@@ -1,0 +1,23 @@
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" media="print" onload="this.media='all'">
+<style>
+:root{--bg0:#080b0f;--bg1:#0e1318;--bg2:#141c24;--bg3:#1c2733;--border:#2a3a4a;--accent:#00e5ff;--green:#39ff87;--yellow:#ffd166;--red:#ff4757;--orange:#ff6b35;--text:#d0dde8;--muted:#5a7a96;--blue:#79c0ff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Space Mono',monospace;background:var(--bg0);color:var(--text);min-height:100vh;font-size:13px}
+header{background:var(--bg1);padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;position:relative}
+header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--accent),transparent 60%)}
+.logo{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:var(--accent);text-shadow:0 0 18px rgba(0,229,255,.35);letter-spacing:.5px}
+.logo span{color:var(--orange)}
+.leds{display:flex;gap:12px;align-items:center}
+.led-g{display:flex;flex-direction:column;align-items:center;gap:3px}
+.led-lbl{font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:'Space Mono',monospace}
+.led{width:9px;height:9px;border-radius:50%;background:rgba(90,122,150,.2);transition:background .2s,box-shadow .2s}
+.led.green{background:var(--green);box-shadow:0 0 7px var(--green)}
+.led.blue{background:var(--blue);box-shadow:0 0 7px rgba(121,192,255,.6)}
+.led.yellow{background:var(--yellow);box-shadow:0 0 7px var(--yellow)}
+.led.red{background:var(--red);box-shadow:0 0 7px var(--red)}
+.tab-nav{display:flex;background:var(--bg1);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.tab-nav a{flex:1;text-align:center;padding:11px 4px;font-size:11px;font-weight:700;letter-spacing:.08em;text-decoration:none;color:var(--muted);border-bottom:2px solid transparent;transition:color .15s}
+.tab-nav a.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-nav a:hover{color:var(--text)}
+</style>

@@ -1,0 +1,9 @@
+.pio
+.claude
+.vscode
+src/secrets.h
+BAUPLAN.md
+INFLUX_PLAN.md
+fehler-opus.md
+debug logs
+todos.md.DS_Store

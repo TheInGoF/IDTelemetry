@@ -1,0 +1,17 @@
+<header>
+  <div class="logo">VW CAN<span>.</span>{{LOGO}}</div>
+  <span style="flex:1"></span>
+  <div class="leds">
+    <div class="led-g"><div class="led blue" id="led-can"></div><span class="led-lbl">CAN</span></div>
+    <div class="led-g"><div class="led" id="led-ble"></div><span class="led-lbl">BLE</span></div>
+    <div class="led-g"><div class="led" id="led-gyro"></div><span class="led-lbl">GYRO</span></div>
+    <div class="led-g"><div class="led" id="led-tx"></div><span class="led-lbl">TX</span></div>
+    <div class="led-g"><div class="led" id="led-rx"></div><span class="led-lbl">RX</span></div>
+  </div>
+  <span style="font-size:10px;color:var(--muted);min-width:32px;text-align:right" id="uptime">--</span>
+</header>
+<nav class="tab-nav">
+  <a href="/" {{ACTIVE_CAN}}>CAN</a>
+  <a href="/live" {{ACTIVE_LIVE}}>LIVE</a>
+  <a href="/config" {{ACTIVE_CONFIG}}>CONFIG</a>
+</nav>

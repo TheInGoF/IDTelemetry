@@ -1,0 +1,23 @@
+// ── LED System ──────────────────────────────────────────────
+const _ledTimers = {};
+function setLed(id, cls) {
+  const el = document.getElementById('led-'+id);
+  if (el) el.className = 'led'+(cls?' '+cls:'');
+}
+function flashLed(id, cls) {
+  const el = document.getElementById('led-'+id);
+  if (!el) return;
+  el.classList.add(cls);
+  clearTimeout(_ledTimers[id]);
+  _ledTimers[id] = setTimeout(() => el.classList.remove(cls), 150);
+}
+setInterval(async()=>{
+  try{
+    const d=await(await fetch('/status')).json();
+    const u=document.getElementById('uptime');
+    if(u) u.textContent=Math.floor(d.uptime/1000)+'s';
+    setLed('can', d.can_ok?'green':'blue');
+    if(!d.gyro_ok) setLed('gyro','');
+    else setLed('gyro', d.gyro_state===2?'yellow':'green');
+  }catch(e){}
+},6000);

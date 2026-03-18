@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>ID · Config</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" media="print" onload="this.media='all'">
+<style>
+:root{
+  --bg0:#080b0f;--bg1:#0e1318;--bg2:#141c24;--bg3:#1c2733;
+  --border:#2a3a4a;--accent:#00e5ff;--green:#39ff87;--red:#ff4757;
+  --yellow:#ffd166;--orange:#ff6b35;--text:#d0dde8;--muted:#5a7a96;--blue:#79c0ff;
+  --mono:'Space Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-size:13px;min-height:100vh}
+header{background:var(--bg1);border-bottom:1px solid var(--border);display:flex;flex-direction:column;position:relative}.hrow1{display:flex;align-items:center;gap:10px;padding:8px 16px;position:relative}.hrow2{display:flex;align-items:center;gap:12px;justify-content:flex-end;padding:2px 16px 6px;border-top:1px solid rgba(42,58,74,.4)}
+header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--accent),transparent 60%)}
+.logo{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:var(--accent);text-shadow:0 0 18px rgba(0,229,255,.35);letter-spacing:.5px}
+.logo span{color:var(--orange)}
+.leds{display:flex;gap:12px;align-items:center}
+.led-g{display:flex;flex-direction:column;align-items:center;gap:3px}
+.led-lbl{font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:'Space Mono',monospace}
+.led{width:9px;height:9px;border-radius:50%;background:rgba(90,122,150,.2);transition:background .2s,box-shadow .2s}
+.led.green{background:var(--green);box-shadow:0 0 7px var(--green)}
+.led.blue{background:var(--blue);box-shadow:0 0 7px rgba(121,192,255,.6)}
+.led.yellow{background:var(--yellow);box-shadow:0 0 7px var(--yellow)}
+.led.red{background:var(--red);box-shadow:0 0 7px var(--red)}
+.container{max-width:800px;margin:0 auto;padding:20px}
+.section-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;margin-top:24px;display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;margin-bottom:8px}
+.lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.field{margin-bottom:12px}
+.field:last-child{margin-bottom:0}
+input[type=text],input[type=password],input[type=number]{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:12px}
+input:focus{outline:none;border-color:var(--accent)}
+.btn{font-size:11px;background:transparent;padding:6px 16px;border-radius:4px;cursor:pointer;font-family:var(--mono);border:1px solid var(--border);color:var(--muted);transition:all .2s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.accent{border-color:var(--accent);color:var(--accent)}
+.btn.accent:hover{background:rgba(0,212,255,.1)}
+.btn.danger{border-color:var(--red);color:var(--red)}
+.btn.danger:hover{background:rgba(255,69,96,.1)}
+.btn.green{border-color:var(--green);color:var(--green)}
+.btn.green:hover{background:rgba(57,255,135,.08)}
+.btn:disabled{opacity:.4;cursor:default}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.hint{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5}
+.hint.warn{color:var(--yellow)}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg1);border:1px solid var(--accent);color:var(--accent);padding:10px 18px;border-radius:6px;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
+.toast.show{opacity:1}
+.ota-drop{border:2px dashed var(--border);border-radius:6px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.ota-drop:hover,.ota-drop.drag{border-color:var(--accent);background:rgba(0,229,255,.04)}
+.ota-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.ota-prog{height:6px;border-radius:3px;background:var(--bg3);margin-top:12px;overflow:hidden;display:none}
+.ota-prog-bar{height:100%;width:0;background:var(--accent);transition:width .2s;border-radius:3px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:.04em}
+.badge.ok{background:rgba(57,255,135,.12);color:var(--green);border:1px solid rgba(57,255,135,.3)}
+.badge.err{background:rgba(255,71,87,.12);color:var(--red);border:1px solid rgba(255,71,87,.3)}
+/* Burger */
+.burger-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 9px;border-radius:4px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;transition:all .15s}.burger-btn:hover{color:var(--accent);border-color:var(--accent)}.drop-nav{position:absolute;top:100%;left:0;background:var(--bg1);border:1px solid var(--border);border-top:2px solid var(--accent);border-radius:0 0 6px 6px;z-index:200;min-width:150px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)}.drop-nav a{display:block;padding:11px 16px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.08em;border-bottom:1px solid var(--border);transition:all .15s}.drop-nav a:last-child{border:none}.drop-nav a:hover,.drop-nav a.active{color:var(--accent);background:var(--bg2)}.modem-w{display:flex;flex-direction:column;align-items:center;gap:2px;padding:0}.modem-bars{display:flex;align-items:flex-end;gap:2px;height:14px}.modem-bar{width:3px;border-radius:1px 1px 0 0;background:rgba(90,122,150,.2)}.modem-bar.on{background:var(--green);box-shadow:0 0 4px var(--green)}.bar1{height:3px}.bar2{height:6px}.bar3{height:9px}.bar4{height:11px}.bar5{height:14px}.modem-op{font-size:7px;color:var(--muted);letter-spacing:.04em;white-space:nowrap;max-width:54px;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow1">
+    <button class="burger-btn" onclick="toggleMenu()">☰</button>
+    <div class="logo">ID<span>.</span>CONFIG</div>
+    <span style="flex:1"></span>
+    <div class="led-g"><div class="led" id="led-gps"></div><span class="led-lbl">GPS</span></div>
+    <div class="modem-w">
+      <div class="modem-bars">
+        <div class="modem-bar bar1" id="mb1"></div>
+        <div class="modem-bar bar2" id="mb2"></div>
+        <div class="modem-bar bar3" id="mb3"></div>
+        <div class="modem-bar bar4" id="mb4"></div>
+        <div class="modem-bar bar5" id="mb5"></div>
+      </div>
+      <div class="modem-op" id="modem-op">--</div>
+    </div>
+    <nav class="drop-nav" id="drop-nav" style="display:none">
+      <a href="/daten">DATA</a>
+      <a href="/debug">DEBUG</a>
+      <a href="/config" class="active">CONFIG</a>
+    </nav>
+  </div>
+  <div class="hrow2">
+    <div class="led-g"><div class="led blue" id="led-can"></div><span class="led-lbl">CAN</span></div>
+    <div class="led-g"><div class="led" id="led-influx"></div><span class="led-lbl">INFLUX</span></div>
+    <div class="led-g"><div class="led" id="led-lte"></div><span class="led-lbl">LTE</span></div>
+    <div class="led-g" style="min-width:38px"><span id="batt-pct" style="font-size:10px;font-weight:700;color:var(--muted)">--</span><span class="led-lbl">BAT</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- WiFi Access Point -->
+  <div class="section-title">WiFi Access Point</div>
+  <div class="card">
+    <div class="row2">
+      <div class="field">
+        <div class="lbl">SSID</div>
+        <input type="text" id="ap_ssid" placeholder="IDTelemetry">
+      </div>
+      <div class="field">
+        <div class="lbl">Passwort</div>
+        <input type="password" id="ap_pass" placeholder="••••••••" autocomplete="new-password">
+      </div>
+    </div>
+    <div class="hint warn">&#9888; AP-Name und Passwort werden erst nach Neustart aktiv.</div>
+  </div>
+
+  <!-- SIM / APN -->
+  <div class="section-title">SIM / APN</div>
+  <div class="card">
+    <div class="row2">
+      <div class="field">
+        <div class="lbl">APN</div>
+        <input type="text" id="apn" placeholder="internet">
+      </div>
+      <div class="field">
+        <div class="lbl">APN Benutzer</div>
+        <input type="text" id="apn_user" placeholder="(leer lassen wenn nicht nötig)">
+      </div>
+    </div>
+    <div class="field">
+      <div class="lbl">APN Passwort</div>
+      <input type="password" id="apn_pass" placeholder="(leer lassen wenn nicht nötig)" autocomplete="new-password">
+    </div>
+    <div class="hint warn">&#9888; APN-Änderungen werden erst nach Neustart vom Modem übernommen.</div>
+  </div>
+
+  <!-- Traccar -->
+  <div class="section-title">Traccar (OsmAnd)</div>
+  <div class="card">
+    <div class="field">
+      <div class="lbl">Host (kein https://, kein Port)</div>
+      <input type="text" id="tc_host" placeholder="traccar.example.com">
+    </div>
+    <div class="field">
+      <div class="lbl">Gerät-ID</div>
+      <input type="text" id="tc_id" placeholder="meinfahrzeug-id">
+    </div>
+    <div class="hint">HTTPS Port 443 wird automatisch verwendet.</div>
+  </div>
+
+  <!-- InfluxDB -->
+  <div class="section-title">InfluxDB v2</div>
+  <div class="card">
+    <div class="field">
+      <div class="lbl">Host (kein https://, kein Port)</div>
+      <input type="text" id="ix_host" placeholder="influx.example.com">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <div class="lbl">Organisation</div>
+        <input type="text" id="ix_org" placeholder="home">
+      </div>
+      <div class="field">
+        <div class="lbl">Bucket</div>
+        <input type="text" id="ix_bucket" placeholder="can-scan">
+      </div>
+    </div>
+    <div class="field">
+      <div class="lbl">API Token</div>
+      <input type="password" id="ix_token" placeholder="••••••••" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <div class="lbl">Geräte-Tag (device=)</div>
+      <input type="text" id="ix_device" placeholder="vw_nox">
+    </div>
+    <div class="hint">HTTPS Port 443. Token wird sicher im NVS gespeichert, nicht im Dateisystem.</div>
+  </div>
+
+  <!-- Guard -->
+  <div class="section-title">Guard (CAN TX Freigabe)</div>
+  <div class="card">
+    <div class="field">
+      <div class="lbl">Guard Modus</div>
+      <select id="guard_mode" style="width:100%;padding:6px 8px;background:var(--card);color:var(--fg);border:1px solid #333;border-radius:4px;font-size:12px">
+        <option value="4">VBUS — externe Spannung (USB/12V)</option>
+        <option value="1">WiFi — Fahrzeug-SSID scannen</option>
+        <option value="0">AUS — CAN TX immer gesperrt</option>
+      </select>
+    </div>
+    <div class="hint">VBUS: CAN wird freigegeben wenn externe Spannung am USB anliegt (z.B. 12V-Adapter im Fahrzeug). WiFi: Freigabe nur wenn die Guard-SSID in Reichweite ist.</div>
+  </div>
+
+  <!-- BLE Standby -->
+  <div class="section-title">BLE / ABRP</div>
+  <div class="card">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <input type="checkbox" id="ble_standby" style="width:16px;height:16px;accent-color:var(--accent)">
+      <span style="font-size:12px">Standby-Defaults senden</span>
+    </label>
+    <div class="hint">Wenn aktiv, bekommt ABRP auch ohne CAN-Verbindung plausible Standwerte (0 km/h, 80% SoC etc.) und kann sich verbinden. Deaktiviert: ABRP bekommt "NO DATA" wenn kein CAN.</div>
+  </div>
+
+  <!-- SPIFFS Logs -->
+  <div class="section-title">SPIFFS Logging</div>
+  <div class="card">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+      <input type="checkbox" id="log_can" style="width:16px;height:16px;accent-color:var(--accent)">
+      <span style="font-size:12px">CAN / ELM Log</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <input type="checkbox" id="log_ble" style="width:16px;height:16px;accent-color:var(--accent)">
+      <span style="font-size:12px">BLE Log</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:10px">
+      <input type="checkbox" id="log_wifi" style="width:16px;height:16px;accent-color:var(--accent)">
+      <span style="font-size:12px">WiFi Guard Scan-Log</span>
+    </label>
+    <div class="hint">Aktiviert SPIFFS-Logging fuer CAN/ELM327, BLE-Geraete bzw. WiFi-Scans. Syslog (System-Events) laeuft immer.</div>
+  </div>
+
+  <!-- Speichern -->
+  <div style="display:flex;gap:10px;align-items:center;margin-top:16px;margin-bottom:4px">
+    <button class="btn accent" onclick="saveConfig()" id="btn-save">&#10003; Speichern</button>
+    <button class="btn" onclick="loadConfig()" style="font-size:10px">&#8635; Neu laden</button>
+    <span id="save-status" style="font-size:11px;color:var(--muted)"></span>
+  </div>
+  <div class="hint" style="margin-bottom:24px">
+    Werte werden sofort im NVS gespeichert. Für APN und AP-SSID/Passwort ist ein Neustart nötig.
+  </div>
+
+  <!-- Firmware OTA -->
+  <div class="section-title">Firmware Update (OTA)</div>
+  <div class="card">
+    <div class="ota-drop" id="ota-drop">
+      <input type="file" id="ota-file" accept=".bin">
+      <div style="font-size:12px;color:var(--muted)">
+        <span style="font-size:18px;display:block;margin-bottom:6px">&#128190;</span>
+        .bin Datei hier ablegen oder klicken<br>
+        <span style="font-size:10px">(PlatformIO: .pio/build/&lt;env&gt;/firmware.bin)</span>
+      </div>
+    </div>
+    <div class="ota-prog" id="ota-prog"><div class="ota-prog-bar" id="ota-bar"></div></div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn green" onclick="startOta()" id="btn-ota" disabled>&#8593; Flash</button>
+      <span id="ota-status" style="font-size:11px;color:var(--muted)">Keine Datei ausgewählt</span>
+    </div>
+    <div class="hint warn" style="margin-top:8px">
+      &#9888; Das Gerät startet nach erfolgreichem Upload automatisch neu. WLAN-Verbindung wird kurz unterbrochen.
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Burger ──────────────────────────────────────────────────
+function toggleMenu(){const m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
+if(!window._menuListener){window._menuListener=true;document.addEventListener('click',e=>{if(!e.target.closest('header')){const m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
+
+
+// ── Modem Widget ────────────────────────────────────────────
+var _modemLastOp='';
+function updateModem(sig,op,sim,conn){const bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(let i=1;i<=5;i++){const b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}const el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
+
+function setLed(id,cls){const el=document.getElementById('led-'+id);if(el)el.className='led'+(cls?' '+cls:'');}
+function setBatt(v,chg,vbus){const el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
+
+async function fetchStatus(){
+  try{
+    const d=await(await fetch('/status')).json();
+    setLed('can',d.can_ok?'green':'blue');
+    setLed('gps',d.gps_valid?'green':'');
+    setLed('lte',d.modem_ok?'green':'');
+    setBatt(d.batt_pct??-1,d.charging??false,d.vbus_in??false);
+    updateModem(d.modem_sig??-1,d.modem_op??'',d.modem_sim??false,d.modem_ok??false);
+  }catch(e){}
+  try{
+    const t=await(await fetch('/api/telemetry')).json();
+    setLed('influx',t.influx_ok?'green':'');
+  }catch(e){}
+}
+fetchStatus();
+var _stTimer=setInterval(fetchStatus,8000);
+
+// ── Toast ───────────────────────────────────────────────────
+function toast(msg,ok=true){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.borderColor=ok?'var(--green)':'var(--red)';
+  t.style.color=ok?'var(--green)':'var(--red)';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+// ── Config laden ────────────────────────────────────────────
+async function loadConfig(){
+  try{
+    const d=await(await fetch('/api/config')).json();
+    document.getElementById('ap_ssid').value   = d.ap_ssid  || '';
+    document.getElementById('ap_pass').value   = d.ap_pass  || '';
+    document.getElementById('apn').value       = d.apn      || '';
+    document.getElementById('apn_user').value  = d.apn_user || '';
+    document.getElementById('apn_pass').value  = d.apn_pass || '';
+    document.getElementById('tc_host').value   = d.tc_host  || '';
+    document.getElementById('tc_id').value     = d.tc_id    || '';
+    document.getElementById('ix_host').value   = d.ix_host  || '';
+    document.getElementById('ix_org').value    = d.ix_org   || '';
+    document.getElementById('ix_bucket').value = d.ix_bucket|| '';
+    document.getElementById('ix_token').value  = d.ix_token || '';
+    document.getElementById('ix_device').value = d.ix_device|| '';
+    document.getElementById('ble_standby').checked = d.ble_standby !== false;
+    document.getElementById('log_can').checked = d.log_can === true;
+    document.getElementById('log_ble').checked = d.log_ble === true;
+    document.getElementById('log_wifi').checked = d.log_wifi === true;
+    if(d.guard_mode!=null) document.getElementById('guard_mode').value = d.guard_mode;
+    document.getElementById('save-status').textContent='Geladen';
+    setTimeout(()=>document.getElementById('save-status').textContent='',1500);
+  }catch(e){
+    toast('Fehler beim Laden!',false);
+  }
+}
+
+// ── Config speichern ────────────────────────────────────────
+async function saveConfig(){
+  const btn=document.getElementById('btn-save');
+  btn.disabled=true;
+  const payload={
+    ap_ssid:   document.getElementById('ap_ssid').value.trim(),
+    ap_pass:   document.getElementById('ap_pass').value,
+    apn:       document.getElementById('apn').value.trim(),
+    apn_user:  document.getElementById('apn_user').value.trim(),
+    apn_pass:  document.getElementById('apn_pass').value,
+    tc_host:   document.getElementById('tc_host').value.trim(),
+    tc_id:     document.getElementById('tc_id').value.trim(),
+    ix_host:   document.getElementById('ix_host').value.trim(),
+    ix_org:    document.getElementById('ix_org').value.trim(),
+    ix_bucket: document.getElementById('ix_bucket').value.trim(),
+    ix_token:  document.getElementById('ix_token').value.trim(),
+    ix_device:    document.getElementById('ix_device').value.trim(),
+    ble_standby:  document.getElementById('ble_standby').checked,
+    log_can:      document.getElementById('log_can').checked,
+    log_ble:      document.getElementById('log_ble').checked,
+    log_wifi:     document.getElementById('log_wifi').checked,
+    guard_mode:   parseInt(document.getElementById('guard_mode').value),
+  };
+  try{
+    const r=await fetch('/api/config',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    const d=await r.json();
+    if(d.ok){
+      toast('✓ Gespeichert');
+      document.getElementById('save-status').textContent='Gespeichert ✓';
+    }else{
+      toast('Fehler beim Speichern!',false);
+    }
+  }catch(e){
+    toast('Verbindungsfehler!',false);
+  }
+  btn.disabled=false;
+}
+
+// ── OTA Upload ──────────────────────────────────────────────
+var _otaFile=null;
+
+document.getElementById('ota-file').addEventListener('change',function(){
+  _otaFile=this.files[0]||null;
+  const st=document.getElementById('ota-status');
+  const btn=document.getElementById('btn-ota');
+  if(_otaFile){
+    st.textContent=_otaFile.name+' ('+(_otaFile.size/1024).toFixed(1)+' kB)';
+    btn.disabled=false;
+  }else{
+    st.textContent='Keine Datei ausgewählt';
+    btn.disabled=true;
+  }
+});
+
+// Drag & Drop
+(function(){
+  const drop=document.getElementById('ota-drop');
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
+  drop.addEventListener('drop',e=>{
+    e.preventDefault();drop.classList.remove('drag');
+    const f=e.dataTransfer.files[0];
+    if(f&&f.name.endsWith('.bin')){
+      _otaFile=f;
+      document.getElementById('ota-file').files;  // cannot set, just show
+      document.getElementById('ota-status').textContent=f.name+' ('+( f.size/1024).toFixed(1)+' kB)';
+      document.getElementById('btn-ota').disabled=false;
+    }else{
+      toast('Nur .bin Dateien erlaubt!',false);
+    }
+  });
+})();
+
+async function startOta(){
+  if(!_otaFile){toast('Keine Datei!',false);return;}
+  const btn=document.getElementById('btn-ota');
+  const st=document.getElementById('ota-status');
+  const prog=document.getElementById('ota-prog');
+  const bar=document.getElementById('ota-bar');
+  btn.disabled=true;
+  prog.style.display='block';
+  bar.style.width='0%';
+  st.style.color='var(--accent)';
+  st.textContent='Upload läuft…';
+
+  const form=new FormData();
+  form.append('firmware',_otaFile,_otaFile.name);
+
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST','/api/ota');
+
+  xhr.upload.onprogress=e=>{
+    if(e.lengthComputable){
+      const pct=Math.round(e.loaded/e.total*100);
+      bar.style.width=pct+'%';
+      st.textContent='Upload: '+pct+'%';
+    }
+  };
+
+  xhr.onload=()=>{
+    try{
+      const d=JSON.parse(xhr.responseText);
+      if(d.ok){
+        bar.style.width='100%';
+        bar.style.background='var(--green)';
+        st.style.color='var(--green)';
+        st.textContent='✓ Flash OK — Neustart läuft…';
+        toast('✓ Firmware geflasht — Neustart…');
+      }else{
+        st.style.color='var(--red)';
+        st.textContent='✗ Flash fehlgeschlagen!';
+        toast('Flash fehlgeschlagen!',false);
+        btn.disabled=false;
+      }
+    }catch(_){
+      st.style.color='var(--red)';
+      st.textContent='Neustart läuft (kein Response normal)…';
+      toast('Neustart läuft…');
+    }
+  };
+
+  xhr.onerror=()=>{
+    // Nach OTA-Reboot kommt kein Response — das ist normal
+    st.style.color='var(--green)';
+    st.textContent='Neustart läuft — Seite neu laden in ~10s';
+    bar.style.width='100%';
+    bar.style.background='var(--green)';
+    setTimeout(()=>location.reload(),10000);
+  };
+
+  xhr.send(form);
+}
+
+// ── Init ─────────────────────────────────────────────────────
+loadConfig();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>ID · Data</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" media="print" onload="this.media='all'">
+<style>
+:root{
+  --bg0:#080b0f;--bg1:#0e1318;--bg2:#141c24;--bg3:#1c2733;
+  --border:#2a3a4a;--accent:#00e5ff;--green:#39ff87;--red:#ff4757;
+  --yellow:#ffd166;--orange:#ff6b35;--text:#d0dde8;--muted:#5a7a96;--blue:#79c0ff;
+  --mono:'Space Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-size:14px;line-height:1.35;min-height:100vh}
+header{background:var(--bg1);border-bottom:1px solid var(--border);display:flex;flex-direction:column;position:relative}.hrow1{display:flex;align-items:center;gap:10px;padding:8px 16px;position:relative}.hrow2{display:flex;align-items:center;gap:12px;justify-content:flex-end;padding:2px 16px 6px;border-top:1px solid rgba(42,58,74,.4)}
+header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--accent),transparent 60%)}
+.logo{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:var(--accent);text-shadow:0 0 18px rgba(0,229,255,.35);letter-spacing:.5px}
+.logo span{color:var(--orange)}
+.led-g{display:flex;flex-direction:column;align-items:center;gap:3px}
+.led-lbl{font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:'Space Mono',monospace}
+.led{width:9px;height:9px;border-radius:50%;background:rgba(90,122,150,.2);transition:background .2s,box-shadow .2s}
+.led.green{background:var(--green);box-shadow:0 0 7px var(--green)}
+.led.blue{background:var(--blue);box-shadow:0 0 7px rgba(121,192,255,.6)}
+.led.yellow{background:var(--yellow);box-shadow:0 0 7px var(--yellow)}
+.led.red{background:var(--red);box-shadow:0 0 7px var(--red)}
+/* ── Burger & Modem ── */
+.burger-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 9px;border-radius:4px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;transition:all .15s}.burger-btn:hover{color:var(--accent);border-color:var(--accent)}.drop-nav{position:absolute;top:100%;left:0;background:var(--bg1);border:1px solid var(--border);border-top:2px solid var(--accent);border-radius:0 0 6px 6px;z-index:200;min-width:150px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)}.drop-nav a{display:block;padding:11px 16px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.08em;border-bottom:1px solid var(--border);transition:all .15s}.drop-nav a:last-child{border:none}.drop-nav a:hover,.drop-nav a.active{color:var(--accent);background:var(--bg2)}.modem-w{display:flex;flex-direction:column;align-items:center;gap:2px;padding:0}.modem-bars{display:flex;align-items:flex-end;gap:2px;height:14px}.modem-bar{width:3px;border-radius:1px 1px 0 0;background:rgba(90,122,150,.2)}.modem-bar.on{background:var(--green);box-shadow:0 0 4px var(--green)}.bar1{height:3px}.bar2{height:6px}.bar3{height:9px}.bar4{height:11px}.bar5{height:14px}.modem-op{font-size:7px;color:var(--muted);letter-spacing:.04em;white-space:nowrap;max-width:54px;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;text-align:center}
+/* ── Daten-Tabelle ── */
+.container{max-width:640px;margin:0 auto;padding:16px}
+.status-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--muted)}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s}
+.status-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.tbl{width:100%;border-collapse:collapse;background:var(--bg2);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.tbl th{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg3);font-weight:400}
+.tbl th:last-child{text-align:center;width:24px}
+.tbl td{padding:7px 12px;border-bottom:1px solid rgba(42,58,74,.5);font-size:13px}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(0,229,255,.03)}
+.tbl .sep td{padding:4px 12px;border-bottom:1px solid var(--border);background:var(--bg3)}
+.field-name{color:var(--muted);font-size:12px}
+.field-val{font-weight:700;color:var(--text);min-width:100px}
+.field-val.na{color:var(--muted);font-weight:400}
+.field-age{color:var(--muted);font-size:12px;white-space:nowrap;min-width:50px}
+.age-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(90,122,150,.2)}
+.age-dot.green{background:var(--green);box-shadow:0 0 5px var(--green)}
+.age-dot.yellow{background:var(--yellow);box-shadow:0 0 5px var(--yellow)}
+.age-dot.red{background:var(--red);box-shadow:0 0 5px var(--red)}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow1">
+    <button class="burger-btn" onclick="toggleMenu()">☰</button>
+    <div class="logo">ID<span>.</span>DATA</div>
+    <span style="flex:1"></span>
+    <div class="led-g"><div class="led" id="led-gps"></div><span class="led-lbl">GPS</span></div>
+    <div class="modem-w">
+      <div class="modem-bars">
+        <div class="modem-bar bar1" id="mb1"></div>
+        <div class="modem-bar bar2" id="mb2"></div>
+        <div class="modem-bar bar3" id="mb3"></div>
+        <div class="modem-bar bar4" id="mb4"></div>
+        <div class="modem-bar bar5" id="mb5"></div>
+      </div>
+      <div class="modem-op" id="modem-op">--</div>
+    </div>
+    <nav class="drop-nav" id="drop-nav" style="display:none">
+      <a href="/daten" class="active">DATA</a>
+      <a href="/debug">DEBUG</a>
+      <a href="/config">CONFIG</a>
+    </nav>
+  </div>
+  <div class="hrow2">
+    <div class="led-g"><div class="led blue" id="led-can"></div><span class="led-lbl">CAN</span></div>
+    <div class="led-g"><div class="led" id="led-ble"></div><span class="led-lbl">BLE</span></div>
+    <div class="led-g"><div class="led" id="led-gyro"></div><span class="led-lbl">GYRO</span></div>
+    <div class="led-g"><div class="led" id="led-tx"></div><span class="led-lbl">TX</span></div>
+    <div class="led-g"><div class="led" id="led-rx"></div><span class="led-lbl">RX</span></div>
+    <div class="led-g" style="min-width:38px"><span id="batt-pct" style="font-size:10px;font-weight:700;color:var(--muted)">--</span><span class="led-lbl">BAT</span></div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="status-bar">
+    <div class="status-dot" id="fetch-dot"></div>
+    <span id="fetch-txt">Lade Telemetrie…</span>
+    <span style="flex:1"></span>
+    <span id="fetch-ts" style="font-size:10px"></span>
+  </div>
+
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Wert</th>
+        <th>Alter</th>
+        <th>●</th>
+      </tr>
+    </thead>
+    <tbody id="tbl-body">
+      <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px">Warte auf Daten…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+// ── LED System ────────────────────────────────────────────────
+const _ledTimers = {};
+function setLed(id, cls) {
+  const el = document.getElementById('led-'+id);
+  if (el) el.className = 'led'+(cls?' '+cls:'');
+}
+function flashLed(id, cls) {
+  const el = document.getElementById('led-'+id);
+  if (!el) return;
+  el.classList.add(cls);
+  clearTimeout(_ledTimers[id]);
+  _ledTimers[id] = setTimeout(() => el.classList.remove(cls), 150);
+}
+async function fetchStatus(){
+  try{
+    const d=await(await fetch('/status')).json();
+    setLed('can', d.can_ok?'green':'blue');
+    if(!d.gyro_ok) setLed('gyro','');
+    else setLed('gyro', d.gyro_state===2?'yellow':'green');
+    setLed('gps', d.gps_valid?'green':'');
+    setBatt(d.batt_pct??-1,d.charging??false,d.vbus_in??false);
+    updateModem(d.modem_sig??-1, d.modem_op??'', d.modem_sim??false, d.modem_ok??false);
+  }catch(e){}
+}
+fetchStatus();
+var _statusTimer=setInterval(fetchStatus,6000);
+
+// ── Burger & Nav ─────────────────────────────────────────────
+function toggleMenu(){const m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
+if(!window._menuListener){window._menuListener=true;document.addEventListener('click',e=>{if(!e.target.closest('header')){const m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
+
+// ── Modem ─────────────────────────────────────────────────────
+var _modemLastOp='';
+function updateModem(sig,op,sim,conn){const bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(let i=1;i<=5;i++){const b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}const el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
+
+// ── Battery ───────────────────────────────────────────────────
+function setBatt(v,chg,vbus){const el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
+
+
+// ── Telemetrie-Tabelle ────────────────────────────────────────
+const NEVER = 4294967295;   // sentinel: Feld wurde noch nie abgefragt
+
+// Hilfsfunktionen
+function fmtAge(ms) {
+  if (ms >= NEVER) return '—';
+  if (ms < 1000)   return ms + ' ms';
+  return Math.round(ms / 1000) + ' s';
+}
+
+function ageClass(ms) {
+  if (ms >= NEVER)   return '';      // noch nie → kein Dot
+  if (ms < 15000)    return 'green';
+  if (ms < 90000)    return 'yellow';
+  return 'red';
+}
+
+function dotHtml(ms) {
+  const cls = ageClass(ms);
+  if (!cls) return '';
+  return `<span class="age-dot ${cls}"></span>`;
+}
+
+function boolVal(v) { return v >= 0.5 ? 'Ja' : 'Nein'; }
+
+function fmtVal(f) {
+  if (!f) return '—';
+  const ms = f.age_ms;
+  const v  = parseFloat(f.v);
+  if (ms >= NEVER || (!f.valid && ms >= NEVER)) return '—';
+  return v;
+}
+
+// Zeilen-Definition: [label, key(s), formatFn, unit]
+// key kann String (einfaches Feld) oder Array (kombiniert)
+const ROWS = [
+  { sep: 'Fahrzeug (OBD)' },
+  { label: 'SoC',            key: 'soc',            fmt: v => v.toFixed(1), unit: '%' },
+  { label: 'Spannung',       key: 'voltage',        fmt: v => v.toFixed(1), unit: 'V' },
+  { label: 'Strom',          key: 'current',        fmt: v => v.toFixed(1), unit: 'A' },
+  { label: 'Leistung',       key: 'power',          fmt: v => v.toFixed(1), unit: 'kW' },
+  { label: 'Geschwindigkeit',key: 'vehicle_speed',  fmt: v => Math.round(v), unit: 'km/h' },
+  { label: 'Batt. Temp.',    key: 'batt_temp',      fmt: v => v.toFixed(1), unit: '°C' },
+  { label: 'Außentemp.',     key: 'ext_temp',       fmt: v => v.toFixed(1), unit: '°C' },
+  { label: 'Kapazität',      key: 'capacity',       fmt: v => v.toFixed(1), unit: 'kWh' },
+  { label: 'Geladen',        key: 'kwh_charged',    fmt: v => v.toFixed(2), unit: 'kWh' },
+  { label: 'Laden',          key: 'is_charging',    fmt: boolVal, unit: '' },
+  { label: 'DC Schnellladen',key: 'is_dcfc',        fmt: boolVal, unit: '' },
+  { label: 'Geparkt',        key: 'is_parked',      fmt: boolVal, unit: '' },
+  { label: 'Odometer',       key: 'odometer',       fmt: v => Math.round(v), unit: 'km' },
+  { label: 'Reichweite',     key: 'range',          fmt: v => Math.round(v), unit: 'km' },
+  { sep: 'Sensoren (live)' },
+  { label: 'GPS',            key: ['gps_lat','gps_lon','gps_valid'],
+    fmt: (lat,lon,gv) => gv >= 0.5 ? lat.toFixed(6)+' '+lon.toFixed(6) : '(kein Fix)',
+    unit: '' },
+  { label: 'Gyro',           key: 'gyro_g',         fmt: v => v.toFixed(3), unit: 'G' },
+  { label: 'LTE Signal',     key: 'lte_signal',     fmt: v => Math.round(v)+' / 31', unit: '' },
+  { label: 'LTE Anbieter',   key: 'lte_operator',   fmt: (v,f) => f.str || '—', unit: '' },
+  { sep: 'Gerät' },
+  { label: 'Akku Gerät',     key: 'batt_device',    fmt: v => Math.round(v), unit: '%' },
+  { sep: 'InfluxDB' },
+  { label: 'InfluxDB',       key: '_influx',        fmt: v => v ? 'verbunden' : 'getrennt', unit: '' },
+  { label: 'Gepufferte Punkte', key: '_buf_pending', fmt: v => Math.round(v), unit: '' },
+];
+
+function buildTable(data) {
+  const f = data.fields || {};
+  let html = '';
+
+  for (const row of ROWS) {
+    if (row.sep !== undefined) {
+      html += `<tr class="sep"><td colspan="4" style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px">${row.sep}</td></tr>`;
+      continue;
+    }
+
+    let valStr = '—';
+    let ageMs  = NEVER;
+    let isValid = false;
+
+    if (row.key === '_influx') {
+      valStr  = data.influx_ok ? 'verbunden' : 'getrennt';
+      ageMs   = 0;  // API-Abfrage selbst liefert den frischen Wert
+      isValid = true;
+    } else if (row.key === '_buf_pending') {
+      valStr  = String(data.buf_pending ?? 0);
+      ageMs   = 0;
+      isValid = true;
+    } else if (Array.isArray(row.key)) {
+      // Kombiniertes Feld (GPS)
+      const fields = row.key.map(k => f[k]);
+      ageMs   = Math.max(...fields.map(x => x ? x.age_ms : NEVER));
+      isValid = fields.every(x => x && x.valid);
+      if (ageMs < NEVER) {
+        const vals = fields.map(x => parseFloat(x.v));
+        try { valStr = row.fmt(...vals) + (row.unit ? ' '+row.unit : ''); }
+        catch(e) { valStr = '—'; }
+      }
+    } else {
+      const fd = f[row.key];
+      if (fd) {
+        ageMs   = fd.age_ms;
+        isValid = fd.valid;
+        if (ageMs < NEVER) {
+          const v = parseFloat(fd.v);
+          try {
+            valStr = row.fmt(v, fd) + (row.unit ? ' '+row.unit : '');
+          } catch(e) { valStr = '—'; }
+        }
+      }
+    }
+
+    const ageTxt = fmtAge(ageMs);
+    const dot    = dotHtml(ageMs);
+    const naClass= (ageMs >= NEVER) ? ' na' : '';
+
+    html += `<tr>
+      <td class="field-name">${row.label}</td>
+      <td class="field-val${naClass}">${valStr}</td>
+      <td class="field-age">${ageMs < NEVER ? ageTxt : ''}</td>
+      <td style="text-align:center">${dot}</td>
+    </tr>`;
+  }
+
+  document.getElementById('tbl-body').innerHTML = html;
+}
+
+// ── Auto-Refresh alle 3 s ─────────────────────────────────────
+var _telemTimer;
+
+async function fetchTelemetry() {
+  const dot = document.getElementById('fetch-dot');
+  const txt = document.getElementById('fetch-txt');
+  const ts  = document.getElementById('fetch-ts');
+  try {
+    const data = await (await fetch('/api/telemetry')).json();
+    buildTable(data);
+    dot.className = 'status-dot ok';
+    txt.textContent = 'Telemetrie aktuell';
+    const d = new Date();
+    ts.textContent = d.getHours().toString().padStart(2,'0')+':'+
+                     d.getMinutes().toString().padStart(2,'0')+':'+
+                     d.getSeconds().toString().padStart(2,'0');
+  } catch(e) {
+    dot.className = 'status-dot';
+    txt.textContent = 'Verbindungsfehler';
+  }
+}
+
+fetchTelemetry();
+_telemTimer = setInterval(fetchTelemetry, 3000);
+
+window.addEventListener('pagehide', () => clearInterval(_telemTimer));
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) {
+    clearInterval(_telemTimer);
+    _telemTimer = setInterval(fetchTelemetry, 3000);
+    fetchTelemetry();
+  }
+});
+</script>
+</body>
+</html>
