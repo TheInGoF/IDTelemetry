@@ -70,10 +70,10 @@ LILYGO T-SIM7080G-S3          Externe Module
 ┌──────────────────┐
 │ GPIO17 (TX) ─────┼──→ SN65HVD230 CTX ──→ OBD2 Pin 6  (CAN-H)
 │ GPIO18 (RX) ─────┼──→ SN65HVD230 CRX ──→ OBD2 Pin 14 (CAN-L)
-│                   │
+│                  │
 │ GPIO45 (SDA) ────┼──→ DS1307 SDA + MPU-6050 SDA
 │ GPIO21 (SCL) ────┼──→ DS1307 SCL + MPU-6050 SCL
-│                   │
+│                  │
 │ 3V3 ─────────────┼──→ VCC für alle Module
 │ GND ─────────────┼──→ GND für alle Module
 └──────────────────┘
@@ -85,17 +85,15 @@ SIM-Karte in den Slot auf der Unterseite des LILYGO einlegen (Nano-SIM).
 
 Board per USB-C anschließen, dann in VSCode/PlatformIO:
 
-1. **Upload Filesystem Image** — lädt die Web-UI + XTRA-Daten auf den ESP32 (nur einmalig nötig, bzw. bei HTML-Änderungen)
+1. **Upload Filesystem Image** — lädt die Web-UI auf den ESP32 (nur einmalig nötig, bzw. bei HTML-Änderungen)
 2. **Upload** — flasht die Firmware
 
 Oder per Terminal:
 
 ```bash
-pio run --target uploadfs   # Web-UI + XTRA hochladen (XTRA wird automatisch heruntergeladen)
+pio run --target uploadfs   # Web-UI hochladen
 pio run --target upload      # Firmware flashen
 ```
-
-**XTRA (GPS-Vorhersagedaten):** Beim `uploadfs` wird automatisch eine 3-Tage-Vorhersagedatei von Qualcomm heruntergeladen (`scripts/download_xtra.py`). Diese enthält Satellitenbahnen für GPS, GLONASS und BeiDou — dadurch findet das Modem nach dem Einschalten deutlich schneller einen Fix. Mit aktiver SIM werden die Daten alle 3 Tage automatisch per LTE aufgefrischt.
 
 ### Schritt 5 — Verbinden
 
