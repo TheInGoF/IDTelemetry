@@ -21,3 +21,7 @@ void sleep_init();       // Wake-Grund ermitteln + in sys.log schreiben
 void sleep_log_wake();   // Nach gyro_init(): Wake-Details mit G-Wert loggen
 void sleep_update();     // 10-min-Inaktivitätsprüfung → ggf. Deep Sleep
 void sleep_force();      // Sofort Deep Sleep (Serial-Befehl / Debug)
+
+// Globales Shutdown-Flag: Tasks prüfen dies in ihrer Loop und beenden sich sauber.
+// Verhindert vTaskDelete() während laufender I2C/SPI/UART-Transaktionen.
+extern volatile bool g_shutdown;

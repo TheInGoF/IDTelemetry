@@ -1,4 +1,5 @@
 #include "mod_wifi_guard.h"
+#include "mod_sleep.h"
 #include "mod_pmu.h"
 #include "mod_config.h"
 #include "mod_logs.h"
@@ -290,7 +291,7 @@ static void wifi_log_entry(int n) {
 
 static void ap_monitor_task(void*) {
     vTaskDelay(pdMS_TO_TICKS(3000)); // AP erst stabil
-    while (true) {
+    while (!g_shutdown) {
         uint8_t ap_now = (uint8_t)WiFi.softAPgetStationNum();
         if (ap_now != ap_clients_last) {
             if (ap_now > ap_clients_last) {
@@ -312,12 +313,14 @@ static void ap_monitor_task(void*) {
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+    Serial.println("[WGUARD] AP-Monitor beendet (Shutdown)");
+    vTaskDelete(NULL);
 }
 
 static void wifi_scan_task(void*) {
     vTaskDelay(pdMS_TO_TICKS(8000)); // AP erst stabil
 
-    while (true) {
+    while (!g_shutdown) {
         // Gepufferte Syslog-Eintraege schreiben (thread-safe aus Callbacks)
         syslog_q_flush();
 
@@ -415,6 +418,8 @@ static void wifi_scan_task(void*) {
             }
         }
     }
+    Serial.println("[WGUARD] Scan-Task beendet (Shutdown)");
+    vTaskDelete(NULL);
 }
 
 // ============================================================

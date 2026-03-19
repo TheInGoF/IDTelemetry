@@ -1,4 +1,5 @@
 #include "mod_elm327.h"
+#include "mod_sleep.h"
 #include "mod_ble_scan.h"
 #include "mod_can.h"
 #include "mod_logs.h"
@@ -878,7 +879,7 @@ void elm327_init() {
     // Stack 6144: frames[16][8]+lens+ids+pdu[128] + String-Heap + Call-Chain ≈ 4KB knapp.
     xTaskCreatePinnedToCore([](void*) {
         char qbuf[64];
-        for (;;) {
+        while (!g_shutdown) {
             // Greeting prüfen
             if (send_greeting) {
                 send_greeting = false;
@@ -887,9 +888,12 @@ void elm327_init() {
             }
             // Befehle aus Queue abarbeiten
             while (xQueueReceive(s_cmd_queue, qbuf, pdMS_TO_TICKS(20)) == pdTRUE) {
+                if (g_shutdown) break;
                 process_command(qbuf);
             }
         }
+        Serial.println("[ELM] Worker beendet (Shutdown)");
+        vTaskDelete(NULL);
     }, "elm_worker", 6144, nullptr, 2, nullptr, 1);
     Serial.println("[ELM] Kompatibel mit: ABRP, Torque Pro, OBD Fusion, Car Scanner");
 }

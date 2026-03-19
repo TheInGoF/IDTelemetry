@@ -1,4 +1,5 @@
 #include "mod_can.h"
+#include "mod_sleep.h"
 #include "mod_logs.h"
 #include "driver/twai.h"
 #include "mod_wifi_guard.h"
@@ -459,7 +460,7 @@ void scan_task(void* pv) {
 void monitor_task(void*) {
     uint32_t last_hw_check = 0;
 
-    while (true) {
+    while (!g_shutdown) {
         // Alle 5s echten TWAI-Zustand prüfen → BUS_OFF = Transceiver fehlt/defekt
         if (millis() - last_hw_check >= 5000) {
             last_hw_check = millis();
@@ -495,6 +496,8 @@ void monitor_task(void*) {
             vTaskDelay(pdMS_TO_TICKS(50));
         }
     }
+    Serial.println("[CAN] Monitor beendet (Shutdown)");
+    vTaskDelete(NULL);
 }
 
 // Scan von außen starten (wird vom Webserver aufgerufen)

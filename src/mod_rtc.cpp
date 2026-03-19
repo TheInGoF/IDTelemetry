@@ -1,4 +1,5 @@
 #include "mod_rtc.h"
+#include "mod_sleep.h"
 #include <Wire.h>
 #include "config.h"
 
@@ -181,10 +182,14 @@ static void rtc_do_sync() {
 }
 
 static void rtc_sync_task(void*) {
-    while (true) {
+    while (!g_shutdown) {
         rtc_do_sync();
-        vTaskDelay(pdMS_TO_TICKS(60000));  // alle 60s
+        // In 600 Schritten à 100ms warten — reagiert schneller auf Shutdown
+        for (int i = 0; i < 600 && !g_shutdown; i++)
+            vTaskDelay(pdMS_TO_TICKS(100));
     }
+    Serial.println("[RTC] Sync-Task beendet (Shutdown)");
+    vTaskDelete(NULL);
 }
 
 void rtc_time_sync_task_init() {

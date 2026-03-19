@@ -19,6 +19,11 @@
 
 #define SLEEP_NO_GUARD_MS  (5UL * 60UL * 1000UL)  // 5 min ohne Guard → Sleep
 
+// Globales Shutdown-Flag: wird von enter_deep_sleep() gesetzt.
+// Alle FreeRTOS-Tasks prüfen dies in ihrer Loop und beenden sich sauber,
+// damit shared Resources (I2C, CAN, WiFi) nicht im gesperrten Zustand bleiben.
+volatile bool g_shutdown = false;
+
 static uint32_t g_boot_ms = 0;
 static uint32_t g_last_guard_seen_ms = 0;  // letzter Zeitpunkt mit Guard in Range
 static esp_sleep_wakeup_cause_t g_wake_cause = ESP_SLEEP_WAKEUP_UNDEFINED;
@@ -122,6 +127,11 @@ void sleep_force() {
     enter_deep_sleep("Deep Sleep: manuell ausgelöst (Serial)");
 }
 
+// ── Hilfsfunktion: prüfen ob ein Task noch existiert ──
+static bool task_alive(const char* name) {
+    return xTaskGetHandle(name) != nullptr;
+}
+
 // ── Gemeinsamer Sleep-Ablauf ─────────────────────────────
 static void enter_deep_sleep(const char* reason) {
     syslog("SLEEP", reason);
@@ -132,39 +142,66 @@ static void enter_deep_sleep(const char* reason) {
     telem_persist_to_spiffs();
     Serial.println("[SLEEP] Telem gesichert");
 
-    // ── 2. WiFi-Scan stoppen BEVOR Task gelöscht wird ──
-    WiFi.scanDelete();                // Laufenden Scan abbrechen
-    WiFi.softAPdisconnect(false);     // AP-Clients trennen (kein WiFi-Off)
-    Serial.println("[SLEEP] WiFi Scan+AP gestoppt");
+    // ── 2. Shutdown-Signal an alle Tasks ──
+    //    Tasks prüfen g_shutdown in ihrer Loop und beenden sich sauber,
+    //    damit I2C/CAN/WiFi-Transaktionen ordentlich abgeschlossen werden.
+    g_shutdown = true;
+    Serial.println("[SLEEP] Shutdown-Signal gesetzt");
 
-    // ── 3. Alle FreeRTOS-Tasks stoppen per Name ──
-    const char* tasks_to_kill[] = {
-        "TELEM", "MODEM", "GYRO", "WIFI_SCAN", "AP_MON", "MON", "RTC_SYNC"
+    // Warten bis alle Tasks sich beendet haben (max 2s)
+    const char* task_names[] = {
+        "TELEM", "MODEM", "GYRO", "WIFI_SCAN", "AP_MON", "MON", "RTC_SYNC", "elm_worker"
     };
-    for (auto name : tasks_to_kill) {
-        TaskHandle_t h = xTaskGetHandle(name);
-        if (h && h != xTaskGetCurrentTaskHandle()) {
-            vTaskDelete(h);
+    uint32_t wait_start = millis();
+    bool all_stopped = false;
+    while (millis() - wait_start < 2000) {
+        all_stopped = true;
+        for (auto name : task_names) {
+            if (task_alive(name)) {
+                all_stopped = false;
+                break;
+            }
         }
+        if (all_stopped) break;
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
-    Serial.println("[SLEEP] Tasks gestoppt");
 
-    // ── 4. Hardware herunterfahren ──
+    if (all_stopped) {
+        Serial.println("[SLEEP] Alle Tasks sauber beendet");
+    } else {
+        // Fallback: noch lebende Tasks brutal killen
+        Serial.println("[SLEEP] WARNUNG: Timeout — erzwinge Task-Stop");
+        for (auto name : task_names) {
+            TaskHandle_t h = xTaskGetHandle(name);
+            if (h && h != xTaskGetCurrentTaskHandle()) {
+                Serial.printf("[SLEEP]   Kill: %s\n", name);
+                vTaskDelete(h);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    // ── 3. Hardware herunterfahren ──
     modem_poweroff();
     Serial.println("[SLEEP] Modem aus");
 
     can_stop();
     Serial.println("[SLEEP] CAN aus");
 
-    // WiFi komplett aus — mit Timeout-Schutz
+    // BLE komplett stoppen — verhindert Zombie-BLE nach fehlgeschlagenem Sleep
+    NimBLEDevice::deinit(true);
+    Serial.println("[SLEEP] BLE aus");
+
+    // WiFi komplett aus
+    WiFi.scanDelete();
+    WiFi.softAPdisconnect(false);
     WiFi.mode(WIFI_OFF);
     Serial.println("[SLEEP] WiFi aus");
 
     Serial.flush();
     delay(100);
 
-    // ── 5. Gyro Wake-up konfigurieren ──
+    // ── 4. Gyro Wake-up konfigurieren ──
     gyro_configure_sleep_int();
     Serial.println("[SLEEP] Gyro INT konfiguriert");
 
@@ -187,5 +224,10 @@ static void enter_deep_sleep(const char* reason) {
     delay(100);  // MPU-6050 Zeit geben sich zu stabilisieren
 
     esp_deep_sleep_start();
-    // ─── Gerät schläft hier. Nächste Zeile wird nie erreicht. ───
+
+    // ── Fallback: wenn esp_deep_sleep_start() nicht greift → Neustart ──
+    Serial.println("[SLEEP] FEHLER: Deep Sleep fehlgeschlagen — Neustart!");
+    Serial.flush();
+    delay(100);
+    ESP.restart();
 }

@@ -1,4 +1,5 @@
 #include "mod_gyro.h"
+#include "mod_sleep.h"
 #include <Wire.h>
 #include <SPIFFS.h>
 
@@ -124,7 +125,7 @@ static bool calibrate_i2c(float& out_mean, float& out_stddev) {
 static void gyro_task(void*) {
     float fx=0, fy=0, fz=1.0f;  // Accel-Achsen für WebSocket
     const float GYRO_ALPHA = 0.3f; // Tiefpass für Drehrate
-    while (true) {
+    while (!g_shutdown) {
         uint8_t buf[6];
         bool accel_ok = mpu_read(MPU_REG_ACCEL_XOUT, buf, 6);
         if (accel_ok) {
@@ -208,6 +209,8 @@ static void gyro_task(void*) {
 
         vTaskDelay(pdMS_TO_TICKS(GYRO_TASK_MS));
     }
+    Serial.println("[GYRO] Task beendet (Shutdown)");
+    vTaskDelete(NULL);
 }
 
 // ── Init ─────────────────────────────────────────────────────

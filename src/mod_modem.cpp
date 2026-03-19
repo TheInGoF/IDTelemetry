@@ -2,6 +2,7 @@
 #include <TinyGsmClient.h>
 
 #include "mod_modem.h"
+#include "mod_sleep.h"
 #include "mod_traccar.h"
 #include "mod_telemetry.h"
 #include "mod_rtc.h"
@@ -140,6 +141,7 @@ static void modem_task(void* /*param*/) {
 
 
     for (;;) {
+        if (g_shutdown) break;
 
         uint32_t now = millis();
 
@@ -476,7 +478,8 @@ static void modem_task(void* /*param*/) {
         vTaskDelay(pdMS_TO_TICKS(100)); // Kurze Pause in jedem Zustand
 
     }
-
+    Serial.println("[MODEM] Task beendet (Shutdown)");
+    vTaskDelete(NULL);
 }
 
 

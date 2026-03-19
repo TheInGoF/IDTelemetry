@@ -3,6 +3,7 @@
 #include <ArduinoHttpClient.h>
 
 #include "mod_telemetry.h"
+#include "mod_sleep.h"
 #include "shared.h"
 #include "mod_modem.h"
 #include "mod_pmu.h"
@@ -345,7 +346,7 @@ static void telem_task(void* /*param*/) {
     uint32_t last_sensor_ms = 0;   // GPS, Gyro, LTE (alle 15 s)
     uint32_t last_pmu_ms    = 0;   // PMU-Akku (alle 60 s)
 
-    while (true) {
+    while (!g_shutdown) {
         now = millis();
 
         // ── CAN: max. 1 Abfrage pro Tick (1 s) ──────────────
@@ -420,6 +421,8 @@ static void telem_task(void* /*param*/) {
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+    Serial.println("[TELEM] Task beendet (Shutdown)");
+    vTaskDelete(NULL);
 }
 
 // ============================================================
