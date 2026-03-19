@@ -168,7 +168,7 @@ static bool serial_log_cmd(const char* input, const char* cmd, const char* path)
 void setup() {
     Serial.begin(115200);
     delay(500);
-    Serial.println("\n=== IDTelemetry ===");
+    Serial.printf("\n=== IDTelemetry v%s ===\n", FW_VERSION);
     Serial.println("Hardware: ESP32-S3 N16R8 + SN65HVD230 + DS1307 + MPU-6050");
     Serial.printf("CAN Pins: TX=GPIO%d  RX=GPIO%d  %dkbps\n",
                   CAN_TX_PIN, CAN_RX_PIN, CAN_SPEED_KBPS);

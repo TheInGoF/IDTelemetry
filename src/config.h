@@ -10,6 +10,8 @@
 //  Hardware: LILYGO T-SIM7080G-S3 (ESP32-S3-WROOM-1-N16R8) + SN65HVD230
 // ============================================================
 
+#define FW_VERSION  "1.0.0"
+
 // --- WiFi Access Point ---
 #define WIFI_SSID           SECRET_AP_SSID
 #define WIFI_PASS           SECRET_AP_PASS
@@ -81,8 +83,8 @@
 // GPS-basierte Capture-Schwellen (mind. eine muss erfüllt sein):
 #define TELEM_GPS_MAX_INTERVAL_MS  30000UL  // max. 30 s ohne neuen Punkt (Zeitlimit)
 #define TELEM_GPS_MIN_MOVE_M        15.0f   // Mindestbewegung damit Zeitlimit greift (GPS-Drift-Filter)
-#define TELEM_GPS_DIST_LO_M         50.0f   // Distanz-Schwelle bei Speed < SPEED_THRESHOLD
-#define TELEM_GPS_DIST_HI_M        150.0f   // Distanz-Schwelle bei Speed >= SPEED_THRESHOLD
+#define TELEM_GPS_DIST_LO_M         100.0f   // Distanz-Schwelle bei Speed < SPEED_THRESHOLD
+#define TELEM_GPS_DIST_HI_M         200.0f   // Distanz-Schwelle bei Speed >= SPEED_THRESHOLD
 #define TELEM_GPS_SPEED_THRESH_KMH  70.0f   // Schwelle Stadt/Autobahn (km/h)
 #define TELEM_YAW_TURN_DPS             7    // Drehrate-Schwelle für Kurven-Trigger (°/s, int)
 #define TELEM_YAW_INTERVAL_MS      3000UL  // Wiederholrate während Kurve (3s)

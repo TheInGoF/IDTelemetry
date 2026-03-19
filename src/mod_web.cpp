@@ -1,3 +1,4 @@
+#include "config.h"
 #include "mod_web.h"
 #include "mod_can.h"
 #include "mod_logs.h"
@@ -144,6 +145,7 @@ void web_init() {
     // Status — inkl. RTC + Gyro + PMU Akku + GPS
     server.on("/status", HTTP_GET, [](AsyncWebServerRequest* r) {
         JsonDocument doc;
+        doc["fw_version"]  = FW_VERSION;
         doc["uptime"]      = millis();
         doc["can_ok"]      = can_hw_ok();
         doc["log_cnt"]     = log_count;

@@ -66,7 +66,7 @@ input:focus{outline:none;border-color:var(--accent)}
 <header>
   <div class="hrow1">
     <button class="burger-btn" onclick="toggleMenu()">☰</button>
-    <div class="logo">ID<span>.</span>CONFIG</div>
+    <div class="logo">ID<span>.</span>CONFIG <span id="fw-ver" style="font-size:9px;color:var(--muted);font-weight:400"></span></div>
     <span style="flex:1"></span>
     <div class="led-g"><div class="led" id="led-gps"></div><span class="led-lbl">GPS</span></div>
     <div class="modem-w">
@@ -266,6 +266,7 @@ function setBatt(v,chg,vbus){const el=document.getElementById('batt-pct');if(!el
 async function fetchStatus(){
   try{
     const d=await(await fetch('/status')).json();
+    if(d.fw_version){const v=document.getElementById('fw-ver');if(v)v.textContent='v'+d.fw_version;}
     setLed('can',d.can_ok?'green':'blue');
     setLed('gps',d.gps_valid?'green':'');
     setLed('lte',d.modem_ok?'green':'');
