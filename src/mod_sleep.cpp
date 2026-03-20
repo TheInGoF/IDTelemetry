@@ -188,8 +188,13 @@ static void enter_deep_sleep(const char* reason) {
     can_stop();
     Serial.println("[SLEEP] CAN aus");
 
-    // BLE komplett stoppen — verhindert Zombie-BLE nach fehlgeschlagenem Sleep
-    NimBLEDevice::deinit(true);
+    // BLE sicher stoppen (kein deinit — NimBLE-interne Tasks crashen sonst)
+    NimBLEDevice::stopAdvertising();
+    NimBLEServer* pSrv = NimBLEDevice::getServer();
+    if (pSrv && pSrv->getConnectedCount() > 0) {
+        pSrv->disconnect(0);
+    }
+    delay(100);
     Serial.println("[SLEEP] BLE aus");
 
     // WiFi komplett aus
