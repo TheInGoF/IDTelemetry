@@ -11,6 +11,7 @@
 #include "mod_logs.h"
 #include <Arduino.h>
 #include <SPIFFS.h>
+#include <math.h>
 
 // ============================================================
 //  mod_modem - SIM7080G Modem (LTE + GPS)
@@ -44,6 +45,11 @@ static volatile int    s_gps_vsat     = 0;
 static volatile int    s_gps_usat     = 0;
 static volatile bool   s_gps_enabled  = false;
 static volatile bool   s_gps_has_fix  = false;
+
+// ---- Letzter Fix für Kursberechnung ----
+static double s_prev_fix_lat = 0.0;
+static double s_prev_fix_lon = 0.0;
+static bool   s_prev_fix_ok  = false;
 
 // ---- Interne Linkage für mod_traccar ----------------------
 
@@ -690,7 +696,21 @@ static void modem_task(void* /*param*/) {
                     if (s_modem.getGPS(&lat, &lon, &speed, &alt, &vsat, &usat, &accuracy,
                                        &year, &month, &day, &hour, &gmin, &sec)) {
 
-                        gps_update((double)lat, (double)lon);
+                        // Kurs aus letztem → aktuellem Fix berechnen
+                        float course = 0.0f;
+                        if (s_prev_fix_ok) {
+                            double dlon = ((double)lon - s_prev_fix_lon) * (M_PI / 180.0);
+                            double lat1 = s_prev_fix_lat * (M_PI / 180.0);
+                            double lat2 = (double)lat    * (M_PI / 180.0);
+                            double x = sin(dlon) * cos(lat2);
+                            double y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon);
+                            course = (float)(atan2(x, y) * (180.0 / M_PI));
+                            if (course < 0) course += 360.0f;
+                        }
+                        s_prev_fix_lat = (double)lat;
+                        s_prev_fix_lon = (double)lon;
+                        s_prev_fix_ok  = true;
+                        gps_update((double)lat, (double)lon, speed * 1.852f, course);
 
                         // Unplausible Werte bereinigen (TinyGSM gibt -9999 oder 0 bei leeren Feldern)
                         if (vsat < 0) vsat = 0;

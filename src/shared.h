@@ -56,10 +56,12 @@ extern const int       VW_MEB_DID_COUNT;
 //  Spinlock schützt gegen Tearing bei Cross-Core-Zugriff.
 // ============================================================
 struct GpsCache {
-    bool   valid = false;
-    double lat   = 0.0;
-    double lon   = 0.0;
-    char   loc[32] = "";  // "51.123456 11.123456"
+    bool   valid      = false;
+    double lat        = 0.0;
+    double lon        = 0.0;
+    float  speed_kmh  = 0.0f;  // Geschwindigkeit (km/h)
+    float  course_deg = 0.0f;  // Kurs (°, berechnet aus letzten zwei Fixes)
+    char   loc[32]    = "";    // "51.123456 11.123456"
 };
 extern GpsCache g_gps;
 
@@ -68,11 +70,13 @@ struct GpsSnapshot {
     bool   valid;
     double lat;
     double lon;
+    float  speed_kmh;
+    float  course_deg;
     char   loc[32];
 };
 
 // Schreiber (nur mod_modem): setzt alle Felder atomar
-void gps_update(double lat, double lon);
+void gps_update(double lat, double lon, float speed_kmh, float course_deg);
 void gps_invalidate();
 
 // Leser: einzelne Felder (Spinlock-geschützt)

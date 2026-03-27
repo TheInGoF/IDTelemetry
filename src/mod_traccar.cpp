@@ -50,9 +50,10 @@ static void send_to_traccar(const GpsSnapshot& fix) {
 
     char path[256];
     snprintf(path, sizeof(path),
-             "/?id=%s&lat=%.6f&lon=%.6f&batt=%d",
+             "/?id=%s&lat=%.6f&lon=%.6f&speed=%.1f&bearing=%.1f&batt=%d",
              cfg_traccar_id(),
              (float)fix.lat, (float)fix.lon,
+             fix.speed_kmh, fix.course_deg,
              batt);
 
     Serial.printf("[TRACCAR] → https://%s%s\n", cfg_traccar_host(), path);
@@ -65,8 +66,9 @@ static void send_to_traccar(const GpsSnapshot& fix) {
     }
 
     int status = http.responseStatusCode();
-    Serial.printf("[TRACCAR] HTTP %d  lat=%.6f lon=%.6f batt=%d%%\n",
-                  status, (float)fix.lat, (float)fix.lon, batt);
+    Serial.printf("[TRACCAR] HTTP %d  lat=%.6f lon=%.6f spd=%.1f° brg=%.1f° batt=%d%%\n",
+                  status, (float)fix.lat, (float)fix.lon,
+                  fix.speed_kmh, fix.course_deg, batt);
     http.stop();
 
     char tlog[96];

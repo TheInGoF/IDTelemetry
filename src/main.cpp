@@ -54,10 +54,12 @@ GpsCache          g_gps;        // Zentraler GPS-Cache — alle Module lesen/sch
 // ── GPS Spinlock — schützt g_gps gegen Cross-Core-Tearing ──
 static portMUX_TYPE s_gps_mux = portMUX_INITIALIZER_UNLOCKED;
 
-void gps_update(double lat, double lon) {
+void gps_update(double lat, double lon, float speed_kmh, float course_deg) {
     portENTER_CRITICAL(&s_gps_mux);
-    g_gps.lat   = lat;
-    g_gps.lon   = lon;
+    g_gps.lat        = lat;
+    g_gps.lon        = lon;
+    g_gps.speed_kmh  = speed_kmh;
+    g_gps.course_deg = course_deg;
     snprintf(g_gps.loc, sizeof(g_gps.loc), "%.6f %.6f", lat, lon);
     g_gps.valid = true;
     portEXIT_CRITICAL(&s_gps_mux);
@@ -102,9 +104,11 @@ const char* gps_location_str() {
 GpsSnapshot gps_snapshot() {
     GpsSnapshot s;
     portENTER_CRITICAL(&s_gps_mux);
-    s.valid = g_gps.valid;
-    s.lat   = g_gps.lat;
-    s.lon   = g_gps.lon;
+    s.valid      = g_gps.valid;
+    s.lat        = g_gps.lat;
+    s.lon        = g_gps.lon;
+    s.speed_kmh  = g_gps.speed_kmh;
+    s.course_deg = g_gps.course_deg;
     memcpy(s.loc, g_gps.loc, sizeof(s.loc));
     portEXIT_CRITICAL(&s_gps_mux);
     return s;
