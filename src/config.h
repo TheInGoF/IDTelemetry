@@ -80,14 +80,10 @@
 // ---- Telemetrie Zeilen-Puffer ----
 #define TELEM_ROW_BUF_SIZE       500    // max. gespeicherte Zeilen im RAM-Ringpuffer (~83 min bei 6/min)
 #define INFLUX_ROWS_PER_SEND      50    // max. Zeilen pro LTE-Fenster (50 × ~220 B ≈ 11 kB Body)
-// GPS-basierte Capture-Schwellen (mind. eine muss erfüllt sein):
-#define TELEM_GPS_MAX_INTERVAL_MS  30000UL  // max. 30 s ohne neuen Punkt (Zeitlimit)
-#define TELEM_GPS_MIN_MOVE_M        15.0f   // Mindestbewegung damit Zeitlimit greift (GPS-Drift-Filter)
-#define TELEM_GPS_DIST_LO_M         100.0f   // Distanz-Schwelle bei Speed < SPEED_THRESHOLD
-#define TELEM_GPS_DIST_HI_M         200.0f   // Distanz-Schwelle bei Speed >= SPEED_THRESHOLD
-#define TELEM_GPS_SPEED_THRESH_KMH  70.0f   // Schwelle Stadt/Autobahn (km/h)
-#define TELEM_YAW_TURN_DPS             7    // Drehrate-Schwelle für Kurven-Trigger (°/s, int)
-#define TELEM_YAW_INTERVAL_MS      3000UL  // Wiederholrate während Kurve (3s)
+// GPS-basierte Capture-Schwellen (sequentiell: Distanz → Yaw → Zeit):
+#define TELEM_GPS_MAX_INTERVAL_MS  20000UL  // max. 20 s ohne neuen Punkt (Zeitlimit)
+#define TELEM_GPS_DIST_HI_M         200.0f  // Distanz-Schwelle (einzige)
+#define TELEM_YAW_TURN_DPS             7    // Drehrate-Schwelle für Kurven-Trigger (°/s)
 
 // ---- WiFi Guard ----
 #define BLE_RSSI_THRESHOLD    -72    // dBm (Legacy, nicht mehr genutzt)

@@ -80,7 +80,7 @@ static uint16_t     s_row_pending   = 0;   // ausstehende (ungesendete) Zeilen
 static double   s_cap_lat = 0.0;
 static double   s_cap_lon = 0.0;
 static uint32_t s_cap_ms  = 0;
-static uint32_t s_yaw_last_cap_ms = 0;  // letzter Capture durch Yaw-Burst
+static float    s_yaw_peak        = 0.0f; // max |yaw_dps| seit letztem Capture-Tick
 
 // ── Delta-Kompression: nur geänderte Werte senden ──────────
 static float s_prev_val[TELEM_FIELD_COUNT];  // letzte gesendete Werte
@@ -164,54 +164,28 @@ static float bearing_deg(double lat1, double lon1, double lat2, double lon2) {
 }
 
 // ── GPS-getriggerter Zeilen-Capture ─────────────────────────
-// Wird jede Sekunde aus telem_task aufgerufen.
-// Schreibt nur wenn GPS gültig UND mind. eine Schwelle überschritten.
-// OBD-Daten ohne GPS werden verworfen (GPS hat Vorrang).
+// Wird alle 3s aus telem_task aufgerufen.
+// Sequentielle Prüfung: Distanz → Yaw-Peak → Zeit (first-match wins).
+// s_yaw_peak wird im 1s-Loop akkumuliert und hier zurückgesetzt.
 static void row_try_capture() {
-    if (!gps_valid()) return;
+    if (!gps_valid()) { s_yaw_peak = 0.0f; return; }
 
-    double   lat = gps_lat();
-    double   lon = gps_lon();
-    uint32_t now = millis();
+    double   lat     = gps_lat();
+    double   lon     = gps_lon();
+    uint32_t now     = millis();
+    float    dist    = (s_cap_ms == 0) ? 9999.0f
+                     : haversine_m(s_cap_lat, s_cap_lon, lat, lon);
+    uint32_t elapsed = (s_cap_ms == 0) ? 99999UL : (now - s_cap_ms);
 
-    // Aktuelle Fahrzeuggeschwindigkeit für Distanz-Schwelle
-    float speed_kmh = 0.0f;
-    telem_get_latest(TELEM_VEHICLE_SPEED, &speed_kmh, nullptr);
+    bool        do_capture = false;
+    const char* reason     = "";
 
-    // Kein Capture im Stand: vermeidet identische Zeilen beim Parken
-    float parked_val = 0.0f;
-    telem_get_latest(TELEM_IS_PARKED, &parked_val, nullptr);
-    if (parked_val > 0.5f && speed_kmh < 1.0f) return;
+    if      (dist    >= TELEM_GPS_DIST_HI_M)       { do_capture = true; reason = "Distanz"; }
+    else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) { do_capture = true; reason = "Kurve";   }
+    else if (elapsed >= TELEM_GPS_MAX_INTERVAL_MS)  { do_capture = true; reason = "Zeit";    }
 
-    // ── Trigger-Bedingungen prüfen ─────────────────────────
-    bool do_capture = false;
-    if (s_cap_ms == 0) {
-        do_capture = true;  // erster Punkt immer speichern
-    } else {
-        uint32_t elapsed = now - s_cap_ms;
-        float    dist    = haversine_m(s_cap_lat, s_cap_lon, lat, lon);
+    s_yaw_peak = 0.0f;  // immer zurücksetzen
 
-        if (elapsed >= TELEM_GPS_MAX_INTERVAL_MS && dist >= TELEM_GPS_MIN_MOVE_M) {
-            do_capture = true;  // Zeitlimit + Mindestbewegung
-        } else {
-            float thresh = (speed_kmh >= TELEM_GPS_SPEED_THRESH_KMH) ? TELEM_GPS_DIST_HI_M : TELEM_GPS_DIST_LO_M;
-            if (dist >= thresh) {
-                do_capture = true;  // Distanz-Schwelle
-            } else {
-                // Yaw-Burst: sofort bei Kurve, dann alle 3s solange Drehung anhält
-                int yaw = (int)fabsf(gyro_get_yaw_dps());
-                if (yaw >= TELEM_YAW_TURN_DPS && dist >= 5.0f) {
-                    if (s_yaw_last_cap_ms == 0 ||
-                        (now - s_yaw_last_cap_ms) >= TELEM_YAW_INTERVAL_MS) {
-                        do_capture = true;
-                        s_yaw_last_cap_ms = now;
-                    }
-                } else {
-                    s_yaw_last_cap_ms = 0;  // Kurve vorbei → Reset
-                }
-            }
-        }
-    }
     if (!do_capture) return;
 
     // RTC-Zeitstempel erforderlich (InfluxDB braucht gültigen Timestamp)
@@ -288,6 +262,7 @@ static void row_try_capture() {
     s_cap_lat = lat;
     s_cap_lon = lon;
     s_cap_ms  = now;
+    syslog("TELEM", "GPS-Capture: %s (%.0fm, %lus)", reason, dist, (unsigned long)(elapsed / 1000UL));
 }
 
 // ── Wert aktualisieren ──────────────────────────────────────
@@ -437,8 +412,9 @@ static void telem_task(void* /*param*/) {
         s_can_schedule[i].last_ms = now - s_can_schedule[i].interval_ms + (i * 1000UL);
     }
 
-    uint32_t last_sensor_ms = 0;   // GPS, Gyro, LTE (alle 15 s)
-    uint32_t last_pmu_ms    = 0;   // PMU-Akku (alle 60 s)
+    uint32_t last_sensor_ms  = 0;   // GPS, Gyro, LTE (alle 15 s)
+    uint32_t last_pmu_ms     = 0;   // PMU-Akku (alle 60 s)
+    uint32_t last_gps_cap_ms = 0;   // GPS-Capture (alle 3 s)
 
     while (!g_shutdown) {
         now = millis();
@@ -510,8 +486,17 @@ static void telem_task(void* /*param*/) {
             last_pmu_ms = now;
         }
 
-        // GPS-getriggerter Zeilen-Capture (prüft intern Distanz/Kurs/Zeit-Schwellen)
-        row_try_capture();
+        // Yaw-Peak jede Sekunde akkumulieren (für 3s-Capture-Tick)
+        {
+            float y = fabsf(gyro_get_yaw_dps());
+            if (y > s_yaw_peak) s_yaw_peak = y;
+        }
+
+        // GPS-getriggerter Zeilen-Capture alle 3 s
+        if (now - last_gps_cap_ms >= 3000UL) {
+            row_try_capture();
+            last_gps_cap_ms = now;
+        }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
