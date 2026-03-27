@@ -2,6 +2,7 @@
 #include "config.h"
 #include <Arduino.h>
 #include <XPowersLib.h>
+#include "esp_sleep.h"
 
 // ============================================================
 //  mod_pmu - AXP2101 PMU  (Wire1, SDA=GPIO15, SCL=GPIO7)
@@ -21,7 +22,15 @@ void pmu_init() {
     s_pmu_ok = true;
     Serial.printf("[PMU] AXP2101 OK  Pins: SDA=GPIO%d SCL=GPIO%d\n", PMU_SDA_PIN, PMU_SCL_PIN);
 
-    // ---- Modem-Stromversorgung aktivieren (1:1 aus LilyGo AllFunction/power.cpp) ----
+    // ---- Modem-Stromversorgung aktivieren (wie LilyGo MinimalModemNBIOTExample) ----
+    // Beim ersten Boot (kein Deep-Sleep-Wake): DC3 kurz abschalten → sauberer Power-Cycle.
+    // Nach Deep Sleep: Modem war bereits via AT+CPOF abgeschaltet → kein Power-Cycle noetig.
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
+        PMU.disableDC3();
+        delay(200);
+        Serial.println("[PMU] Erster Boot: DC3 Power-Cycle");
+    }
+
     // DC3  = Modem VDD   2700~3400mV → 3000mV
     PMU.setDC3Voltage(3000);
     PMU.enableDC3();
@@ -30,9 +39,13 @@ void pmu_init() {
     PMU.enableBLDO2();
     Serial.println("[PMU] Modem-Power aktiviert: DC3=3000mV, BLDO2=3300mV");
 
+    // TS-Pin Messung deaktivieren (wie LilyGo-Beispiel — sonst blockiert Laden)
+    PMU.disableTSPinMeasure();
+
     // ---- Lade-Parameter (wie LilyGo-Beispiel) ----
     PMU.setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_300MA);
     PMU.setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V1);
+    PMU.enableCellbatteryCharge();  // Laden aktivieren (war ggf. vor Deep Sleep deaktiviert)
 
     pmu_update();
 }
@@ -55,4 +68,14 @@ bool pmu_is_vbus_in() {
 bool pmu_is_charging() {
     if (!s_pmu_ok) return false;
     return PMU.isCharging();
+}
+
+void pmu_set_charging(bool on) {
+    if (!s_pmu_ok) return;
+    if (on) {
+        PMU.enableCellbatteryCharge();
+    } else {
+        PMU.disableCellbatteryCharge();
+    }
+    Serial.printf("[PMU] Laden %s\n", on ? "aktiviert" : "deaktiviert");
 }

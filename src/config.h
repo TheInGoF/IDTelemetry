@@ -34,7 +34,7 @@
 
 // --- Gyro Schwelle ---
 // Ab diesem G-Wert (Abweichung von Ruhelage) wird gelb angezeigt
-#define GYRO_SHAKE_THRESHOLD 0.06f       // 0.06G = deutliche Bewegung
+#define GYRO_SHAKE_THRESHOLD 0.05f       // 0.05G = deutliche Bewegung
 #define GYRO_HOLD_MS         30000       // SHAKE bleibt 30s aktiv — Autobahn-Vibrationen reichen alle ~15s
 
 // --- Timeouts ---
@@ -74,7 +74,7 @@
 #define SLEEP_INACTIVITY_MS     (10UL * 60UL * 1000UL) // 10 Minuten Inaktivität
 
 // ---- Telemetrie / LTE-Fenster ----
-#define SEND_INTERVAL_S          60                          // GPS→LTE Wechselzyklus (einzige Quelle)
+#define SEND_INTERVAL_S          90                          // GPS→LTE Wechselzyklus (einzige Quelle)
 #define TRACCAR_SEND_INTERVAL_MS (SEND_INTERVAL_S * 1000UL) // abgeleitet — nicht separat ändern
 
 // ---- Telemetrie Zeilen-Puffer ----
