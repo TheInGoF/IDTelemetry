@@ -255,14 +255,18 @@ void setup() {
 
 void loop() {
     // ── Serial-Befehle (Terminal) ──
-    static char serial_buf[32];
+    static char serial_buf[80];
     static uint8_t serial_pos = 0;
     while (Serial.available()) {
         char c = Serial.read();
         if (c == '\n' || c == '\r') {
             if (serial_pos > 0) {
                 serial_buf[serial_pos] = '\0';
-                if (strcmp(serial_buf, "sleep") == 0) {
+                if (strcmp(serial_buf, "nosleep") == 0) {
+                    g_nosleep = !g_nosleep;
+                    Serial.printf("[CMD] Sleep %s (bis Neustart)\n",
+                                  g_nosleep ? "DEAKTIVIERT" : "aktiviert");
+                } else if (strcmp(serial_buf, "sleep") == 0) {
                     Serial.println("[CMD] → Deep Sleep");
                     sleep_force();
                 } else if (strcmp(serial_buf, "gps") == 0) {
@@ -271,6 +275,18 @@ void loop() {
                     modem_print_lte_info();
                 } else if (strcmp(serial_buf, "lte scan") == 0) {
                     modem_print_lte_scan();
+                } else if (strcmp(serial_buf, "lte bands") == 0) {
+                    modem_print_lte_bands();
+                } else if (strcmp(serial_buf, "lte bands fix") == 0) {
+                    modem_lte_bands_fix(false);
+                } else if (strcmp(serial_buf, "lte bands all") == 0) {
+                    modem_lte_bands_fix(true);
+                } else if (strcmp(serial_buf, "at stop") == 0) {
+                    modem_pause_task();
+                } else if (strcmp(serial_buf, "at start") == 0) {
+                    modem_resume_task();
+                } else if (strncmp(serial_buf, "at ", 3) == 0) {
+                    modem_send_at(serial_buf + 3);
                 } else if (strcmp(serial_buf, "can sniff") == 0) {
                     can_sniff(5000);  // 5 Sekunden
                 } else if (strcmp(serial_buf, "reset") == 0) {
@@ -289,7 +305,9 @@ void loop() {
                     if (SPIFFS.exists(SPIFFS_SCAN_LOG)) SPIFFS.remove(SPIFFS_SCAN_LOG);
                     Serial.println("[CMD] Alle Logs geloescht");
                 } else if (strcmp(serial_buf, "help") == 0) {
-                    Serial.println("Befehle: sleep, gps, lte, lte scan, can sniff, reset");
+                    Serial.println("Befehle: sleep, nosleep, gps, lte, lte scan, can sniff, reset");
+                    Serial.println("  LTE:   lte bands, lte bands fix, lte bands all");
+                    Serial.println("  Debug: at +KOMMANDO  (roher AT-Befehl an Modem)");
                     Serial.println("  Logs:  syslog, elmlog, blelog, scanlog, clearlog");
                 } else {
                     Serial.printf("[CMD] Unbekannt: '%s' → help\n", serial_buf);

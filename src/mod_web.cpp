@@ -290,6 +290,12 @@ void ble_web_routes_init() {
     server.on("/config", HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/config.html"); });
     server.on("/daten",  HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/daten.html");  });
 
+    // i18n — Sprachdateien
+    server.on("/i18n.js", HTTP_GET, [](AsyncWebServerRequest* r) {
+        r->send(SPIFFS, "/i18n.js", "application/javascript");
+    });
+    server.serveStatic("/lang/", SPIFFS, "/lang/");
+
     // /api/telemetry — alle Telemetrie-Felder mit Wert + Alter
     server.on("/api/telemetry", HTTP_GET, [](AsyncWebServerRequest* r) {
         JsonDocument doc;

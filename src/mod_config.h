@@ -20,6 +20,7 @@ const char* cfg_ap_ssid();
 const char* cfg_ap_pass();
 
 // SIM / APN
+const char* cfg_sim_pin();      // SIM PIN (leer = kein PIN)
 const char* cfg_apn();
 const char* cfg_apn_user();
 const char* cfg_apn_pass();
@@ -37,6 +38,9 @@ const char* cfg_influx_device();
 
 // BLE Standby-Defaults (ABRP bekommt Werte auch ohne CAN)
 bool        cfg_ble_standby();
+
+// Sprache ("de", "en")
+const char* cfg_lang();
 
 // Log-Schalter (SPIFFS-Logging ein/aus, zur Laufzeit änderbar)
 bool        cfg_log_can();    // CAN/ELM SPIFFS-Log

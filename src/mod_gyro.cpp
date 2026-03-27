@@ -28,8 +28,9 @@ static int        g_shake_cnt     = 0;
 static uint32_t   g_last_shake_ms = 0;
 static bool       g_shake_active  = false;
 static float      g_threshold     = GYRO_SHAKE_THRESHOLD;
-static uint8_t    g_mot_thr       = 5;   // MPU-6050 MOT_THR (1 Einheit = 32mg)
+static uint8_t    g_mot_thr       = 4;   // MPU-6050 MOT_THR (1 Einheit = 32mg)
 static float      g_baseline      = 1.0f;    // kalibrierte Ruhelage in G
+static float      g_wake_accel    = 0.0f;    // Beschleunigung beim Boot (vor Kalibrierung)
 
 // Von gyro_task beschrieben, von gyro_recalibrate() gelesen (cross-task)
 static volatile float    g_raw_total = 1.0f; // Roh-Vektorbetrag ohne baseline-Abzug
@@ -236,6 +237,21 @@ void gyro_init() {
     }
     // Alle Achsen aktivieren (Accel + Gyro) — nach Deep Sleep steht hier 0xC7
     mpu_write(0x6C, 0x00);
+    delay(10);  // Accel stabilisieren lassen
+
+    // Beschleunigung beim Boot auslesen (vor Kalibrierung)
+    {
+        uint8_t abuf[6];
+        if (mpu_read(MPU_REG_ACCEL_XOUT, abuf, 6)) {
+            int16_t ax = (int16_t)((abuf[0] << 8) | abuf[1]);
+            int16_t ay = (int16_t)((abuf[2] << 8) | abuf[3]);
+            int16_t az = (int16_t)((abuf[4] << 8) | abuf[5]);
+            float fx = ax / 16384.0f, fy = ay / 16384.0f, fz = az / 16384.0f;
+            g_wake_accel = sqrtf(fx*fx + fy*fy + fz*fz);
+            Serial.printf("[GYRO] Boot-Accel: %.4fG (ax=%.3f ay=%.3f az=%.3f)\n",
+                          g_wake_accel, fx, fy, fz);
+        }
+    }
 
     // Motion-Detection-Interrupt für GPIO3-Wake konfigurieren
     // MOT_THR aus SPIFFS laden (persistente Aufwachschwelle)
@@ -443,3 +459,4 @@ void gyro_set_mot_threshold(uint8_t v) {
     if (f) { f.printf("%u\n", v); f.close(); }
 }
 uint8_t gyro_get_mot_threshold() { return g_mot_thr; }
+float   gyro_get_wake_accel()    { return g_wake_accel; }

@@ -25,3 +25,6 @@ void sleep_force();      // Sofort Deep Sleep (Serial-Befehl / Debug)
 // Globales Shutdown-Flag: Tasks prüfen dies in ihrer Loop und beenden sich sauber.
 // Verhindert vTaskDelete() während laufender I2C/SPI/UART-Transaktionen.
 extern volatile bool g_shutdown;
+
+// Sleep-Sperre: true = Deep Sleep fuer diese Session deaktiviert (Serial: "nosleep")
+extern volatile bool g_nosleep;

@@ -26,9 +26,9 @@ header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0
 .led.blue{background:var(--blue);box-shadow:0 0 7px rgba(121,192,255,.6)}
 .led.yellow{background:var(--yellow);box-shadow:0 0 7px var(--yellow)}
 .led.red{background:var(--red);box-shadow:0 0 7px var(--red)}
-/* ── Burger & Modem ── */
+/* Burger & Modem */
 .burger-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 9px;border-radius:4px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;transition:all .15s}.burger-btn:hover{color:var(--accent);border-color:var(--accent)}.drop-nav{position:absolute;top:100%;left:0;background:var(--bg1);border:1px solid var(--border);border-top:2px solid var(--accent);border-radius:0 0 6px 6px;z-index:200;min-width:150px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)}.drop-nav a{display:block;padding:11px 16px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.08em;border-bottom:1px solid var(--border);transition:all .15s}.drop-nav a:last-child{border:none}.drop-nav a:hover,.drop-nav a.active{color:var(--accent);background:var(--bg2)}.modem-w{display:flex;flex-direction:column;align-items:center;gap:2px;padding:0}.modem-bars{display:flex;align-items:flex-end;gap:2px;height:14px}.modem-bar{width:3px;border-radius:1px 1px 0 0;background:rgba(90,122,150,.2)}.modem-bar.on{background:var(--green);box-shadow:0 0 4px var(--green)}.bar1{height:3px}.bar2{height:6px}.bar3{height:9px}.bar4{height:11px}.bar5{height:14px}.modem-op{font-size:7px;color:var(--muted);letter-spacing:.04em;white-space:nowrap;max-width:54px;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;text-align:center}
-/* ── Daten-Tabelle ── */
+/* Daten-Tabelle */
 .container{max-width:640px;margin:0 auto;padding:16px}
 .status-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--muted)}
 .status-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s}
@@ -53,7 +53,7 @@ header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0
 <body>
 <header>
   <div class="hrow1">
-    <button class="burger-btn" onclick="toggleMenu()">☰</button>
+    <button class="burger-btn" onclick="toggleMenu()">&#9776;</button>
     <div class="logo">ID<span>.</span>DATA <span id="fw-ver" style="font-size:9px;color:var(--muted);font-weight:400"></span></div>
     <span style="flex:1"></span>
     <div class="led-g"><div class="led" id="led-gps"></div><span class="led-lbl">GPS</span></div>
@@ -68,9 +68,9 @@ header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0
       <div class="modem-op" id="modem-op">--</div>
     </div>
     <nav class="drop-nav" id="drop-nav" style="display:none">
-      <a href="/daten" class="active">DATA</a>
-      <a href="/debug">DEBUG</a>
-      <a href="/config">CONFIG</a>
+      <a href="/daten" class="active" data-i18n="nav.data">DATA</a>
+      <a href="/debug" data-i18n="nav.debug">DEBUG</a>
+      <a href="/config" data-i18n="nav.config">CONFIG</a>
     </nav>
   </div>
   <div class="hrow2">
@@ -86,7 +86,7 @@ header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0
 <div class="container">
   <div class="status-bar">
     <div class="status-dot" id="fetch-dot"></div>
-    <span id="fetch-txt">Lade Telemetrie…</span>
+    <span id="fetch-txt" data-i18n="data.loading">Lade Telemetrie&#8230;</span>
     <span style="flex:1"></span>
     <span id="fetch-ts" style="font-size:10px"></span>
   </div>
@@ -94,36 +94,37 @@ header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0
   <table class="tbl">
     <thead>
       <tr>
-        <th>Name</th>
-        <th>Wert</th>
-        <th>Alter</th>
-        <th>●</th>
+        <th data-i18n="data.th_name">Name</th>
+        <th data-i18n="data.th_value">Wert</th>
+        <th data-i18n="data.th_age">Alter</th>
+        <th>&#9679;</th>
       </tr>
     </thead>
     <tbody id="tbl-body">
-      <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px">Warte auf Daten…</td></tr>
+      <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px" data-i18n="data.waiting">Warte auf Daten&#8230;</td></tr>
     </tbody>
   </table>
 </div>
 
+<script src="/i18n.js"></script>
 <script>
 // ── LED System ────────────────────────────────────────────────
-const _ledTimers = {};
+var _ledTimers = {};
 function setLed(id, cls) {
-  const el = document.getElementById('led-'+id);
+  var el = document.getElementById('led-'+id);
   if (el) el.className = 'led'+(cls?' '+cls:'');
 }
 function flashLed(id, cls) {
-  const el = document.getElementById('led-'+id);
+  var el = document.getElementById('led-'+id);
   if (!el) return;
   el.classList.add(cls);
   clearTimeout(_ledTimers[id]);
-  _ledTimers[id] = setTimeout(() => el.classList.remove(cls), 150);
+  _ledTimers[id] = setTimeout(function(){ el.classList.remove(cls); }, 150);
 }
 async function fetchStatus(){
   try{
-    const d=await(await fetch('/status')).json();
-    if(d.fw_version){const v=document.getElementById('fw-ver');if(v)v.textContent='v'+d.fw_version;}
+    var d=await(await fetch('/status')).json();
+    if(d.fw_version){var v=document.getElementById('fw-ver');if(v)v.textContent='v'+d.fw_version;}
     setLed('can', d.can_ok?'green':'blue');
     if(!d.gyro_ok) setLed('gyro','');
     else setLed('gyro', d.gyro_state===2?'yellow':'green');
@@ -136,138 +137,130 @@ fetchStatus();
 var _statusTimer=setInterval(fetchStatus,6000);
 
 // ── Burger & Nav ─────────────────────────────────────────────
-function toggleMenu(){const m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
-if(!window._menuListener){window._menuListener=true;document.addEventListener('click',e=>{if(!e.target.closest('header')){const m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
+function toggleMenu(){var m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
+if(!window._menuListener){window._menuListener=true;document.addEventListener('click',function(e){if(!e.target.closest('header')){var m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
 
 // ── Modem ─────────────────────────────────────────────────────
 var _modemLastOp='';
-function updateModem(sig,op,sim,conn){const bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(let i=1;i<=5;i++){const b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}const el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
+function updateModem(sig,op,sim,conn){var bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(var i=1;i<=5;i++){var b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}var el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
 
 // ── Battery ───────────────────────────────────────────────────
-function setBatt(v,chg,vbus){const el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
+function setBatt(v,chg,vbus){var el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
 
 
 // ── Telemetrie-Tabelle ────────────────────────────────────────
-const NEVER = 4294967295;   // sentinel: Feld wurde noch nie abgefragt
+var NEVER = 4294967295;
 
-// Hilfsfunktionen
 function fmtAge(ms) {
-  if (ms >= NEVER) return '—';
+  if (ms >= NEVER) return '\u2014';
   if (ms < 1000)   return ms + ' ms';
   return Math.round(ms / 1000) + ' s';
 }
 
 function ageClass(ms) {
-  if (ms >= NEVER)   return '';      // noch nie → kein Dot
+  if (ms >= NEVER)   return '';
   if (ms < 15000)    return 'green';
   if (ms < 90000)    return 'yellow';
   return 'red';
 }
 
 function dotHtml(ms) {
-  const cls = ageClass(ms);
+  var cls = ageClass(ms);
   if (!cls) return '';
-  return `<span class="age-dot ${cls}"></span>`;
+  return '<span class="age-dot ' + cls + '"></span>';
 }
 
-function boolVal(v) { return v >= 0.5 ? 'Ja' : 'Nein'; }
+function boolVal(v) { return v >= 0.5 ? t('data.yes') : t('data.no'); }
 
-function fmtVal(f) {
-  if (!f) return '—';
-  const ms = f.age_ms;
-  const v  = parseFloat(f.v);
-  if (ms >= NEVER || (!f.valid && ms >= NEVER)) return '—';
-  return v;
+function getRows() {
+  return [
+    { sep: t('data.sep_vehicle') },
+    { label: t('data.soc'),       key: 'soc',            fmt: function(v){return v.toFixed(1);}, unit: '%' },
+    { label: t('data.voltage'),    key: 'voltage',        fmt: function(v){return v.toFixed(1);}, unit: 'V' },
+    { label: t('data.current_a'),  key: 'current',        fmt: function(v){return v.toFixed(1);}, unit: 'A' },
+    { label: t('data.power'),      key: 'power',          fmt: function(v){return v.toFixed(1);}, unit: 'kW' },
+    { label: t('data.speed'),      key: 'vehicle_speed',  fmt: function(v){return Math.round(v);}, unit: 'km/h' },
+    { label: t('data.batt_temp'),  key: 'batt_temp',      fmt: function(v){return v.toFixed(1);}, unit: '\u00b0C' },
+    { label: t('data.ext_temp'),   key: 'ext_temp',       fmt: function(v){return v.toFixed(1);}, unit: '\u00b0C' },
+    { label: t('data.capacity'),   key: 'capacity',       fmt: function(v){return v.toFixed(1);}, unit: 'kWh' },
+    { label: t('data.charged'),    key: 'kwh_charged',    fmt: function(v){return v.toFixed(2);}, unit: 'kWh' },
+    { label: t('data.charging'),   key: 'is_charging',    fmt: boolVal, unit: '' },
+    { label: t('data.dcfc'),       key: 'is_dcfc',        fmt: boolVal, unit: '' },
+    { label: t('data.parked'),     key: 'is_parked',      fmt: boolVal, unit: '' },
+    { label: t('data.odometer'),   key: 'odometer',       fmt: function(v){return Math.round(v);}, unit: 'km' },
+    { label: t('data.range'),      key: 'range',          fmt: function(v){return Math.round(v);}, unit: 'km' },
+    { sep: t('data.sep_sensors') },
+    { label: t('data.gps'),       key: ['gps_lat','gps_lon','gps_valid'],
+      fmt: function(lat,lon,gv){ return gv >= 0.5 ? lat.toFixed(6)+' '+lon.toFixed(6) : t('data.gps_nofix'); },
+      unit: '' },
+    { label: t('data.gyro'),      key: 'gyro_g',         fmt: function(v){return v.toFixed(3);}, unit: 'G' },
+    { label: t('data.lte_sig'),   key: 'lte_signal',     fmt: function(v){return Math.round(v)+' / 31';}, unit: '' },
+    { label: t('data.lte_op'),    key: 'lte_operator',   fmt: function(v,f){return f.str || '\u2014';}, unit: '' },
+    { sep: t('data.sep_device') },
+    { label: t('data.batt_device'), key: 'batt_device',  fmt: function(v){return Math.round(v);}, unit: '%' },
+    { sep: t('data.sep_influx') },
+    { label: t('data.influx_conn'), key: '_influx',      fmt: function(v){return v ? t('data.influx_connected') : t('data.influx_disconnected');}, unit: '' },
+    { label: t('data.buf_pending'), key: '_buf_pending',  fmt: function(v){return Math.round(v);}, unit: '' },
+  ];
 }
-
-// Zeilen-Definition: [label, key(s), formatFn, unit]
-// key kann String (einfaches Feld) oder Array (kombiniert)
-const ROWS = [
-  { sep: 'Fahrzeug (OBD)' },
-  { label: 'SoC',            key: 'soc',            fmt: v => v.toFixed(1), unit: '%' },
-  { label: 'Spannung',       key: 'voltage',        fmt: v => v.toFixed(1), unit: 'V' },
-  { label: 'Strom',          key: 'current',        fmt: v => v.toFixed(1), unit: 'A' },
-  { label: 'Leistung',       key: 'power',          fmt: v => v.toFixed(1), unit: 'kW' },
-  { label: 'Geschwindigkeit',key: 'vehicle_speed',  fmt: v => Math.round(v), unit: 'km/h' },
-  { label: 'Batt. Temp.',    key: 'batt_temp',      fmt: v => v.toFixed(1), unit: '°C' },
-  { label: 'Außentemp.',     key: 'ext_temp',       fmt: v => v.toFixed(1), unit: '°C' },
-  { label: 'Kapazität',      key: 'capacity',       fmt: v => v.toFixed(1), unit: 'kWh' },
-  { label: 'Geladen',        key: 'kwh_charged',    fmt: v => v.toFixed(2), unit: 'kWh' },
-  { label: 'Laden',          key: 'is_charging',    fmt: boolVal, unit: '' },
-  { label: 'DC Schnellladen',key: 'is_dcfc',        fmt: boolVal, unit: '' },
-  { label: 'Geparkt',        key: 'is_parked',      fmt: boolVal, unit: '' },
-  { label: 'Odometer',       key: 'odometer',       fmt: v => Math.round(v), unit: 'km' },
-  { label: 'Reichweite',     key: 'range',          fmt: v => Math.round(v), unit: 'km' },
-  { sep: 'Sensoren (live)' },
-  { label: 'GPS',            key: ['gps_lat','gps_lon','gps_valid'],
-    fmt: (lat,lon,gv) => gv >= 0.5 ? lat.toFixed(6)+' '+lon.toFixed(6) : '(kein Fix)',
-    unit: '' },
-  { label: 'Gyro',           key: 'gyro_g',         fmt: v => v.toFixed(3), unit: 'G' },
-  { label: 'LTE Signal',     key: 'lte_signal',     fmt: v => Math.round(v)+' / 31', unit: '' },
-  { label: 'LTE Anbieter',   key: 'lte_operator',   fmt: (v,f) => f.str || '—', unit: '' },
-  { sep: 'Gerät' },
-  { label: 'Akku Gerät',     key: 'batt_device',    fmt: v => Math.round(v), unit: '%' },
-  { sep: 'InfluxDB' },
-  { label: 'InfluxDB',       key: '_influx',        fmt: v => v ? 'verbunden' : 'getrennt', unit: '' },
-  { label: 'Gepufferte Punkte', key: '_buf_pending', fmt: v => Math.round(v), unit: '' },
-];
 
 function buildTable(data) {
-  const f = data.fields || {};
-  let html = '';
+  var f = data.fields || {};
+  var ROWS = getRows();
+  var html = '';
 
-  for (const row of ROWS) {
+  for (var ri = 0; ri < ROWS.length; ri++) {
+    var row = ROWS[ri];
     if (row.sep !== undefined) {
-      html += `<tr class="sep"><td colspan="4" style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px">${row.sep}</td></tr>`;
+      html += '<tr class="sep"><td colspan="4" style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px">' + row.sep + '</td></tr>';
       continue;
     }
 
-    let valStr = '—';
-    let ageMs  = NEVER;
-    let isValid = false;
+    var valStr = '\u2014';
+    var ageMs  = NEVER;
+    var isValid = false;
 
     if (row.key === '_influx') {
-      valStr  = data.influx_ok ? 'verbunden' : 'getrennt';
-      ageMs   = 0;  // API-Abfrage selbst liefert den frischen Wert
+      valStr  = data.influx_ok ? t('data.influx_connected') : t('data.influx_disconnected');
+      ageMs   = 0;
       isValid = true;
     } else if (row.key === '_buf_pending') {
       valStr  = String(data.buf_pending ?? 0);
       ageMs   = 0;
       isValid = true;
     } else if (Array.isArray(row.key)) {
-      // Kombiniertes Feld (GPS)
-      const fields = row.key.map(k => f[k]);
-      ageMs   = Math.max(...fields.map(x => x ? x.age_ms : NEVER));
-      isValid = fields.every(x => x && x.valid);
+      var fields = row.key.map(function(k){ return f[k]; });
+      ageMs   = Math.max.apply(null, fields.map(function(x){ return x ? x.age_ms : NEVER; }));
+      isValid = fields.every(function(x){ return x && x.valid; });
       if (ageMs < NEVER) {
-        const vals = fields.map(x => parseFloat(x.v));
-        try { valStr = row.fmt(...vals) + (row.unit ? ' '+row.unit : ''); }
-        catch(e) { valStr = '—'; }
+        var vals = fields.map(function(x){ return parseFloat(x.v); });
+        try { valStr = row.fmt.apply(null, vals) + (row.unit ? ' '+row.unit : ''); }
+        catch(e) { valStr = '\u2014'; }
       }
     } else {
-      const fd = f[row.key];
+      var fd = f[row.key];
       if (fd) {
         ageMs   = fd.age_ms;
         isValid = fd.valid;
         if (ageMs < NEVER) {
-          const v = parseFloat(fd.v);
+          var v = parseFloat(fd.v);
           try {
             valStr = row.fmt(v, fd) + (row.unit ? ' '+row.unit : '');
-          } catch(e) { valStr = '—'; }
+          } catch(e) { valStr = '\u2014'; }
         }
       }
     }
 
-    const ageTxt = fmtAge(ageMs);
-    const dot    = dotHtml(ageMs);
-    const naClass= (ageMs >= NEVER) ? ' na' : '';
+    var ageTxt = fmtAge(ageMs);
+    var dot    = dotHtml(ageMs);
+    var naClass= (ageMs >= NEVER) ? ' na' : '';
 
-    html += `<tr>
-      <td class="field-name">${row.label}</td>
-      <td class="field-val${naClass}">${valStr}</td>
-      <td class="field-age">${ageMs < NEVER ? ageTxt : ''}</td>
-      <td style="text-align:center">${dot}</td>
-    </tr>`;
+    html += '<tr>' +
+      '<td class="field-name">' + row.label + '</td>' +
+      '<td class="field-val' + naClass + '">' + valStr + '</td>' +
+      '<td class="field-age">' + (ageMs < NEVER ? ageTxt : '') + '</td>' +
+      '<td style="text-align:center">' + dot + '</td>' +
+    '</tr>';
   }
 
   document.getElementById('tbl-body').innerHTML = html;
@@ -277,29 +270,29 @@ function buildTable(data) {
 var _telemTimer;
 
 async function fetchTelemetry() {
-  const dot = document.getElementById('fetch-dot');
-  const txt = document.getElementById('fetch-txt');
-  const ts  = document.getElementById('fetch-ts');
+  var dot = document.getElementById('fetch-dot');
+  var txt = document.getElementById('fetch-txt');
+  var ts  = document.getElementById('fetch-ts');
   try {
-    const data = await (await fetch('/api/telemetry')).json();
+    var data = await (await fetch('/api/telemetry')).json();
     buildTable(data);
     dot.className = 'status-dot ok';
-    txt.textContent = 'Telemetrie aktuell';
-    const d = new Date();
+    txt.textContent = t('data.current');
+    var d = new Date();
     ts.textContent = d.getHours().toString().padStart(2,'0')+':'+
                      d.getMinutes().toString().padStart(2,'0')+':'+
                      d.getSeconds().toString().padStart(2,'0');
   } catch(e) {
     dot.className = 'status-dot';
-    txt.textContent = 'Verbindungsfehler';
+    txt.textContent = t('data.conn_err');
   }
 }
 
 fetchTelemetry();
 _telemTimer = setInterval(fetchTelemetry, 3000);
 
-window.addEventListener('pagehide', () => clearInterval(_telemTimer));
-window.addEventListener('pageshow', (e) => {
+window.addEventListener('pagehide', function(){ clearInterval(_telemTimer); });
+window.addEventListener('pageshow', function(e){
   if (e.persisted) {
     clearInterval(_telemTimer);
     _telemTimer = setInterval(fetchTelemetry, 3000);

@@ -65,7 +65,7 @@ input:focus{outline:none;border-color:var(--accent)}
 <body>
 <header>
   <div class="hrow1">
-    <button class="burger-btn" onclick="toggleMenu()">☰</button>
+    <button class="burger-btn" onclick="toggleMenu()">&#9776;</button>
     <div class="logo">ID<span>.</span>CONFIG <span id="fw-ver" style="font-size:9px;color:var(--muted);font-weight:400"></span></div>
     <span style="flex:1"></span>
     <div class="led-g"><div class="led" id="led-gps"></div><span class="led-lbl">GPS</span></div>
@@ -80,9 +80,9 @@ input:focus{outline:none;border-color:var(--accent)}
       <div class="modem-op" id="modem-op">--</div>
     </div>
     <nav class="drop-nav" id="drop-nav" style="display:none">
-      <a href="/daten">DATA</a>
-      <a href="/debug">DEBUG</a>
-      <a href="/config" class="active">CONFIG</a>
+      <a href="/daten" data-i18n="nav.data">DATA</a>
+      <a href="/debug" data-i18n="nav.debug">DEBUG</a>
+      <a href="/config" class="active" data-i18n="nav.config">CONFIG</a>
     </nav>
   </div>
   <div class="hrow2">
@@ -95,8 +95,20 @@ input:focus{outline:none;border-color:var(--accent)}
 
 <div class="container">
 
+  <!-- Sprache -->
+  <div class="section-title" data-i18n="cfg.lang_title">Sprache / Language</div>
+  <div class="card">
+    <div class="field">
+      <div class="lbl" data-i18n="cfg.lang_label">Sprache</div>
+      <select id="lang" style="width:100%;padding:6px 8px;background:var(--card);color:var(--fg);border:1px solid #333;border-radius:4px;font-size:12px">
+        <option value="de">Deutsch</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+  </div>
+
   <!-- WiFi Access Point -->
-  <div class="section-title">WiFi Access Point</div>
+  <div class="section-title" data-i18n="cfg.wifi_title">WiFi Access Point</div>
   <div class="card">
     <div class="row2">
       <div class="field">
@@ -104,145 +116,150 @@ input:focus{outline:none;border-color:var(--accent)}
         <input type="text" id="ap_ssid" placeholder="IDTelemetry">
       </div>
       <div class="field">
-        <div class="lbl">Passwort</div>
-        <input type="password" id="ap_pass" placeholder="••••••••" autocomplete="new-password">
+        <div class="lbl" data-i18n="cfg.wifi_pass">Passwort</div>
+        <input type="password" id="ap_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
       </div>
     </div>
-    <div class="hint warn">&#9888; AP-Name und Passwort werden erst nach Neustart aktiv.</div>
+    <div class="hint warn" data-i18n="cfg.wifi_hint">&#9888; AP-Name und Passwort werden erst nach Neustart aktiv.</div>
   </div>
 
   <!-- SIM / APN -->
-  <div class="section-title">SIM / APN</div>
+  <div class="section-title" data-i18n="cfg.apn_title">SIM / APN</div>
   <div class="card">
+    <div class="field">
+      <div class="lbl" data-i18n="cfg.sim_pin">SIM PIN</div>
+      <input type="password" id="sim_pin" placeholder="&#8226;&#8226;&#8226;&#8226;" maxlength="8" autocomplete="off">
+      <div class="hint" data-i18n="cfg.sim_pin_hint">4-8 Ziffern. Leer lassen wenn kein PIN n&#246;tig. Nach 3 Fehlversuchen wird die SIM mit PUK gesperrt!</div>
+    </div>
     <div class="row2">
       <div class="field">
         <div class="lbl">APN</div>
         <input type="text" id="apn" placeholder="internet">
       </div>
       <div class="field">
-        <div class="lbl">APN Benutzer</div>
-        <input type="text" id="apn_user" placeholder="(leer lassen wenn nicht nötig)">
+        <div class="lbl" data-i18n="cfg.apn_user">APN Benutzer</div>
+        <input type="text" id="apn_user" data-i18n-ph="cfg.apn_ph" placeholder="(leer lassen wenn nicht n&#246;tig)">
       </div>
     </div>
     <div class="field">
-      <div class="lbl">APN Passwort</div>
-      <input type="password" id="apn_pass" placeholder="(leer lassen wenn nicht nötig)" autocomplete="new-password">
+      <div class="lbl" data-i18n="cfg.apn_pass">APN Passwort</div>
+      <input type="password" id="apn_pass" data-i18n-ph="cfg.apn_ph" placeholder="(leer lassen wenn nicht n&#246;tig)" autocomplete="new-password">
     </div>
-    <div class="hint warn">&#9888; APN-Änderungen werden erst nach Neustart vom Modem übernommen.</div>
+    <div class="hint warn" data-i18n="cfg.apn_hint">&#9888; SIM PIN und APN-&#196;nderungen werden erst nach Neustart vom Modem &#252;bernommen.</div>
   </div>
 
   <!-- Traccar -->
-  <div class="section-title">Traccar (OsmAnd)</div>
+  <div class="section-title" data-i18n="cfg.tc_title">Traccar (OsmAnd)</div>
   <div class="card">
     <div class="field">
-      <div class="lbl">Host (kein https://, kein Port)</div>
+      <div class="lbl" data-i18n="cfg.tc_host_label">Host (kein https://, kein Port)</div>
       <input type="text" id="tc_host" placeholder="traccar.example.com">
     </div>
     <div class="field">
-      <div class="lbl">Gerät-ID</div>
+      <div class="lbl" data-i18n="cfg.tc_id_label">Ger&#228;t-ID</div>
       <input type="text" id="tc_id" placeholder="meinfahrzeug-id">
     </div>
-    <div class="hint">HTTPS Port 443 wird automatisch verwendet.</div>
+    <div class="hint" data-i18n="cfg.tc_hint">HTTPS Port 443 wird automatisch verwendet.</div>
   </div>
 
   <!-- InfluxDB -->
-  <div class="section-title">InfluxDB v2</div>
+  <div class="section-title" data-i18n="cfg.ix_title">InfluxDB v2</div>
   <div class="card">
     <div class="field">
-      <div class="lbl">Host (kein https://, kein Port)</div>
+      <div class="lbl" data-i18n="cfg.tc_host_label">Host (kein https://, kein Port)</div>
       <input type="text" id="ix_host" placeholder="influx.example.com">
     </div>
     <div class="row2">
       <div class="field">
-        <div class="lbl">Organisation</div>
+        <div class="lbl" data-i18n="cfg.ix_org">Organisation</div>
         <input type="text" id="ix_org" placeholder="home">
       </div>
       <div class="field">
-        <div class="lbl">Bucket</div>
+        <div class="lbl" data-i18n="cfg.ix_bucket">Bucket</div>
         <input type="text" id="ix_bucket" placeholder="can-scan">
       </div>
     </div>
     <div class="field">
-      <div class="lbl">API Token</div>
-      <input type="password" id="ix_token" placeholder="••••••••" autocomplete="new-password">
+      <div class="lbl" data-i18n="cfg.ix_token">API Token</div>
+      <input type="password" id="ix_token" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
     </div>
     <div class="field">
-      <div class="lbl">Geräte-Tag (device=)</div>
+      <div class="lbl" data-i18n="cfg.ix_device">Ger&#228;te-Tag (device=)</div>
       <input type="text" id="ix_device" placeholder="vw_nox">
     </div>
-    <div class="hint">HTTPS Port 443. Token wird sicher im NVS gespeichert, nicht im Dateisystem.</div>
+    <div class="hint" data-i18n="cfg.ix_hint">HTTPS Port 443. Token wird sicher im NVS gespeichert, nicht im Dateisystem.</div>
   </div>
 
   <!-- Guard -->
-  <div class="section-title">Guard (CAN TX Freigabe)</div>
+  <div class="section-title" data-i18n="cfg.guard_title">Guard (CAN TX Freigabe)</div>
   <div class="card">
     <div class="field">
-      <div class="lbl">Guard Modus</div>
+      <div class="lbl" data-i18n="cfg.guard_label">Guard Modus</div>
       <select id="guard_mode" style="width:100%;padding:6px 8px;background:var(--card);color:var(--fg);border:1px solid #333;border-radius:4px;font-size:12px">
-        <option value="4">VBUS — externe Spannung (USB/12V)</option>
-        <option value="1">WiFi — Fahrzeug-SSID scannen</option>
-        <option value="0">AUS — CAN TX immer gesperrt</option>
+        <option value="4" data-i18n="cfg.guard_vbus">VBUS &#8212; externe Spannung (USB/12V)</option>
+        <option value="1" data-i18n="cfg.guard_wifi">WiFi &#8212; Fahrzeug-SSID scannen</option>
+        <option value="0" data-i18n="cfg.guard_off">AUS &#8212; CAN TX immer gesperrt</option>
       </select>
     </div>
-    <div class="hint">VBUS: CAN wird freigegeben wenn externe Spannung am USB anliegt (z.B. 12V-Adapter im Fahrzeug). WiFi: Freigabe nur wenn die Guard-SSID in Reichweite ist.</div>
+    <div class="hint" data-i18n="cfg.guard_hint">VBUS: CAN wird freigegeben wenn externe Spannung am USB anliegt (z.B. 12V-Adapter im Fahrzeug). WiFi: Freigabe nur wenn die Guard-SSID in Reichweite ist.</div>
   </div>
 
   <!-- BLE Standby -->
-  <div class="section-title">BLE / ABRP</div>
+  <div class="section-title" data-i18n="cfg.ble_title">BLE / ABRP</div>
   <div class="card">
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
       <input type="checkbox" id="ble_standby" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px">Standby-Defaults senden</span>
+      <span style="font-size:12px" data-i18n="cfg.ble_standby">Standby-Defaults senden</span>
     </label>
-    <div class="hint">Wenn aktiv, bekommt ABRP auch ohne CAN-Verbindung plausible Standwerte (0 km/h, 80% SoC etc.) und kann sich verbinden. Deaktiviert: ABRP bekommt "NO DATA" wenn kein CAN.</div>
+    <div class="hint" data-i18n="cfg.ble_hint">Wenn aktiv, bekommt ABRP auch ohne CAN-Verbindung plausible Standwerte (0 km/h, 80% SoC etc.) und kann sich verbinden. Deaktiviert: ABRP bekommt "NO DATA" wenn kein CAN.</div>
   </div>
 
   <!-- SPIFFS Logs -->
-  <div class="section-title">SPIFFS Logging</div>
+  <div class="section-title" data-i18n="cfg.log_title">SPIFFS Logging</div>
   <div class="card">
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
       <input type="checkbox" id="log_can" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px">CAN / ELM Log</span>
+      <span style="font-size:12px" data-i18n="cfg.log_can">CAN / ELM Log</span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
       <input type="checkbox" id="log_ble" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px">BLE Log</span>
+      <span style="font-size:12px" data-i18n="cfg.log_ble">BLE Log</span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:10px">
       <input type="checkbox" id="log_wifi" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px">WiFi Guard Scan-Log</span>
+      <span style="font-size:12px" data-i18n="cfg.log_wifi">WiFi Guard Scan-Log</span>
     </label>
-    <div class="hint">Aktiviert SPIFFS-Logging fuer CAN/ELM327, BLE-Geraete bzw. WiFi-Scans. Syslog (System-Events) laeuft immer.</div>
+    <div class="hint" data-i18n="cfg.log_hint">Aktiviert SPIFFS-Logging fuer CAN/ELM327, BLE-Geraete bzw. WiFi-Scans. Syslog (System-Events) laeuft immer.</div>
   </div>
 
   <!-- Speichern -->
   <div style="display:flex;gap:10px;align-items:center;margin-top:16px;margin-bottom:4px">
-    <button class="btn accent" onclick="saveConfig()" id="btn-save">&#10003; Speichern</button>
-    <button class="btn" onclick="loadConfig()" style="font-size:10px">&#8635; Neu laden</button>
+    <button class="btn accent" onclick="saveConfig()" id="btn-save" data-i18n="cfg.save">&#10003; Speichern</button>
+    <button class="btn" onclick="loadConfig()" style="font-size:10px" data-i18n="cfg.reload">&#8635; Neu laden</button>
     <span id="save-status" style="font-size:11px;color:var(--muted)"></span>
   </div>
-  <div class="hint" style="margin-bottom:24px">
-    Werte werden sofort im NVS gespeichert. Für APN und AP-SSID/Passwort ist ein Neustart nötig.
+  <div class="hint" style="margin-bottom:24px" data-i18n="cfg.save_hint">
+    Werte werden sofort im NVS gespeichert. F&#252;r APN und AP-SSID/Passwort ist ein Neustart n&#246;tig.
   </div>
 
   <!-- Firmware OTA -->
-  <div class="section-title">Firmware Update (OTA)</div>
+  <div class="section-title" data-i18n="cfg.ota_title">Firmware Update (OTA)</div>
   <div class="card">
     <div class="ota-drop" id="ota-drop">
       <input type="file" id="ota-file" accept=".bin">
       <div style="font-size:12px;color:var(--muted)">
         <span style="font-size:18px;display:block;margin-bottom:6px">&#128190;</span>
-        .bin Datei hier ablegen oder klicken<br>
-        <span style="font-size:10px">(PlatformIO: .pio/build/&lt;env&gt;/firmware.bin)</span>
+        <span data-i18n="cfg.ota_drop">.bin Datei hier ablegen oder klicken</span><br>
+        <span style="font-size:10px" data-i18n="cfg.ota_drop_sub">(PlatformIO: .pio/build/&lt;env&gt;/firmware.bin)</span>
       </div>
     </div>
     <div class="ota-prog" id="ota-prog"><div class="ota-prog-bar" id="ota-bar"></div></div>
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <button class="btn green" onclick="startOta()" id="btn-ota" disabled>&#8593; Flash</button>
-      <span id="ota-status" style="font-size:11px;color:var(--muted)">Keine Datei ausgewählt</span>
+      <button class="btn green" onclick="startOta()" id="btn-ota" disabled data-i18n="cfg.ota_flash">&#8593; Flash</button>
+      <span id="ota-status" style="font-size:11px;color:var(--muted)" data-i18n="cfg.ota_none">Keine Datei ausgew&#228;hlt</span>
     </div>
-    <div class="hint warn" style="margin-top:8px">
-      &#9888; Das Gerät startet nach erfolgreichem Upload automatisch neu. WLAN-Verbindung wird kurz unterbrochen.
+    <div class="hint warn" style="margin-top:8px" data-i18n="cfg.ota_hint">
+      &#9888; Das Ger&#228;t startet nach erfolgreichem Upload automatisch neu. WLAN-Verbindung wird kurz unterbrochen.
     </div>
   </div>
 
@@ -250,23 +267,23 @@ input:focus{outline:none;border-color:var(--accent)}
 
 <div class="toast" id="toast"></div>
 
+<script src="/i18n.js"></script>
 <script>
 // ── Burger ──────────────────────────────────────────────────
-function toggleMenu(){const m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
-if(!window._menuListener){window._menuListener=true;document.addEventListener('click',e=>{if(!e.target.closest('header')){const m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
-
+function toggleMenu(){var m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
+if(!window._menuListener){window._menuListener=true;document.addEventListener('click',function(e){if(!e.target.closest('header')){var m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
 
 // ── Modem Widget ────────────────────────────────────────────
 var _modemLastOp='';
-function updateModem(sig,op,sim,conn){const bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(let i=1;i<=5;i++){const b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}const el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
+function updateModem(sig,op,sim,conn){var bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(var i=1;i<=5;i++){var b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}var el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
 
-function setLed(id,cls){const el=document.getElementById('led-'+id);if(el)el.className='led'+(cls?' '+cls:'');}
-function setBatt(v,chg,vbus){const el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
+function setLed(id,cls){var el=document.getElementById('led-'+id);if(el)el.className='led'+(cls?' '+cls:'');}
+function setBatt(v,chg,vbus){var el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
 
 async function fetchStatus(){
   try{
-    const d=await(await fetch('/status')).json();
-    if(d.fw_version){const v=document.getElementById('fw-ver');if(v)v.textContent='v'+d.fw_version;}
+    var d=await(await fetch('/status')).json();
+    if(d.fw_version){var v=document.getElementById('fw-ver');if(v)v.textContent='v'+d.fw_version;}
     setLed('can',d.can_ok?'green':'blue');
     setLed('gps',d.gps_valid?'green':'');
     setLed('lte',d.modem_ok?'green':'');
@@ -274,29 +291,31 @@ async function fetchStatus(){
     updateModem(d.modem_sig??-1,d.modem_op??'',d.modem_sim??false,d.modem_ok??false);
   }catch(e){}
   try{
-    const t=await(await fetch('/api/telemetry')).json();
-    setLed('influx',t.influx_ok?'green':'');
+    var ti=await(await fetch('/api/telemetry')).json();
+    setLed('influx',ti.influx_ok?'green':'');
   }catch(e){}
 }
 fetchStatus();
 var _stTimer=setInterval(fetchStatus,8000);
 
 // ── Toast ───────────────────────────────────────────────────
-function toast(msg,ok=true){
-  const t=document.getElementById('toast');
-  t.textContent=msg;
-  t.style.borderColor=ok?'var(--green)':'var(--red)';
-  t.style.color=ok?'var(--green)':'var(--red)';
-  t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2800);
+function toast(msg,ok){
+  if(ok===undefined)ok=true;
+  var el=document.getElementById('toast');
+  el.textContent=msg;
+  el.style.borderColor=ok?'var(--green)':'var(--red)';
+  el.style.color=ok?'var(--green)':'var(--red)';
+  el.classList.add('show');
+  setTimeout(function(){el.classList.remove('show');},2800);
 }
 
 // ── Config laden ────────────────────────────────────────────
 async function loadConfig(){
   try{
-    const d=await(await fetch('/api/config')).json();
+    var d=await(await fetch('/api/config')).json();
     document.getElementById('ap_ssid').value   = d.ap_ssid  || '';
     document.getElementById('ap_pass').value   = d.ap_pass  || '';
+    document.getElementById('sim_pin').value   = d.sim_pin  || '';
     document.getElementById('apn').value       = d.apn      || '';
     document.getElementById('apn_user').value  = d.apn_user || '';
     document.getElementById('apn_pass').value  = d.apn_pass || '';
@@ -311,21 +330,23 @@ async function loadConfig(){
     document.getElementById('log_can').checked = d.log_can === true;
     document.getElementById('log_ble').checked = d.log_ble === true;
     document.getElementById('log_wifi').checked = d.log_wifi === true;
+    document.getElementById('lang').value = d.lang || 'de';
     if(d.guard_mode!=null) document.getElementById('guard_mode').value = d.guard_mode;
-    document.getElementById('save-status').textContent='Geladen';
-    setTimeout(()=>document.getElementById('save-status').textContent='',1500);
+    document.getElementById('save-status').textContent=t('cfg.loaded');
+    setTimeout(function(){document.getElementById('save-status').textContent='';},1500);
   }catch(e){
-    toast('Fehler beim Laden!',false);
+    toast(t('cfg.load_err'),false);
   }
 }
 
 // ── Config speichern ────────────────────────────────────────
 async function saveConfig(){
-  const btn=document.getElementById('btn-save');
+  var btn=document.getElementById('btn-save');
   btn.disabled=true;
-  const payload={
+  var payload={
     ap_ssid:   document.getElementById('ap_ssid').value.trim(),
     ap_pass:   document.getElementById('ap_pass').value,
+    sim_pin:   document.getElementById('sim_pin').value.trim(),
     apn:       document.getElementById('apn').value.trim(),
     apn_user:  document.getElementById('apn_user').value.trim(),
     apn_pass:  document.getElementById('apn_pass').value,
@@ -340,23 +361,24 @@ async function saveConfig(){
     log_can:      document.getElementById('log_can').checked,
     log_ble:      document.getElementById('log_ble').checked,
     log_wifi:     document.getElementById('log_wifi').checked,
+    lang:         document.getElementById('lang').value,
     guard_mode:   parseInt(document.getElementById('guard_mode').value),
   };
   try{
-    const r=await fetch('/api/config',{
+    var r=await fetch('/api/config',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
-    const d=await r.json();
+    var d=await r.json();
     if(d.ok){
-      toast('✓ Gespeichert');
-      document.getElementById('save-status').textContent='Gespeichert ✓';
+      toast(t('cfg.saved'));
+      document.getElementById('save-status').textContent=t('cfg.saved_status');
     }else{
-      toast('Fehler beim Speichern!',false);
+      toast(t('cfg.save_err'),false);
     }
   }catch(e){
-    toast('Verbindungsfehler!',false);
+    toast(t('cfg.conn_err'),false);
   }
   btn.disabled=false;
 }
@@ -366,91 +388,89 @@ var _otaFile=null;
 
 document.getElementById('ota-file').addEventListener('change',function(){
   _otaFile=this.files[0]||null;
-  const st=document.getElementById('ota-status');
-  const btn=document.getElementById('btn-ota');
+  var st=document.getElementById('ota-status');
+  var btn=document.getElementById('btn-ota');
   if(_otaFile){
     st.textContent=_otaFile.name+' ('+(_otaFile.size/1024).toFixed(1)+' kB)';
     btn.disabled=false;
   }else{
-    st.textContent='Keine Datei ausgewählt';
+    st.textContent=t('cfg.ota_none');
     btn.disabled=true;
   }
 });
 
 // Drag & Drop
 (function(){
-  const drop=document.getElementById('ota-drop');
-  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
-  drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
-  drop.addEventListener('drop',e=>{
+  var drop=document.getElementById('ota-drop');
+  drop.addEventListener('dragover',function(e){e.preventDefault();drop.classList.add('drag');});
+  drop.addEventListener('dragleave',function(){drop.classList.remove('drag');});
+  drop.addEventListener('drop',function(e){
     e.preventDefault();drop.classList.remove('drag');
-    const f=e.dataTransfer.files[0];
+    var f=e.dataTransfer.files[0];
     if(f&&f.name.endsWith('.bin')){
       _otaFile=f;
-      document.getElementById('ota-file').files;  // cannot set, just show
-      document.getElementById('ota-status').textContent=f.name+' ('+( f.size/1024).toFixed(1)+' kB)';
+      document.getElementById('ota-status').textContent=f.name+' ('+(f.size/1024).toFixed(1)+' kB)';
       document.getElementById('btn-ota').disabled=false;
     }else{
-      toast('Nur .bin Dateien erlaubt!',false);
+      toast(t('cfg.ota_only_bin'),false);
     }
   });
 })();
 
 async function startOta(){
-  if(!_otaFile){toast('Keine Datei!',false);return;}
-  const btn=document.getElementById('btn-ota');
-  const st=document.getElementById('ota-status');
-  const prog=document.getElementById('ota-prog');
-  const bar=document.getElementById('ota-bar');
+  if(!_otaFile){toast(t('cfg.ota_no_file'),false);return;}
+  var btn=document.getElementById('btn-ota');
+  var st=document.getElementById('ota-status');
+  var prog=document.getElementById('ota-prog');
+  var bar=document.getElementById('ota-bar');
   btn.disabled=true;
   prog.style.display='block';
   bar.style.width='0%';
   st.style.color='var(--accent)';
-  st.textContent='Upload läuft…';
+  st.textContent=t('cfg.ota_uploading');
 
-  const form=new FormData();
+  var form=new FormData();
   form.append('firmware',_otaFile,_otaFile.name);
 
-  const xhr=new XMLHttpRequest();
+  var xhr=new XMLHttpRequest();
   xhr.open('POST','/api/ota');
 
-  xhr.upload.onprogress=e=>{
+  xhr.upload.onprogress=function(e){
     if(e.lengthComputable){
-      const pct=Math.round(e.loaded/e.total*100);
+      var pct=Math.round(e.loaded/e.total*100);
       bar.style.width=pct+'%';
-      st.textContent='Upload: '+pct+'%';
+      st.textContent=t('cfg.ota_progress',[pct]);
     }
   };
 
-  xhr.onload=()=>{
+  xhr.onload=function(){
     try{
-      const d=JSON.parse(xhr.responseText);
+      var d=JSON.parse(xhr.responseText);
       if(d.ok){
         bar.style.width='100%';
         bar.style.background='var(--green)';
         st.style.color='var(--green)';
-        st.textContent='✓ Flash OK — Neustart läuft…';
-        toast('✓ Firmware geflasht — Neustart…');
+        st.textContent=t('cfg.ota_ok');
+        toast(t('cfg.ota_flashed'));
       }else{
         st.style.color='var(--red)';
-        st.textContent='✗ Flash fehlgeschlagen!';
-        toast('Flash fehlgeschlagen!',false);
+        st.textContent='\u2717 '+t('cfg.ota_fail');
+        toast(t('cfg.ota_fail'),false);
         btn.disabled=false;
       }
     }catch(_){
       st.style.color='var(--red)';
-      st.textContent='Neustart läuft (kein Response normal)…';
-      toast('Neustart läuft…');
+      st.textContent=t('cfg.ota_reboot_noresp');
+      toast(t('cfg.ota_reboot'));
     }
   };
 
-  xhr.onerror=()=>{
-    // Nach OTA-Reboot kommt kein Response — das ist normal
+  xhr.onerror=function(){
     st.style.color='var(--green)';
-    st.textContent='Neustart läuft — Seite neu laden in ~10s';
+    st.textContent=t('cfg.ota_reboot_reload');
     bar.style.width='100%';
     bar.style.background='var(--green)';
-    setTimeout(()=>location.reload(),10000);
+    setTimeout(function(){location.reload();},10000);
   };
 
   xhr.send(form);

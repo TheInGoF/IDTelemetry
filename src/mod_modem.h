@@ -38,6 +38,11 @@ int  modem_gps_vsat();     // Gesamt sichtbar
 int  modem_gps_usat();     // Gesamt verwendet
 
 // Serial-Befehle: Info-Ausgabe auf Terminal
-void modem_print_gps_info();   // "gps"      → GPS-Status
-void modem_print_lte_info();   // "lte"      → LTE-Status (schnell)
-void modem_print_lte_scan();   // "lte scan" → Netzwerk-Scan (bis 3 Min!)
+void modem_print_gps_info();   // "gps"       → GPS-Status
+void modem_print_lte_info();   // "lte"       → LTE-Status (schnell)
+void modem_print_lte_scan();   // "lte scan"  → Netzwerk-Scan (bis 3 Min!)
+void modem_print_lte_bands();  // "lte bands"     → Band-Konfiguration anzeigen
+void modem_lte_bands_fix(bool all); // "lte bands fix/all" → Baender setzen + Radio-Neustart
+void modem_send_at(const char* cmd); // "at ..." → rohes AT-Kommando senden + Antwort anzeigen
+void modem_pause_task();             // "at stop"  → Modem-Task pausieren (fuer manuelles AT-Testing)
+void modem_resume_task();            // "at start" → Modem-Task fortsetzen

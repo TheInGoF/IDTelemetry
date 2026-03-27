@@ -37,6 +37,7 @@ void       gyro_set_threshold(float g);  // Schwelle zur Laufzeit ändern (0.005
 float      gyro_get_threshold();         // aktuelle Schwelle in G
 void       gyro_set_mot_threshold(uint8_t v); // Hardware MOT_THR für Deep-Sleep-Wake (1-255, 1=32mg)
 uint8_t    gyro_get_mot_threshold();          // aktueller MOT_THR Registerwert
+float      gyro_get_wake_accel();            // Beschleunigung beim Boot (vor Kalibrierung)
 uint32_t   gyro_last_shake_ms();         // millis() des letzten Erschütterungsmoments (0 = nie)
 void       gyro_configure_sleep_int();   // MPU-6050 INT-Latch für Deep-Sleep-Wake konfigurieren
 

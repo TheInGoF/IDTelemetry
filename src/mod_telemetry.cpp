@@ -82,6 +82,63 @@ static double   s_cap_lon = 0.0;
 static uint32_t s_cap_ms  = 0;
 static uint32_t s_yaw_last_cap_ms = 0;  // letzter Capture durch Yaw-Burst
 
+// ── Delta-Kompression: nur geänderte Werte senden ──────────
+static float s_prev_val[TELEM_FIELD_COUNT];  // letzte gesendete Werte
+static bool  s_prev_has[TELEM_FIELD_COUNT];  // true = Feld wurde min. 1× gesendet
+
+// Max-Alter bevor ein Wert als veraltet gilt (0 = kein Limit / immer senden)
+// Faustregel: 3× Poll-Intervall
+static const uint32_t s_max_age_ms[TELEM_FIELD_COUNT] = {
+    90000,   // SOC          (30s poll)
+    15000,   // VOLTAGE      (5s poll)
+    15000,   // CURRENT      (5s poll)
+    15000,   // POWER        (berechnet aus V×I)
+    15000,   // SPEED        (5s poll)
+    15000,   // IS_CHARGING  (5s — Status-Bit)
+    15000,   // IS_DCFC      (5s — Status-Bit)
+    45000,   // BATT_TEMP    (15s poll)
+    45000,   // EXT_TEMP     (15s poll)
+    45000,   // RANGE        (15s poll)
+    0,       // GPS_LAT      (Trigger — immer)
+    0,       // GPS_LON      (Trigger — immer)
+    0,       // GPS_HEADING  (berechnet — immer)
+    0,       // GPS_VALID    (nicht gesendet)
+    45000,   // GYRO_G       (15s sensor)
+    45000,   // LTE_SIGNAL   (15s sensor)
+    0,       // LTE_OPERATOR (nicht gesendet)
+    180000,  // CAPACITY     (60s poll)
+    180000,  // KWH_CHARGED  (60s poll)
+    90000,   // IS_PARKED    (30s poll)
+    180000,  // ODOMETER     (60s poll)
+    180000,  // BATT_DEVICE  (60s sensor)
+};
+
+// Mindest-Änderung damit ein Wert gesendet wird (0 = bei jeder Änderung)
+static const float s_min_delta[TELEM_FIELD_COUNT] = {
+    0.3f,    // SOC (%)
+    0.5f,    // VOLTAGE (V)
+    0.5f,    // CURRENT (A)
+    0.1f,    // POWER (kW)
+    0.5f,    // SPEED (km/h)
+    0.0f,    // IS_CHARGING (bool)
+    0.0f,    // IS_DCFC (bool)
+    0.3f,    // BATT_TEMP (°C)
+    0.3f,    // EXT_TEMP (°C)
+    1.0f,    // RANGE (km)
+    0.0f,    // GPS_LAT (immer)
+    0.0f,    // GPS_LON (immer)
+    0.0f,    // GPS_HEADING (immer)
+    0.0f,    // GPS_VALID
+    0.005f,  // GYRO_G
+    0.0f,    // LTE_SIGNAL (int)
+    0.0f,    // LTE_OPERATOR
+    0.5f,    // CAPACITY (kWh)
+    0.5f,    // KWH_CHARGED (kWh)
+    0.0f,    // IS_PARKED (bool)
+    0.5f,    // ODOMETER (km)
+    0.0f,    // BATT_DEVICE (int %)
+};
+
 // ── Geo-Hilfsfunktionen ──────────────────────────────────────
 // Haversine-Distanz in Metern zwischen zwei GPS-Koordinaten
 static float haversine_m(double lat1, double lon1, double lat2, double lon2) {
@@ -165,20 +222,57 @@ static void row_try_capture() {
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
 
     TelemetryRow row;
-    row.unix_s = (uint32_t)unix_s;
+    row.unix_s  = (uint32_t)unix_s;
+    row.eq_mask = 0;
+    row.na_mask = 0;
+
     for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
-        row.values[f] = s_cache[f].value;
-        row.valid[f]  = s_cache[f].valid && (s_cache[f].timestamp_ms > 0);
+        float val = s_cache[f].value;
+        bool  ok  = s_cache[f].valid && (s_cache[f].timestamp_ms > 0);
+
+        // Max-Age: veraltete Werte → na_mask
+        if (ok && s_max_age_ms[f] > 0) {
+            uint32_t age = now - s_cache[f].timestamp_ms;
+            if (age > s_max_age_ms[f]) ok = false;
+        }
+
+        if (!ok) {
+            row.valid[f]  = false;
+            row.values[f] = 0;
+            row.na_mask  |= (1UL << f);
+        } else if (s_prev_has[f] && fabsf(val - s_prev_val[f]) <= s_min_delta[f]) {
+            // Unverändert → eq_mask
+            row.valid[f]  = false;
+            row.values[f] = val;
+            row.eq_mask  |= (1UL << f);
+        } else {
+            // Neuer/geänderter Wert → senden
+            row.valid[f]  = true;
+            row.values[f] = val;
+        }
     }
-    // GPS frisch überschreiben (aktuell aus gps_lat/lon, vor LTE-Fenster gültig)
+
+    // GPS frisch überschreiben (Trigger — immer senden, nie in Masks)
     row.values[TELEM_GPS_LAT] = (float)lat;
     row.values[TELEM_GPS_LON] = (float)lon;
     row.valid[TELEM_GPS_LAT]  = true;
     row.valid[TELEM_GPS_LON]  = true;
-    // Heading aus vorherigem → aktuellem Punkt berechnen (genauer als NMEA-Kurs)
+    row.eq_mask &= ~((1UL << TELEM_GPS_LAT) | (1UL << TELEM_GPS_LON));
+    row.na_mask &= ~((1UL << TELEM_GPS_LAT) | (1UL << TELEM_GPS_LON));
+    // Heading aus vorherigem → aktuellem Punkt berechnen
     if (s_cap_ms > 0 && haversine_m(s_cap_lat, s_cap_lon, lat, lon) >= 5.0f) {
         row.values[TELEM_GPS_HEADING] = bearing_deg(s_cap_lat, s_cap_lon, lat, lon);
         row.valid[TELEM_GPS_HEADING]  = true;
+        row.eq_mask &= ~(1UL << TELEM_GPS_HEADING);
+        row.na_mask &= ~(1UL << TELEM_GPS_HEADING);
+    }
+
+    // Prev-Werte aktualisieren für nächsten Delta-Vergleich
+    for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
+        if (row.valid[f]) {
+            s_prev_val[f] = row.values[f];
+            s_prev_has[f] = true;
+        }
     }
 
     s_row_buf[s_row_head] = row;
@@ -587,41 +681,42 @@ const char* telem_preview_rows(int max_rows) {
 //  Phase 3 — InfluxDB v2 Sender
 // ============================================================
 
-// ── Kurze Feldnamen (Datenvolumen-optimiert, siehe UEBERGABE.md) ──
+// ── Kurze Feldnamen (Datenvolumen-optimiert) ──────────────────
 // Reihenfolge muss zu TelemField-Enum passen!
-// nullptr = nicht senden (LTE_OPERATOR ist String, GPS_VALID redundant)
+// nullptr = nicht senden
+// fmt: 'f'=float(%.4g)  'b'=bool(0i/1i)  'i'=int(%di)
+//      'g'=gps(%.6f)    '1'=1-Dezimale(%.1f)
 struct InfluxField {
-    const char* key;    // Kurzname im Line Protocol
-    bool        is_int; // true = Integer-Suffix 'i'
-    bool        is_gps; // true = 6 Dezimalstellen
+    const char* key;
+    char        fmt;
 };
 
 static const InfluxField s_fields[TELEM_FIELD_COUNT] = {
     // Schnell (5s)
-    { "s",  false, false },  // TELEM_SOC
-    { "u",  false, false },  // TELEM_VOLTAGE
-    { "i",  false, false },  // TELEM_CURRENT
-    { "p",  false, false },  // TELEM_POWER
-    { "v",  false, false },  // TELEM_VEHICLE_SPEED
-    { "c",  true,  false },  // TELEM_IS_CHARGING
-    { "dc", true,  false },  // TELEM_IS_DCFC
-    // Mittel (10s)
-    { "bt", false, false },  // TELEM_BATT_TEMP
-    { "et", false, false },  // TELEM_EXT_TEMP
-    { "r",  false, false },  // TELEM_RANGE
-    { "la", false, true  },  // TELEM_GPS_LAT
-    { "lo", false, true  },  // TELEM_GPS_LON
-    { "hd", false, false },  // TELEM_GPS_HEADING (berechnet, °)
-    { nullptr, false, false }, // TELEM_GPS_VALID — nicht senden
-    { "g",  false, false },  // TELEM_GYRO_G
-    { nullptr, false, false }, // TELEM_LTE_SIGNAL — in Zeile unten
-    { nullptr, false, false }, // TELEM_LTE_OPERATOR — String, skip
+    { "s",  'f' },   // TELEM_SOC          — float %
+    { "u",  'i' },   // TELEM_VOLTAGE      — int V
+    { "i",  'i' },   // TELEM_CURRENT      — int A
+    { "p",  '1' },   // TELEM_POWER        — 1 Dez kW
+    { "v",  'f' },   // TELEM_VEHICLE_SPEED — float km/h
+    { "c",  'b' },   // TELEM_IS_CHARGING  — bool
+    { "dc", 'b' },   // TELEM_IS_DCFC      — bool
+    // Mittel (10–15s)
+    { "bt", 'i' },   // TELEM_BATT_TEMP    — int °C
+    { "et", 'i' },   // TELEM_EXT_TEMP     — int °C
+    { "r",  'f' },   // TELEM_RANGE        — float km
+    { "la", 'g' },   // TELEM_GPS_LAT      — 6 Dez °
+    { "lo", 'g' },   // TELEM_GPS_LON      — 6 Dez °
+    { "hd", 'i' },   // TELEM_GPS_HEADING  — int °
+    { nullptr, 0 },  // TELEM_GPS_VALID    — skip
+    { nullptr, 0 },  // TELEM_GYRO_G       — skip (nicht senden)
+    { nullptr, 0 },  // TELEM_LTE_SIGNAL   — manuell als ls
+    { nullptr, 0 },  // TELEM_LTE_OPERATOR — String, skip
     // Langsam (30–60s)
-    { "ca", false, false },  // TELEM_CAPACITY
-    { "kw", false, false },  // TELEM_KWH_CHARGED
-    { "pk", true,  false },  // TELEM_IS_PARKED
-    { "od", false, false },  // TELEM_ODOMETER
-    { "bd", true,  false },  // TELEM_BATT_DEVICE
+    { "ca", 'f' },   // TELEM_CAPACITY     — float kWh
+    { "kw", 'f' },   // TELEM_KWH_CHARGED  — float kWh
+    { "pk", 'b' },   // TELEM_IS_PARKED    — bool
+    { "od", 'f' },   // TELEM_ODOMETER     — float km
+    { "bd", 'i' },   // TELEM_BATT_DEVICE  — int %
 };
 
 void telem_send_influx() {
@@ -681,15 +776,17 @@ void telem_send_influx() {
 
             if (field_cnt > 0) body[pos++] = ',';
 
-            if (s_fields[f].is_int) {
-                pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%di",
-                                s_fields[f].key, (int)(row.values[f] > 0.5f ? 1 : 0));
-            } else if (s_fields[f].is_gps) {
-                pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%.6f",
-                                s_fields[f].key, (double)row.values[f]);
-            } else {
-                pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%.4g",
-                                s_fields[f].key, row.values[f]);
+            switch (s_fields[f].fmt) {
+                case 'b': pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%di",
+                              s_fields[f].key, (int)(row.values[f] > 0.5f ? 1 : 0)); break;
+                case 'i': pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%di",
+                              s_fields[f].key, (int)row.values[f]); break;
+                case 'g': pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%.6f",
+                              s_fields[f].key, (double)row.values[f]); break;
+                case '1': pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%.1f",
+                              s_fields[f].key, row.values[f]); break;
+                default:  pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%.4g",
+                              s_fields[f].key, row.values[f]); break;
             }
             field_cnt++;
         }
@@ -699,6 +796,20 @@ void telem_send_influx() {
             if (field_cnt > 0) body[pos++] = ',';
             pos += snprintf(body + pos, BODY_SIZE - pos, "ls=%di",
                             (int)row.values[TELEM_LTE_SIGNAL]);
+            field_cnt++;
+        }
+
+        // Delta-Status: _eq (gleich) und _na (fehlt) als Bitmask
+        if (row.eq_mask && pos + 20 < (int)BODY_SIZE) {
+            if (field_cnt > 0) body[pos++] = ',';
+            pos += snprintf(body + pos, BODY_SIZE - pos, "_eq=%lui",
+                            (unsigned long)row.eq_mask);
+            field_cnt++;
+        }
+        if (row.na_mask && pos + 20 < (int)BODY_SIZE) {
+            if (field_cnt > 0) body[pos++] = ',';
+            pos += snprintf(body + pos, BODY_SIZE - pos, "_na=%lui",
+                            (unsigned long)row.na_mask);
             field_cnt++;
         }
 
@@ -728,6 +839,8 @@ void telem_send_influx() {
 
     Serial.printf("[INFLUX] %d/%d Zeilen · %d Bytes ausstehend: %d\n",
                   lines_ok, rows_to_send, pos, s_row_pending);
+    Serial.printf("[INFLUX] POST https://%s%s\n", cfg_influx_host(), path);
+    Serial.printf("[INFLUX] Body (%d bytes): %.80s%s\n", pos, body, pos > 80 ? "..." : "");
 
     http.beginRequest();
     http.post(path);
@@ -739,11 +852,11 @@ void telem_send_influx() {
     http.endRequest();
 
     int status = http.responseStatusCode();
-    http.stop();
 
     // ── Schritt 4: Buffer-Pointer bei Erfolg vorrücken ───────────
     if (status == 204) {
         s_influx_ok = true;
+        http.stop();
         if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
             s_row_send_tail = (uint16_t)((s_row_send_tail + rows_to_send) % TELEM_ROW_BUF_SIZE);
             s_row_pending  -= rows_to_send;
@@ -755,10 +868,17 @@ void telem_send_influx() {
     } else {
         // Fehler: send_tail bleibt → nächster Zyklus versucht es erneut
         s_influx_ok = false;
+        // Response-Body lesen (InfluxDB liefert JSON-Fehlermeldung)
+        String rbody = http.responseBody();
+        http.stop();
+        rbody.trim();
         char msg[48];
         snprintf(msg, sizeof(msg), "Fehler HTTP %d", status);
         syslog("INFLUX", msg);
         Serial.printf("[INFLUX] Fehler: HTTP %d\n", status);
+        if (rbody.length() > 0) {
+            Serial.printf("[INFLUX] Response: %.200s\n", rbody.c_str());
+        }
     }
 }
 
@@ -767,7 +887,7 @@ void telem_send_influx() {
 // ============================================================
 
 #define TELEM_PERSIST_FILE  "/telem.bin"
-#define TELEM_PERSIST_MAGIC 0x544C4D01UL  // 'TLM' + Version 1
+#define TELEM_PERSIST_MAGIC 0x544C4D02UL  // 'TLM' + Version 2 (eq_mask/na_mask)
 
 struct PersistHeader {
     uint32_t magic;

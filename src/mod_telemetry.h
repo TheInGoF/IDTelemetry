@@ -61,6 +61,8 @@ struct TelemetryRow {
     uint32_t unix_s;                     // RTC-Zeitstempel bei Capture
     float    values[TELEM_FIELD_COUNT];  // Snapshot aus s_cache
     bool     valid[TELEM_FIELD_COUNT];   // Gültigkeitsflags
+    uint32_t eq_mask;   // Bit=1: Wert identisch zum vorherigen (Server: fill previous)
+    uint32_t na_mask;   // Bit=1: Wert fehlt/veraltet (Server: NULL/gap)
 };
 
 // ── Öffentliche API ──────────────────────────────────────────

@@ -171,3 +171,9 @@ Konzeption, Entscheidungen und Richtung kommen vom Menschen — der Code wird vo
 ## Lizenz
 
 GNU Affero General Public License v3.0 © 2026 Ingo F — siehe [LICENSE](LICENSE)
+
+---
+
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/lordvonbaum)
+
+> Spenden sind freiwillig und dienen ausschliesslich der Unterstuetzung des Projekts. Sie haben keinen Einfluss auf die Priorisierung von Bugs, Feature-Wuenschen oder Support-Anfragen.

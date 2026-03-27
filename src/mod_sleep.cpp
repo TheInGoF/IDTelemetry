@@ -23,6 +23,7 @@
 // Alle FreeRTOS-Tasks prüfen dies in ihrer Loop und beenden sich sauber,
 // damit shared Resources (I2C, CAN, WiFi) nicht im gesperrten Zustand bleiben.
 volatile bool g_shutdown = false;
+volatile bool g_nosleep  = false;
 
 static uint32_t g_boot_ms = 0;
 static uint32_t g_last_guard_seen_ms = 0;  // letzter Zeitpunkt mit Guard in Range
@@ -47,14 +48,21 @@ void sleep_init() {
 // ── Nach gyro_init(): Wake-Details loggen ─────────────────
 void sleep_log_wake() {
     if (g_wake_cause != ESP_SLEEP_WAKEUP_EXT1) return;
-    char msg[80];
-    snprintf(msg, sizeof(msg), "Gyro-Wake · Wake-Schwelle: %.2fG (MOT_THR=%d)",
-             gyro_get_mot_threshold() * 0.032f, gyro_get_mot_threshold());
+    char msg[140];
+    float wake_g  = gyro_get_wake_accel();
+    int   thr_mg  = gyro_get_mot_threshold() * 32;
+    float delta_g = wake_g - 1.0f;  // Abweichung von Ruhelage (1G = Erdanziehung)
+    snprintf(msg, sizeof(msg),
+             "Gyro-Wake · Accel: %.3fG (delta %.0fmg) · HW-Schwelle: %dmg (MOT_THR=%d) · SW-Schwelle: %.0fmg",
+             wake_g, delta_g * 1000.0f, thr_mg, gyro_get_mot_threshold(),
+             gyro_get_threshold() * 1000.0f);
     syslog("WAKE", msg);
 }
 
 // ── Update: im loop() aufrufen ────────────────────────────
 void sleep_update() {
+    if (g_nosleep) return;
+
     uint32_t now = millis();
 
     // ─── Guard-Status ermitteln (WiFi oder VBUS) ──────────
@@ -182,6 +190,9 @@ static void enter_deep_sleep(const char* reason) {
     }
 
     // ── 3. Hardware herunterfahren ──
+    // Laden deaktivieren — AXP2101 behaelt Einstellung im Deep Sleep
+    pmu_set_charging(false);
+
     modem_poweroff();
     Serial.println("[SLEEP] Modem aus");
 

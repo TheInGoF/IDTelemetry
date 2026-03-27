@@ -10,7 +10,7 @@
 //  Hardware: LILYGO T-SIM7080G-S3 (ESP32-S3-WROOM-1-N16R8) + SN65HVD230
 // ============================================================
 
-#define FW_VERSION  "1.0.0"
+#define FW_VERSION  "1.0.1"
 
 // --- WiFi Access Point ---
 #define WIFI_SSID           SECRET_AP_SSID
