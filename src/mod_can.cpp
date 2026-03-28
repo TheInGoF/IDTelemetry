@@ -134,16 +134,19 @@ bool can_init(uint32_t kbps) {
 
     if (twai_driver_install(&g, &t, &f) != ESP_OK) {
         Serial.println("[CAN] Treiber Install FEHLER");
+        syslog("CAN", "FEHLER: Treiber Install — Hardware/Lötstelle prüfen");
         return false;
     }
     if (twai_start() != ESP_OK) {
         twai_driver_uninstall();
         Serial.println("[CAN] Start FEHLER");
+        syslog("CAN", "FEHLER: TWAI Start — Transceiver prüfen");
         return false;
     }
 
     can_running = true;
     Serial.printf("[CAN] OK %ukbps TX=GPIO%d RX=GPIO%d\n", kbps, CAN_TX_PIN, CAN_RX_PIN);
+    { char _m[48]; snprintf(_m, sizeof(_m), "SN65HVD230 OK · %ukbps · TX=%d RX=%d", kbps, CAN_TX_PIN, CAN_RX_PIN); syslog("CAN", _m); }
     return true;
 }
 
@@ -469,14 +472,17 @@ void monitor_task(void*) {
                 if (twai_get_status_info(&st) == ESP_OK &&
                     st.state == TWAI_STATE_BUS_OFF) {
                     Serial.println("[CAN] BUS_OFF — Recovery...");
+                    syslog("CAN", "BUS_OFF erkannt — Recovery läuft");
                     twai_initiate_recovery();
                     vTaskDelay(pdMS_TO_TICKS(500));
                     if (twai_get_status_info(&st) == ESP_OK &&
                         st.state == TWAI_STATE_RUNNING) {
                         Serial.println("[CAN] BUS_OFF Recovery OK");
+                        syslog("CAN", "BUS_OFF Recovery OK");
                     } else {
                         can_running = false;
                         Serial.println("[CAN] BUS_OFF Recovery fehlgeschlagen — Transceiver prüfen!");
+                        syslog("CAN", "FEHLER: BUS_OFF Recovery fehlgeschlagen — Transceiver prüfen");
                     }
                 }
             }

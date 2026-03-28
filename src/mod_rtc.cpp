@@ -1,5 +1,6 @@
 #include "mod_rtc.h"
 #include "mod_sleep.h"
+#include "mod_logs.h"
 #include <Wire.h>
 #include "config.h"
 
@@ -29,16 +30,21 @@ void rtc_init() {
     if (!Wire.available()) {
         Serial.println("[RTC] FEHLER: DS1307 nicht gefunden!");
         Serial.printf("[RTC] Pins: SDA=GPIO%d  SCL=GPIO%d\n", RTC_SDA_PIN, RTC_SCL_PIN);
+        syslog("RTC", "FEHLER: DS1307 nicht gefunden — Lötstelle/I2C prüfen");
         return;
     }
     uint8_t sec = Wire.read();
     if (sec & 0x80) {
-        // Uhr starten: CH-Bit loeschen
         Wire.beginTransmission(DS1307_ADDR);
         Wire.write(0x00);
         Wire.write(sec & 0x7F);
         Wire.endTransmission();
         Serial.println("[RTC] Uhr gestartet (war gestoppt - Batterie pruefen)");
+        syslog("RTC", "DS1307 gefunden · Batterie leer/neu — Uhr gestartet");
+    } else {
+        char _m[48];
+        snprintf(_m, sizeof(_m), "DS1307 OK · %s", rtc_time_str().c_str());
+        syslog("RTC", _m);
     }
     Serial.printf("[RTC] DS1307 OK - Zeit: %s\n", rtc_time_str().c_str());
 }
