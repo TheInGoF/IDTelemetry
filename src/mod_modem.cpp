@@ -82,9 +82,14 @@ static volatile bool s_task_paused = false;  // "at stop" → Modem-Task pausier
 static bool gps_enable_with_config() {
     s_modem.disableGPS();
     delay(300);
-    // Multi-GNSS: GPS + GLONASS + BeiDou
-    s_modem.sendAT("+CGNSMOD=1,1,0,1");
-    s_modem.waitResponse(1000);
+    // Multi-GNSS nur beim ersten Start setzen — danach bleibt Config im NVRAM.
+    // Wiederholtes CGNSMOD invalidiert Ephemeris-Cache → erzwingt Cold Start.
+    static bool s_gnss_configured = false;
+    if (!s_gnss_configured) {
+        s_modem.sendAT("+CGNSMOD=1,1,0,1");  // GPS + GLONASS + BeiDou
+        s_modem.waitResponse(1000);
+        s_gnss_configured = true;
+    }
     bool ok = s_modem.enableGPS();          // ZUERST GPS einschalten
     if (ok && s_had_lte) {
         delay(200);                          // GPS-Engine braucht Moment zum Starten
