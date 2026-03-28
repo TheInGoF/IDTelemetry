@@ -468,8 +468,16 @@ void monitor_task(void*) {
                 twai_status_info_t st;
                 if (twai_get_status_info(&st) == ESP_OK &&
                     st.state == TWAI_STATE_BUS_OFF) {
-                    can_running = false;
-                    Serial.println("[CAN] BUS_OFF erkannt — Transceiver prüfen!");
+                    Serial.println("[CAN] BUS_OFF — Recovery...");
+                    twai_initiate_recovery();
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    if (twai_get_status_info(&st) == ESP_OK &&
+                        st.state == TWAI_STATE_RUNNING) {
+                        Serial.println("[CAN] BUS_OFF Recovery OK");
+                    } else {
+                        can_running = false;
+                        Serial.println("[CAN] BUS_OFF Recovery fehlgeschlagen — Transceiver prüfen!");
+                    }
                 }
             }
         }

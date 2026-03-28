@@ -182,7 +182,7 @@ static void row_try_capture() {
 
     if      (dist    >= TELEM_GPS_DIST_HI_M)       { do_capture = true; reason = "Distanz"; }
     else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) { do_capture = true; reason = "Kurve";   }
-    else if (elapsed >= TELEM_GPS_MAX_INTERVAL_MS)  { do_capture = true; reason = "Zeit";    }
+    else if (elapsed >= TELEM_GPS_MAX_INTERVAL_MS && dist >= 15.0f) { do_capture = true; reason = "Zeit"; }
 
     s_yaw_peak = 0.0f;  // immer zurücksetzen
 
@@ -262,7 +262,12 @@ static void row_try_capture() {
     s_cap_lat = lat;
     s_cap_lon = lon;
     s_cap_ms  = now;
-    syslog("TELEM", "GPS-Capture: %s (%.0fm, %lus)", reason, dist, (unsigned long)(elapsed / 1000UL));
+    {
+        char _msg[48];
+        snprintf(_msg, sizeof(_msg), "GPS-Capture: %s (%.0fm, %lus)",
+                 reason, dist, (unsigned long)(elapsed / 1000UL));
+        syslog("TELEM", _msg);
+    }
 }
 
 // ── Wert aktualisieren ──────────────────────────────────────

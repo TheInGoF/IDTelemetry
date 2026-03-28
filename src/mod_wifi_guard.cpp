@@ -318,7 +318,7 @@ static void ap_monitor_task(void*) {
 }
 
 static void wifi_scan_task(void*) {
-    vTaskDelay(pdMS_TO_TICKS(8000)); // AP erst stabil
+    vTaskDelay(pdMS_TO_TICKS(2000)); // AP erst stabil
 
     while (!g_shutdown) {
         // Gepufferte Syslog-Eintraege schreiben (thread-safe aus Callbacks)
@@ -352,6 +352,12 @@ static void wifi_scan_task(void*) {
             }
 
             int n = WiFi.scanComplete();
+            if (n == WIFI_SCAN_FAILED) {
+                Serial.println("[WGUARD] Scan fehlgeschlagen — sofort retry");
+                WiFi.scanDelete();
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue; // Scan-Zyklus sofort neu starten
+            }
             if (n >= 0) {
                 // Dedup: gleiche SSID nur einmal (stärkster RSSI behalten)
                 // Einfache Methode: beim Loggen und Guard-Check doppelte überspringen
@@ -409,13 +415,15 @@ static void wifi_scan_task(void*) {
             }
         }
 
-        // 30s warten, aber alle 500ms auf pending flush pruefen
-        for (int _w = 0; _w < 60; _w++) {
+        // LOCKED: 30s warten; LOST: 10s (schnellere Recovery)
+        int wait_slots = (wstate == WGUARD_LOCKED) ? 60 : 20;
+        for (int _w = 0; _w < wait_slots; _w++) {
             vTaskDelay(pdMS_TO_TICKS(500));
             if (syslog_flush_pending) {
                 syslog_flush_pending = false;
                 syslog_q_flush();
             }
+            if (scan_trigger) break; // sofortiger Scan wenn angefordert
         }
     }
     Serial.println("[WGUARD] Scan-Task beendet (Shutdown)");
@@ -508,6 +516,9 @@ const char* wifi_guard_state_str()     { return wstate_name(wstate); }
 bool guard_can_tx_allowed() {
     // Manuell entsperrt (Button) → erlaubt solange Client da
     if (g_manual_tx_unlock) return true;
+
+    // AP-Client verbunden → immer erlaubt (z.B. Diagnose-App über eigenen Hotspot)
+    if (WiFi.softAPgetStationNum() > 0) return true;
 
     // VBUS Guard: externe Spannung = erlaubt
     if (guard_mode == GUARD_MODE_VBUS) return pmu_is_vbus_in();

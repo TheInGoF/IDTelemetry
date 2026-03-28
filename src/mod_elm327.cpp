@@ -143,7 +143,7 @@ static bool handle_obd2_pid(uint8_t pid, String& response) {
     uint8_t req_data[2] = { 0x01, pid };
     char label[32]; snprintf(label, sizeof(label), "ELM OBD2 PID=0x%02X", pid);
 
-    if (!can_lock()) { response = "NO DATA"; return false; }
+    if (!can_lock(1500)) { response = "NO DATA"; return false; }
 
     uint32_t fc_id = (elm_fc_mode == 1 && elm_fc_header != 0) ? elm_fc_header : 0;
     uint8_t* fc_data_ptr = (elm_fc_mode == 1) ? elm_fc_data : nullptr;
@@ -384,7 +384,7 @@ static bool handle_uds_did(uint16_t did, String& response) {
     // Unbekannte DID (z.B. 0x0364, 0x2613): CAN-Fallback für Kompatibilität
     uint8_t req_data[3] = { 0x22, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF) };
 
-    if (!can_lock()) { response = "NO DATA"; return false; }
+    if (!can_lock(1500)) { response = "NO DATA"; return false; }
 
     uint32_t fc_id = (elm_fc_mode == 1 && elm_fc_header != 0) ? elm_fc_header : 0;
     uint8_t* fc_data_ptr = (elm_fc_mode == 1) ? elm_fc_data : nullptr;
