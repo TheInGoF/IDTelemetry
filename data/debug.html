@@ -292,7 +292,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
     <button class="btn danger" style="margin-left:auto;font-size:10px;padding:2px 10px" onclick="clearWifiLog()" data-i18n="dbg.wifi_log_delete">&#10005; L&#246;schen</button>
     <a href="/download-wifi-log" class="btn accent" style="font-size:10px;padding:2px 10px;text-decoration:none">↓ wifi.log</a>
   </div>
-  <div class="log-box" id="wifi-log">Lade...</div>
+  <div class="log-box" id="wifi-log" style="white-space:pre">Lade...</div>
   </div>
 
   <!-- ELM Log (nur sichtbar wenn log_can aktiv) -->
@@ -301,7 +301,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
     <button class="btn danger" style="margin-left:auto;font-size:10px;padding:2px 10px" onclick="clearElmLog()" data-i18n="dbg.elm_delete">&#10005; L&#246;schen</button>
     <a href="/download-elm-log" class="btn" style="border-color:var(--green);color:var(--green);font-size:10px;padding:2px 10px;text-decoration:none">↓ elm.log</a>
   </div>
-  <div class="log-box" id="elm-log">Lade...</div>
+  <div class="log-box" id="elm-log" style="white-space:pre">Lade...</div>
   </div>
 
   <!-- InfluxDB Puffer -->
@@ -311,7 +311,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
   <div style="font-size:10px;color:var(--muted);margin-bottom:6px">
     <span data-i18n="dbg.influx_desc">Gepufferte Zeilen (GPS-getriggert) &#183; werden beim n&#228;chsten LTE-Fenster gesendet</span>
   </div>
-  <div class="log-box" id="influx-preview" style="max-height:180px">Lade...</div>
+  <div class="log-box" id="influx-preview" style="max-height:180px;white-space:pre">Lade...</div>
 
   <!-- System Log -->
   <div class="section-title" style="margin-top:16px" data-i18n="dbg.syslog_title">System Log
@@ -321,7 +321,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
   <div style="font-size:10px;color:var(--muted);margin-bottom:6px">
     <span data-i18n="dbg.syslog_desc">Neustarts &bull; Client-Events &bull; Guard-Status &bull; Zeit-Events</span>
   </div>
-  <div class="log-box" id="sys-log" style="max-height:400px">Lade...</div>
+  <div class="log-box" id="sys-log" style="max-height:400px;white-space:pre">Lade...</div>
 
 </div>
 
@@ -519,10 +519,11 @@ async function loadWifiLog() {
       el.textContent = t('dbg.wifi_log_empty');
       return;
     }
+    const escW = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const lines = t.trim().split('\n').slice(-40);
     el.innerHTML = lines.map(l => {
-      if (l.startsWith('[')) return `<div style="color:var(--green)">${l}</div>`;
-      return `<div>${l}</div>`;
+      if (l.startsWith('[')) return `<span style="color:var(--green)">${escW(l)}</span>\n`;
+      return `<span>${escW(l)}</span>\n`;
     }).join('');
     el.scrollTop = el.scrollHeight;
   } catch(e) { document.getElementById('wifi-log').textContent = 'Fehler beim Laden'; }
@@ -646,7 +647,8 @@ async function loadElmLog() {
     const t = await r.text();
     const el = document.getElementById('elm-log');
     const lines = t.trim().split('\n').slice(-30).reverse();
-    el.innerHTML = lines.map(l => `<div>${l}</div>`).join('') || t('dbg.elm_empty');
+    const escE = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    el.innerHTML = lines.map(l => `<span>${escE(l)}</span>\n`).join('') || t('dbg.elm_empty');
   } catch(e) {}
 }
 
@@ -669,21 +671,23 @@ async function loadSysLog() {
     const t = await r.text();
     if (!t.trim() || t.startsWith('# Sys')) { el.textContent = window.t('dbg.syslog_empty'); return; }
     const lines = t.trim().split('\n').slice(-60);
+    const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     el.innerHTML = lines.map(l => {
       const col = (l.includes('PANIC') || l.includes('CRASH') || l.includes('WDT')) ? 'var(--red)'
-                : l.includes('GPS-Fix verloren') || l.includes('Fehler HTTP')       ? 'var(--red)'
+                : l.includes('FEHLER') || l.includes('GPS-Fix verloren') || l.includes('Fehler HTTP') ? 'var(--red)'
                 : (l.includes('ERSTER GPS-FIX') || l.includes('GPS-Fix wieder'))   ? 'var(--green)'
                 : l.includes('LTE-M verbunden') || l.includes('GPRS OK')           ? 'var(--green)'
+                : l.includes('OK')                                                  ? 'var(--green)'
                 : l.includes('gesendet')                                            ? 'var(--yellow)'
                 : l.includes('GPS gestoppt')                                        ? 'var(--orange)'
-                : l.includes('] AKKU')                                              ? '#ff79c6'
+                : l.includes('AKKU')                                                ? '#ff79c6'
                 : l.includes('WAKE')                                                ? 'var(--accent)'
                 : (l.includes('SLEEP') || l.includes('pausiert'))                  ? 'var(--yellow)'
                 : l.includes('BOOT')                                                ? 'var(--orange)'
                 : l.includes('CLIENT')                                              ? 'var(--accent)'
                 : l.includes('GUARD')                                               ? 'var(--green)'
                 : '';
-      return col ? `<div style="color:${col}">${l}</div>` : `<div>${l}</div>`;
+      return col ? `<span style="color:${col}">${esc(l)}</span>\n` : `<span>${esc(l)}</span>\n`;
     }).join('');
     el.scrollTop = el.scrollHeight;
   } catch(e) {
@@ -884,8 +888,9 @@ async function loadInfluxPreview() {
     if (!prev.trim() || prev.startsWith('Keine')) {
       el.textContent = t('dbg.influx_no_gps');
     } else {
+      const escI = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       el.innerHTML = prev.trim().split('\n').map(l =>
-        `<div class="log-entry">${l}</div>`
+        `<span>${escI(l)}</span>\n`
       ).join('');
     }
   } catch(e) {

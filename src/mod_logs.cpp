@@ -287,7 +287,7 @@ const char* syslog_timestr() {
 void syslog(const char* category, const char* msg) {
     // Serial immer zuerst — unabhängig von SPIFFS-Zustand
     char line[140];
-    snprintf(line, sizeof(line), "[%s] %-7s %s\n",
+    snprintf(line, sizeof(line), "[%s]\t%-8s\t%s\n",
              syslog_timestr(), category, msg);
     Serial.print(line);
 
