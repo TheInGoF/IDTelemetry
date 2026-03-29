@@ -202,6 +202,10 @@ void setup() {
       Serial.printf("[PMU] %s\n", msg);
       syslog("PMU", msg);
     }
+    if (!cfg_mod_gps()) {
+        pmu_set_gps_power(false);  // BLDO2 (GPS-Antenne) abschalten
+        syslog("GPS", "Modul deaktiviert (cfg mod_gps=0) — BLDO2 aus");
+    }
     modem_init();        // UART1 (TX=GPIO1, RX=GPIO2) SIM7080G — übernimmt Modem exklusiv
     modem_start_task();  // FreeRTOS: GPS alle 5s + Traccar alle 60s
 

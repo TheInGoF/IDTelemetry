@@ -214,6 +214,16 @@ input:focus{outline:none;border-color:var(--accent)}
     <div class="hint" data-i18n="cfg.ble_hint">Wenn aktiv, bekommt ABRP auch ohne CAN-Verbindung plausible Standwerte (0 km/h, 80% SoC etc.) und kann sich verbinden. Deaktiviert: ABRP bekommt "NO DATA" wenn kein CAN.</div>
   </div>
 
+  <!-- Module -->
+  <div class="section-title">Module</div>
+  <div class="card">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <input type="checkbox" id="mod_gps" style="width:16px;height:16px;accent-color:var(--accent)">
+      <span style="font-size:12px">GPS (SIM7080G intern)</span>
+    </label>
+    <div class="hint">GPS-Modul vorhanden. Wenn deaktiviert: GNSS wird nicht gestartet, GPS-Antenne (BLDO2) stromlos.</div>
+  </div>
+
   <!-- SPIFFS Logs -->
   <div class="section-title" data-i18n="cfg.log_title">SPIFFS Logging</div>
   <div class="card">
@@ -327,6 +337,7 @@ async function loadConfig(){
     document.getElementById('ix_token').value  = d.ix_token || '';
     document.getElementById('ix_device').value = d.ix_device|| '';
     document.getElementById('ble_standby').checked = d.ble_standby !== false;
+    document.getElementById('mod_gps').checked     = d.mod_gps !== false;
     document.getElementById('log_can').checked = d.log_can === true;
     document.getElementById('log_ble').checked = d.log_ble === true;
     document.getElementById('log_wifi').checked = d.log_wifi === true;
@@ -358,6 +369,7 @@ async function saveConfig(){
     ix_token:  document.getElementById('ix_token').value.trim(),
     ix_device:    document.getElementById('ix_device').value.trim(),
     ble_standby:  document.getElementById('ble_standby').checked,
+    mod_gps:      document.getElementById('mod_gps').checked,
     log_can:      document.getElementById('log_can').checked,
     log_ble:      document.getElementById('log_ble').checked,
     log_wifi:     document.getElementById('log_wifi').checked,

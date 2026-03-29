@@ -79,3 +79,14 @@ void pmu_set_charging(bool on) {
     }
     Serial.printf("[PMU] Laden %s\n", on ? "aktiviert" : "deaktiviert");
 }
+
+void pmu_set_gps_power(bool on) {
+    if (!s_pmu_ok) return;
+    if (on) {
+        PMU.setBLDO2Voltage(3300);
+        PMU.enableBLDO2();
+    } else {
+        PMU.disableBLDO2();
+    }
+    Serial.printf("[PMU] BLDO2 (GPS-Antenne) %s\n", on ? "an" : "aus");
+}

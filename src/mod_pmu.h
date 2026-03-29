@@ -16,3 +16,4 @@ int  pmu_batt_pct();  // -1 = kein Akku / PMU nicht gefunden, 0-100 = %
 bool pmu_is_vbus_in();   // true = externe Spannung am USB/VBUS angeschlossen
 bool pmu_is_charging();  // true = Akku wird gerade geladen
 void pmu_set_charging(bool on);  // Laden ein/ausschalten (fuer Deep Sleep)
+void pmu_set_gps_power(bool on); // BLDO2 (GPS-Antenne) ein/ausschalten

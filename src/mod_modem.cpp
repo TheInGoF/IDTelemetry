@@ -80,6 +80,10 @@ static volatile bool s_task_paused = false;  // "at stop" → Modem-Task pausier
 // Nach erster LTE-Verbindung: Hot Start (AT+CGNSHOT) — nutzt gespeicherte letzte
 // Position + Almanach + Modem-Zeit (automatisch via LTE synchronisiert).
 static bool gps_enable_with_config() {
+    if (!cfg_mod_gps()) {
+        syslog("GPS", "Deaktiviert (Modul-Config = 0)");
+        return false;
+    }
     s_modem.disableGPS();
     delay(300);
     // Multi-GNSS nur beim ersten Start setzen — danach bleibt Config im NVRAM.
