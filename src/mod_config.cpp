@@ -23,7 +23,6 @@ static char s_ix_token  [256] = SECRET_INFLUX_TOKEN;
 static char s_ix_device [32]  = SECRET_INFLUX_DEVICE;
 static bool s_ble_standby     = false;  // Default: aus
 static bool s_mod_gps         = true;   // Default: GPS vorhanden
-static bool s_mod_gps_ext     = GPS_EXT_ENABLED_DEFAULT;
 static bool s_mod_compass     = false;  // Default: Kompass nicht vorhanden
 static bool s_log_can         = LOG_CAN_ENABLED_DEFAULT;
 static bool s_log_ble         = LOG_BLE_ENABLED_DEFAULT;
@@ -55,7 +54,6 @@ void cfg_init() {
     pref_load(p, "ix_device", s_ix_device, sizeof(s_ix_device), SECRET_INFLUX_DEVICE);
     s_ble_standby = p.getBool("ble_stdby", false);
     s_mod_gps     = p.getBool("mod_gps",     true);
-    s_mod_gps_ext = p.getBool("mod_gps_ext", false);
     s_mod_compass = p.getBool("mod_compass", false);
     s_log_can     = p.getBool("log_can", LOG_CAN_ENABLED_DEFAULT);
     s_log_ble     = p.getBool("log_ble", LOG_BLE_ENABLED_DEFAULT);
@@ -82,7 +80,6 @@ const char* cfg_influx_token()  { return s_ix_token; }
 const char* cfg_influx_device() { return s_ix_device; }
 bool        cfg_ble_standby()  { return s_ble_standby; }
 bool        cfg_mod_gps()      { return s_mod_gps; }
-bool        cfg_mod_gps_ext()  { return s_mod_gps_ext; }
 bool        cfg_mod_compass()  { return s_mod_compass; }
 bool        cfg_log_can()      { return s_log_can; }
 bool        cfg_log_ble()      { return s_log_ble; }
@@ -127,10 +124,6 @@ bool cfg_save_json(const uint8_t* body, size_t len) {
         s_mod_gps = doc["mod_gps"].as<bool>();
         p.putBool("mod_gps", s_mod_gps);
     }
-    if (!doc["mod_gps_ext"].isNull()) {
-        s_mod_gps_ext = doc["mod_gps_ext"].as<bool>();
-        p.putBool("mod_gps_ext", s_mod_gps_ext);
-    }
     if (!doc["mod_compass"].isNull()) {
         s_mod_compass = doc["mod_compass"].as<bool>();
         p.putBool("mod_compass", s_mod_compass);
@@ -174,7 +167,6 @@ const char* cfg_to_json() {
     doc["ix_device"]    = s_ix_device;
     doc["ble_standby"]  = s_ble_standby;
     doc["mod_gps"]      = s_mod_gps;
-    doc["mod_gps_ext"]  = s_mod_gps_ext;
     doc["mod_compass"]  = s_mod_compass;
     doc["log_can"]      = s_log_can;
     doc["log_ble"]      = s_log_ble;

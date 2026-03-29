@@ -221,15 +221,11 @@ input:focus{outline:none;border-color:var(--accent)}
       <input type="checkbox" id="mod_gps" style="width:16px;height:16px;accent-color:var(--accent)">
       <span style="font-size:12px">GPS intern (SIM7080G GNSS)</span>
     </label>
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
-      <input type="checkbox" id="mod_gps_ext" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px">GPS extern (BLITZ M10 GPS V2 &middot; UART2 GPIO1/GPIO2)</span>
-    </label>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
       <input type="checkbox" id="mod_compass" style="width:16px;height:16px;accent-color:var(--accent)">
       <span style="font-size:12px">Kompass (QMC5883L)</span>
     </label>
-    <div class="hint">Intern: GPS-Antenne (BLDO2) stromlos wenn deaktiviert. Extern: NMEA via UART2. Kompass: I2C-Bus GPIO45/21.</div>
+    <div class="hint">GPS-Antenne (BLDO2) stromlos wenn deaktiviert. Kompass: I2C-Bus GPIO45/21. Ext. GPS: config.h GPS_EXT_ENABLED_DEFAULT.</div>
   </div>
 
   <!-- SPIFFS Logs -->
@@ -346,7 +342,6 @@ async function loadConfig(){
     document.getElementById('ix_device').value = d.ix_device|| '';
     document.getElementById('ble_standby').checked = d.ble_standby !== false;
     document.getElementById('mod_gps').checked     = d.mod_gps !== false;
-    document.getElementById('mod_gps_ext').checked = d.mod_gps_ext === true;
     document.getElementById('mod_compass').checked = d.mod_compass === true;
     document.getElementById('log_can').checked = d.log_can === true;
     document.getElementById('log_ble').checked = d.log_ble === true;
@@ -380,7 +375,6 @@ async function saveConfig(){
     ix_device:    document.getElementById('ix_device').value.trim(),
     ble_standby:  document.getElementById('ble_standby').checked,
     mod_gps:      document.getElementById('mod_gps').checked,
-    mod_gps_ext:  document.getElementById('mod_gps_ext').checked,
     mod_compass:  document.getElementById('mod_compass').checked,
     log_can:      document.getElementById('log_can').checked,
     log_ble:      document.getElementById('log_ble').checked,

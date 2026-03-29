@@ -1,5 +1,4 @@
 #include "mod_gps_ext.h"
-#include "mod_config.h"
 #include "mod_logs.h"
 #include "mod_sleep.h"
 #include "config.h"
@@ -115,7 +114,7 @@ static void gps_ext_task(void*) {
 
 // ── Öffentliche API ───────────────────────────────────────
 void gps_ext_init() {
-    if (!cfg_mod_gps_ext()) return;
+    if (!GPS_EXT_ENABLED_DEFAULT) return;
 
     s_gps_uart.begin(GPS_EXT_BAUD, SERIAL_8N1, GPS_EXT_RX_PIN, GPS_EXT_TX_PIN);
     s_ok = true;

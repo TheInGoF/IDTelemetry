@@ -44,7 +44,6 @@ const char* cfg_lang();
 
 // Modul-Schalter (0 = nicht vorhanden, 1 = vorhanden)
 bool        cfg_mod_gps();      // Internes GPS (SIM7080G GNSS)
-bool        cfg_mod_gps_ext();  // Externes GPS (BLITZ M10 GPS V2, UART2 GPIO1/GPIO2)
 bool        cfg_mod_compass();  // QMC5883L Magnetometer
 
 // Log-Schalter (SPIFFS-Logging ein/aus, zur Laufzeit änderbar)
