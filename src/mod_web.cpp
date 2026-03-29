@@ -246,6 +246,20 @@ void web_init() {
     Serial.println("[WEB] Server bereit: http://192.168.4.1");
 }
 
+static bool s_ap_active = true;
+
+bool web_ap_active() { return s_ap_active; }
+
+void web_ap_stop() {
+    if (!s_ap_active) return;
+    s_ap_active = false;
+    ws.closeAll();
+    server.end();
+    WiFi.softAPdisconnect(true);
+    Serial.println("[WEB] AP + WebServer abgeschaltet (Timeout)");
+    syslog("WEB", "AP abgeschaltet — kein Client in 10min");
+}
+
 void ble_web_routes_init() {
     server.on("/wifi/status", HTTP_GET, [](AsyncWebServerRequest* r) {
         r->send(200, "application/json", wifi_guard_status_json());

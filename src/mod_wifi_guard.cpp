@@ -1,4 +1,5 @@
 #include "mod_wifi_guard.h"
+#include "mod_web.h"
 #include "mod_sleep.h"
 #include "mod_pmu.h"
 #include "mod_config.h"
@@ -291,10 +292,22 @@ static void wifi_log_entry(int n) {
 
 static void ap_monitor_task(void*) {
     vTaskDelay(pdMS_TO_TICKS(3000)); // AP erst stabil
+    const uint32_t AP_TIMEOUT_MS = 10UL * 60UL * 1000UL; // 10 Minuten
+    uint32_t ap_start_ms = millis();
+    bool ap_ever_connected = false;
+
     while (!g_shutdown) {
+        // AP-Timeout: kein Client in 10min nach Boot → abschalten
+        if (web_ap_active() && !ap_ever_connected) {
+            if (millis() - ap_start_ms >= AP_TIMEOUT_MS) {
+                web_ap_stop();
+            }
+        }
+
         uint8_t ap_now = (uint8_t)WiFi.softAPgetStationNum();
         if (ap_now != ap_clients_last) {
             if (ap_now > ap_clients_last) {
+                ap_ever_connected = true;
                 neopixelWrite(48, RGB_ORANGE_R, RGB_ORANGE_G, RGB_ORANGE_B);
                 char _m[44]; snprintf(_m, 44, "AP verbunden · aktiv: %d", ap_now);
                 syslog("CLIENT", _m);
