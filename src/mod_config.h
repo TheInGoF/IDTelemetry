@@ -43,7 +43,8 @@ bool        cfg_ble_standby();
 const char* cfg_lang();
 
 // Modul-Schalter (0 = nicht vorhanden, 1 = vorhanden)
-bool        cfg_mod_gps();    // Internes GPS (SIM7080G GNSS)
+bool        cfg_mod_gps();     // Internes GPS (SIM7080G GNSS)
+bool        cfg_mod_compass(); // QMC5883L Magnetometer
 
 // Log-Schalter (SPIFFS-Logging ein/aus, zur Laufzeit änderbar)
 bool        cfg_log_can();    // CAN/ELM SPIFFS-Log

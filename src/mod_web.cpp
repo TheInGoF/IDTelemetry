@@ -10,6 +10,7 @@
 #include "mod_headers.h"
 #include "mod_telemetry.h"
 #include "mod_config.h"
+#include "mod_compass.h"
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
 #include <Update.h>
@@ -173,6 +174,8 @@ void web_init() {
         doc["gps_loc"]     = gps_location_str();
         doc["gps_sat"]     = modem_gps_usat();
         doc["gps_vsat"]    = modem_gps_vsat();
+        doc["compass_ok"]      = compass_ok();
+        doc["compass_heading"] = compass_ok() ? compass_heading_deg() : 0.0f;
         doc["modem_ok"]    = modem_is_connected();
         doc["modem_sig"]   = (int)modem_signal_quality();
         doc["modem_op"]    = modem_operator();

@@ -39,6 +39,7 @@
 #include "mod_wifi_guard.h"
 #include "mod_rtc.h"
 #include "mod_gyro.h"
+#include "mod_compass.h"
 #include "mod_pmu.h"
 #include "mod_modem.h"
 #include "mod_sleep.h"
@@ -192,7 +193,8 @@ void setup() {
 
     // 2. I2C Sensoren (RTC zuerst — startet Wire.begin)
     rtc_init();
-    gyro_init();   // Wire bereits aktiv, kein zweites begin()
+    gyro_init();     // Wire bereits aktiv, kein zweites begin()
+    compass_init();  // QMC5883L — gleicher Wire-Bus, nur wenn mod_compass=1
     sleep_log_wake();  // Gyro-Wake Details loggen (braucht gyro_init)
     pmu_init();              // Wire1 (SDA=GPIO15, SCL=GPIO7) für AXP2101 PMU
     { int b = pmu_batt_pct();

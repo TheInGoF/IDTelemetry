@@ -233,6 +233,31 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
     </div>
   </div>
 
+  <!-- Kompass (nur sichtbar wenn mod_compass=1) -->
+  <div id="sec-compass" style="display:none">
+  <div class="section-title">Kompass (QMC5883L)</div>
+  <div class="card" style="padding:16px 20px">
+    <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <!-- Kompass-Rose -->
+      <div style="flex-shrink:0">
+        <canvas id="compass-canvas" width="110" height="110"></canvas>
+      </div>
+      <!-- Werte -->
+      <div style="flex:1;min-width:120px">
+        <div style="margin-bottom:8px">
+          <div class="lbl">Richtung</div>
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span id="compass-deg" style="font-size:28px;font-weight:700;color:var(--accent);letter-spacing:2px">---</span>
+            <span style="font-size:14px;color:var(--muted)">°</span>
+            <span id="compass-cardinal" style="font-size:18px;font-weight:700;color:var(--orange);min-width:30px">--</span>
+          </div>
+        </div>
+        <div id="compass-status" style="font-size:10px;color:var(--muted)">Warte auf Sensor...</div>
+      </div>
+    </div>
+  </div>
+  </div>
+
   <!-- CAN TX Status -->
   <div class="tx-box">
     <div style="font-size:11px;color:var(--muted)" data-i18n="dbg.cantx_label">CAN TX:</div>
@@ -351,7 +376,7 @@ function setLed(id, cls) {
 function setBatt(v,chg,vbus){const el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
 
 async function fetchStatus(){try{const d=await(await fetch('/status')).json();if(d.fw_version){const v=document.getElementById('fw-ver');if(v)v.textContent='v'+d.fw_version;}setLed('can',d.can_ok?'green':'blue');if(!d.gyro_ok)setLed('gyro','');else setLed('gyro',d.gyro_state===2?'yellow':'green');setLed('gps',d.gps_valid?'green':'');if(d.gyro_threshold!=null){gThr=d.gyro_threshold;const inp=document.getElementById('gyro-thr-input');if(inp)inp.value=gThr.toFixed(3);}
-if(d.gyro_mot_thr!=null){const inp=document.getElementById('gyro-mot-input');if(inp){inp.value=d.gyro_mot_thr;const lbl=document.getElementById('gyro-mot-mg');if(lbl)lbl.textContent='× 32 = '+(d.gyro_mot_thr*32)+'mg';}}setBatt(d.batt_pct??-1,d.charging??false,d.vbus_in??false);updateModem(d.modem_sig??-1,d.modem_op??'',d.modem_sim??false,d.modem_ok??false);}catch(e){}}
+if(d.gyro_mot_thr!=null){const inp=document.getElementById('gyro-mot-input');if(inp){inp.value=d.gyro_mot_thr;const lbl=document.getElementById('gyro-mot-mg');if(lbl)lbl.textContent='× 32 = '+(d.gyro_mot_thr*32)+'mg';}}setBatt(d.batt_pct??-1,d.charging??false,d.vbus_in??false);updateModem(d.modem_sig??-1,d.modem_op??'',d.modem_sim??false,d.modem_ok??false);compassUpdate(d);}catch(e){}}
 fetchStatus();
 var _stTimer=setInterval(fetchStatus,6000);
 
@@ -870,6 +895,79 @@ function axisUpdate(ax,ay,az,gx,gy,gz) {
     setBar('bar-gy','val-gy',gy,250,0);
     setBar('bar-gz','val-gz',gz,250,0);
   }
+}
+
+// ── Kompass ────────────────────────────────────────────
+function compassDraw(deg) {
+  const canvas = document.getElementById('compass-canvas');
+  if (!canvas) return;
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2, r = W/2 - 6;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  // Hintergrund
+  ctx.fillStyle = '#1c2733';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#2a3a4a'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
+
+  // Skalaticks
+  for (let i = 0; i < 36; i++) {
+    const a = (i * 10 - 90) * Math.PI / 180;
+    const len = (i % 9 === 0) ? 10 : (i % 3 === 0) ? 6 : 3;
+    const x1 = cx + Math.cos(a) * (r - 1), y1 = cy + Math.sin(a) * (r - 1);
+    const x2 = cx + Math.cos(a) * (r - len), y2 = cy + Math.sin(a) * (r - len);
+    ctx.strokeStyle = (i % 9 === 0) ? '#5a7a96' : '#2a3a4a';
+    ctx.lineWidth = (i % 9 === 0) ? 1.5 : 1;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+
+  // Himmelsrichtungen
+  ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const dirs = [['N', 0, '#ff4757'], ['O', 90, '#5a7a96'], ['S', 180, '#5a7a96'], ['W', 270, '#5a7a96']];
+  dirs.forEach(([lbl, ang, col]) => {
+    const a = (ang - 90) * Math.PI / 180;
+    const tx = cx + Math.cos(a) * (r - 16), ty = cy + Math.sin(a) * (r - 16);
+    ctx.fillStyle = col; ctx.fillText(lbl, tx, ty);
+  });
+
+  // Nadel
+  const rad = (deg - 90) * Math.PI / 180;
+  const tipLen = r - 20, tailLen = 16;
+  const tx = cx + Math.cos(rad) * tipLen, ty = cy + Math.sin(rad) * tipLen;
+  const bx = cx - Math.cos(rad) * tailLen, by = cy - Math.sin(rad) * tailLen;
+  const px = Math.cos(rad + Math.PI/2) * 5, py = Math.sin(rad + Math.PI/2) * 5;
+
+  // Nord-Spitze (rot)
+  ctx.fillStyle = '#ff4757';
+  ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(cx+px, cy+py); ctx.lineTo(cx-px, cy-py); ctx.closePath(); ctx.fill();
+  // Süd-Spitze (dunkel)
+  ctx.fillStyle = '#2a3a4a';
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(cx+px, cy+py); ctx.lineTo(cx-px, cy-py); ctx.closePath(); ctx.fill();
+
+  // Mittelpunkt
+  ctx.fillStyle = '#00e5ff';
+  ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, Math.PI*2); ctx.fill();
+}
+
+function compassCardinal(deg) {
+  const dirs = ['N','NO','O','SO','S','SW','W','NW'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function compassUpdate(d) {
+  const sec = document.getElementById('sec-compass');
+  if (!d.compass_ok) { if (sec) sec.style.display = 'none'; return; }
+  if (sec) sec.style.display = '';
+  const heading = d.compass_heading || 0;
+  const degEl = document.getElementById('compass-deg');
+  const carEl = document.getElementById('compass-cardinal');
+  const stEl  = document.getElementById('compass-status');
+  if (degEl) degEl.textContent = Math.round(heading);
+  if (carEl) carEl.textContent = compassCardinal(heading);
+  if (stEl)  stEl.textContent  = 'QMC5883L · Echtzeit · flach montiert';
+  compassDraw(heading);
 }
 
 // ── InfluxDB Preview ──────────────────────────────────
