@@ -48,8 +48,8 @@
 #define LOG_INFO_LEN        48           // Max Info-String pro Eintrag
 
 // --- Log-Defaults (via Web-UI / NVS zur Laufzeit änderbar) ---
-#define LOG_CAN_ENABLED_DEFAULT   false  // CAN/ELM SPIFFS-Log initial aus
-#define LOG_BLE_ENABLED_DEFAULT   false  // BLE SPIFFS-Log initial aus
+#define LOG_CAN_ENABLED_DEFAULT   true  // CAN/ELM SPIFFS-Log initial aus
+#define LOG_BLE_ENABLED_DEFAULT   true  // BLE SPIFFS-Log initial aus
 #define LOG_WIFI_ENABLED_DEFAULT  false  // WiFi Guard Scan-Log initial aus
 
 // --- LTE deaktivieren (GPS-Only Modus) ---
@@ -69,9 +69,10 @@
 #define GPS_INTERVAL_MS     5000     // GPS-Update alle 5 Sekunden
 
 // --- Externes GPS (UART2, BLITZ M10 GPS V2) ---
-#define GPS_EXT_RX_PIN      1        // GPIO1 ← GPS TX (NMEA)
-#define GPS_EXT_TX_PIN      2        // GPIO2 → GPS RX (Konfiguration)
-#define GPS_EXT_BAUD        9600     // BLITZ M10 Default
+#define GPS_EXT_ENABLED_DEFAULT  false   // true = BLITZ M10 aktiv (UART2 GPIO1/GPIO2)
+#define GPS_EXT_RX_PIN      1            // GPIO1 ← GPS TX (NMEA)
+#define GPS_EXT_TX_PIN      2            // GPIO2 → GPS RX (Konfiguration)
+#define GPS_EXT_BAUD        9600         // BLITZ M10 Default
 
 // --- Deep Sleep (Gyro Wake-up) ---
 // MPU-6050 INT Pin → GPIO3 (RTC-fähig ESP32-S3 GPIO0-21, EXT1-Wake-up)
