@@ -44,7 +44,7 @@ void pmu_init() {
 
     // Nach EXT0-Wake (PMU INT): pending IRQ löschen, damit INT-Pin wieder HIGH geht
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
-        PMU.clearIRQ();
+        PMU.clearIrqStatus();
         Serial.println("[PMU] Wake-IRQ gelöscht (EXT0 VBUS-Insert)");
     }
 
@@ -95,7 +95,7 @@ void pmu_enable_vbus_wake() {
 
 void pmu_clear_wake_irq() {
     if (!s_pmu_ok) return;
-    PMU.clearIRQ();
+    PMU.clearIrqStatus();
 }
 
 void pmu_set_gps_power(bool on) {
