@@ -293,13 +293,12 @@ static void wifi_log_entry(int n) {
 static void ap_monitor_task(void*) {
     vTaskDelay(pdMS_TO_TICKS(3000)); // AP erst stabil
     const uint32_t AP_TIMEOUT_MS = 10UL * 60UL * 1000UL; // 10 Minuten
-    uint32_t ap_start_ms = millis();
-    bool ap_ever_connected = false;
+    uint32_t ap_no_client_since = millis(); // Zeitpunkt seit dem kein Client verbunden
 
     while (!g_shutdown) {
-        // AP-Timeout: kein Client in 10min nach Boot → abschalten
-        if (web_ap_active() && !ap_ever_connected) {
-            if (millis() - ap_start_ms >= AP_TIMEOUT_MS) {
+        // AP-Timeout: kein Client für 10min → abschalten
+        if (web_ap_active() && WiFi.softAPgetStationNum() == 0) {
+            if (millis() - ap_no_client_since >= AP_TIMEOUT_MS) {
                 web_ap_stop();
             }
         }
@@ -307,7 +306,7 @@ static void ap_monitor_task(void*) {
         uint8_t ap_now = (uint8_t)WiFi.softAPgetStationNum();
         if (ap_now != ap_clients_last) {
             if (ap_now > ap_clients_last) {
-                ap_ever_connected = true;
+                ap_no_client_since = millis(); // Timer pausieren solange Client da
                 neopixelWrite(48, RGB_ORANGE_R, RGB_ORANGE_G, RGB_ORANGE_B);
                 char _m[44]; snprintf(_m, 44, "AP verbunden · aktiv: %d", ap_now);
                 syslog("CLIENT", _m);
@@ -317,9 +316,10 @@ static void ap_monitor_task(void*) {
                 char _m[44]; snprintf(_m, 44, "AP getrennt · aktiv: %d", ap_now);
                 syslog("CLIENT", _m);
                 if (ap_now == 0) {
-                    // Letzter Client weg → sofort Guard-Scan erzwingen
+                    // Letzter Client weg → sofort Guard-Scan + AP-Timeout neu starten
                     scan_trigger = true;
-                    Serial.println("[WGUARD] Client 0 → sofortiger Guard-Rescan");
+                    ap_no_client_since = millis();
+                    Serial.println("[WGUARD] Client 0 → Guard-Rescan + AP-Timeout reset");
                 }
             }
             ap_clients_last = ap_now;
