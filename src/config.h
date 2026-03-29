@@ -83,6 +83,10 @@
 #define SEND_INTERVAL_S          90                          // GPS→LTE Wechselzyklus (einzige Quelle)
 #define TRACCAR_SEND_INTERVAL_MS (SEND_INTERVAL_S * 1000UL) // abgeleitet — nicht separat ändern
 
+// Externes GPS: kein GPS/LTE-Wechsel, eigene Sende-Intervalle
+#define EXT_GPS_TRACCAR_INTERVAL_MS  60000UL   // Traccar alle 60s
+#define EXT_GPS_INFLUX_INTERVAL_MS  120000UL   // InfluxDB-Puffer alle 120s leeren
+
 // ---- Telemetrie Zeilen-Puffer ----
 #define TELEM_ROW_BUF_SIZE       500    // max. gespeicherte Zeilen im RAM-Ringpuffer (~83 min bei 6/min)
 #define INFLUX_ROWS_PER_SEND      50    // max. Zeilen pro LTE-Fenster (50 × ~220 B ≈ 11 kB Body)

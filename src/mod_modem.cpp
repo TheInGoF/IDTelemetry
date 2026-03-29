@@ -8,6 +8,7 @@
 #include "shared.h"
 #include "config.h"
 #include "mod_config.h"
+#include "mod_gps_ext.h"
 #include "mod_logs.h"
 #include <Arduino.h>
 #include <SPIFFS.h>
@@ -552,6 +553,10 @@ static void modem_task(void* /*param*/) {
     uint32_t   last_traccar_ms = 0;
     bool       traccar_first   = true;  // erster Traccar-Versand nach TRACCAR_SEND_INTERVAL_MS
 
+    // Externes GPS: eigene Sende-Timer (kein GPS/LTE-Wechsel)
+    uint32_t   last_ext_traccar_ms = 0;
+    uint32_t   last_ext_influx_ms  = 0;
+
     int        scan_fail_count = 0;        // Fehlversuche STATE_WAIT_FOR_NETWORK
     bool       radio_initialized = false;  // CFUN-Sequenz bereits ausgeführt
     int        sig_fail_count = 0;         // Aufeinanderfolgende Signal-99-Abfragen
@@ -821,11 +826,28 @@ static void modem_task(void* /*param*/) {
 
 
                 #ifndef LTE_DISABLED
-                // LTE-Fenster: GPS deaktivieren → GPRS verbinden → senden → GPS reaktivieren
-                // (SIM7080G: GPS und LTE-Daten können nicht gleichzeitig aktiv sein)
-                // Ohne SIM: kein LTE → GPS läuft durchgehend
+                // ── Externes GPS: kein GPS/LTE-Wechsel ──────────────────────────
+                // SIM7080G bleibt in LTE-Modus, ext. GPS liefert Fixes über UART2.
+                // Bestehende GPS/LTE-Wechsel-Logik (unten) bleibt komplett unverändert.
+                if (gps_ext_ok()) {
+                    if (s_sim_ok && gps_valid() &&
+                        (now - last_ext_traccar_ms) >= EXT_GPS_TRACCAR_INTERVAL_MS) {
+                        last_ext_traccar_ms = now;
+                        if (modem_ensure_connected()) {
+                            traccar_on_gps_tick(gps_snapshot());
+                        }
+                    }
+                    if (s_sim_ok &&
+                        (now - last_ext_influx_ms) >= EXT_GPS_INFLUX_INTERVAL_MS) {
+                        last_ext_influx_ms = now;
+                        if (modem_ensure_connected()) {
+                            telem_send_influx();
+                        }
+                    }
+                }
 
-                if (s_sim_ok && had_fix && (now - last_traccar_ms) >= TRACCAR_SEND_INTERVAL_MS) {
+                // ── Internes GPS: GPS/LTE-Wechsel (unverändert) ─────────────────
+                if (!gps_ext_ok() && s_sim_ok && had_fix && (now - last_traccar_ms) >= TRACCAR_SEND_INTERVAL_MS) {
 
                     last_traccar_ms = now;  // sofort setzen — verhindert Loop bei langer Ausfuehrung
 
