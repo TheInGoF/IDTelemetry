@@ -171,7 +171,7 @@ void log_clear(uint8_t src) {
 
 String log_to_txt(uint8_t src) {
     const char* path = can_log_path(src);
-    String out = "IDTelemetry Log\r\n";
+    String out = "Telemetry Stick Log\r\n";
     out += (src == LOG_SRC_ELM) ? "Quelle: ELM327/ABRP\r\n" : "Quelle: Web-Scanner\r\n";
     out += "Uptime: " + String(millis() / 1000) + "s\r\n";
     out += "========================================================\r\n";
@@ -257,7 +257,7 @@ void log_ble_snapshot(const char* json_devices) {
 }
 
 String log_ble_to_txt() {
-    String out = "IDTelemetry - BLE Log\r\n";
+    String out = "Telemetry Stick - BLE Log\r\n";
     out += "Schwelle: " + String(BLE_RSSI_THRESHOLD) + " dBm\r\n";
     out += "Intervall: 10s\r\n";
     out += "========================================\r\n";

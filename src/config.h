@@ -6,11 +6,11 @@
 // #define ELM_MOCK_MODE
 
 // ============================================================
-//  IDTelemetry - Zentrale Konfiguration
+//  Telemetry Stick - Zentrale Konfiguration
 //  Hardware: LILYGO T-SIM7080G-S3 (ESP32-S3-WROOM-1-N16R8) + SN65HVD230
 // ============================================================
 
-#define FW_VERSION  "1.0.2"
+#define FW_VERSION  "1.0.3"
 
 // --- WiFi Access Point ---
 #define WIFI_SSID           SECRET_AP_SSID
