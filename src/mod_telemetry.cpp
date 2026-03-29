@@ -82,8 +82,9 @@ static uint16_t     s_row_pending   = 0;   // ausstehende (ungesendete) Zeilen
 static double   s_cap_lat = 0.0;
 static double   s_cap_lon = 0.0;
 static uint32_t s_cap_ms  = 0;
-static float    s_yaw_peak        = 0.0f;  // max |yaw_dps| seit letztem Capture-Tick
-static float    s_cap_heading     = -1.0f; // Kompass-Heading beim letzten Capture (-1 = noch keiner)
+static float    s_yaw_peak           = 0.0f;   // max |yaw_dps| seit letztem Capture-Tick
+static float    s_compass_peak_delta = 0.0f;   // max Heading-Delta seit letztem Capture-Tick
+static float    s_compass_ref        = -1.0f;  // Kompass-Referenz-Heading für aktuelles Fenster
 
 // ── Delta-Kompression: nur geänderte Werte senden ──────────
 static float s_prev_val[TELEM_FIELD_COUNT];  // letzte gesendete Werte
@@ -186,13 +187,7 @@ static void row_try_capture() {
     if (dist >= TELEM_GPS_DIST_HI_M) {
         do_capture = true; reason = "Distanz";
     } else if (compass_ok()) {
-        // Kompass aktiv: Heading-Delta statt Gyro-Drehrate
-        float heading = compass_heading_deg();
-        if (s_cap_heading >= 0.0f) {
-            float delta = fabsf(heading - s_cap_heading);
-            if (delta > 180.0f) delta = 360.0f - delta;
-            if (delta >= (float)TELEM_COMPASS_TURN_DEG) { do_capture = true; reason = "Kurve"; }
-        }
+        if (s_compass_peak_delta >= (float)TELEM_COMPASS_TURN_DEG) { do_capture = true; reason = "Kurve"; }
     } else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) {
         do_capture = true; reason = "Kurve";
     }
@@ -200,7 +195,10 @@ static void row_try_capture() {
         do_capture = true; reason = "Zeit";
     }
 
-    s_yaw_peak = 0.0f;  // immer zurücksetzen
+    // Peaks zurücksetzen + neue Kompass-Referenz für nächstes Fenster
+    s_yaw_peak           = 0.0f;
+    s_compass_peak_delta = 0.0f;
+    if (compass_ok()) s_compass_ref = compass_heading_deg();
 
     if (!do_capture) return;
 
@@ -279,10 +277,9 @@ static void row_try_capture() {
     }
     xSemaphoreGive(s_mutex);
 
-    s_cap_lat     = lat;
-    s_cap_lon     = lon;
-    s_cap_ms      = now;
-    if (compass_ok()) s_cap_heading = compass_heading_deg();
+    s_cap_lat = lat;
+    s_cap_lon = lon;
+    s_cap_ms  = now;
     {
         char _msg[48];
         snprintf(_msg, sizeof(_msg), "GPS-Capture: %s (%.0fm, %lus)",
@@ -516,6 +513,16 @@ static void telem_task(void* /*param*/) {
         {
             float y = fabsf(gyro_get_yaw_dps());
             if (y > s_yaw_peak) s_yaw_peak = y;
+        }
+        if (compass_ok()) {
+            float h = compass_heading_deg();
+            if (s_compass_ref < 0.0f) {
+                s_compass_ref = h;  // erste Initialisierung
+            } else {
+                float d = fabsf(h - s_compass_ref);
+                if (d > 180.0f) d = 360.0f - d;
+                if (d > s_compass_peak_delta) s_compass_peak_delta = d;
+            }
         }
 
         // GPS-Capture: extern 1s (M10 liefert 1Hz), intern 3s (SIM7080G 5s-Takt)
