@@ -161,7 +161,7 @@ static void enter_deep_sleep(const char* reason) {
 
     // Warten bis alle Tasks sich beendet haben (max 2s)
     const char* task_names[] = {
-        "TELEM", "MODEM", "GYRO", "WIFI_SCAN", "AP_MON", "MON", "RTC_SYNC", "elm_worker"
+        "TELEM", "MODEM", "GYRO", "WIFI_SCAN", "AP_MON", "MON", "RTC_SYNC", "elm_worker", "GPS_EXT"
     };
     uint32_t wait_start = millis();
     bool all_stopped = false;

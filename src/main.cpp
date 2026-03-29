@@ -40,6 +40,7 @@
 #include "mod_rtc.h"
 #include "mod_gyro.h"
 #include "mod_compass.h"
+#include "mod_gps_ext.h"
 #include "mod_pmu.h"
 #include "mod_modem.h"
 #include "mod_sleep.h"
@@ -208,7 +209,8 @@ void setup() {
         pmu_set_gps_power(false);  // BLDO2 (GPS-Antenne) abschalten
         syslog("GPS", "Modul deaktiviert (cfg mod_gps=0) — BLDO2 aus");
     }
-    modem_init();        // UART1 (TX=GPIO1, RX=GPIO2) SIM7080G — übernimmt Modem exklusiv
+    gps_ext_init();      // UART2 (RX=GPIO1, TX=GPIO2) Externes GPS — nur wenn mod_gps_ext=1
+    modem_init();        // UART1 (TX=GPIO5, RX=GPIO4) SIM7080G — übernimmt Modem exklusiv
     modem_start_task();  // FreeRTOS: GPS alle 5s + Traccar alle 60s
 
     // Telemetrie-Modul (nach Modem-Init — liest GPS/LTE-Daten)

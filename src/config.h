@@ -68,6 +68,11 @@
 #define MODEM_BAUD          115200
 #define GPS_INTERVAL_MS     5000     // GPS-Update alle 5 Sekunden
 
+// --- Externes GPS (UART2, BLITZ M10 GPS V2) ---
+#define GPS_EXT_RX_PIN      1        // GPIO1 ← GPS TX (NMEA)
+#define GPS_EXT_TX_PIN      2        // GPIO2 → GPS RX (Konfiguration)
+#define GPS_EXT_BAUD        9600     // BLITZ M10 Default
+
 // --- Deep Sleep (Gyro Wake-up) ---
 // MPU-6050 INT Pin → GPIO3 (RTC-fähig ESP32-S3 GPIO0-21, EXT1-Wake-up)
 // Verdrahtung: MPU-6050 INT-Pin an GPIO3 Lötpad auf T-SIM7080G-S3 Header löten
