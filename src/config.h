@@ -31,6 +31,7 @@
 // GPIO15/16 intern auf PCB verdrahtet (BOARD_I2C_SDA/SCL) — kein externes Lötpad
 #define PMU_SDA_PIN         15           // Wire1 → AXP2101 SDA (intern, LilyGo I2C_SDA)
 #define PMU_SCL_PIN          7           // Wire1 → AXP2101 SCL (intern, LilyGo I2C_SCL)
+#define PMU_INT_PIN     GPIO_NUM_6       // AXP2101 INT (intern, active-low) → EXT0 Wake-up
 
 // --- Gyro Schwelle ---
 // Ab diesem G-Wert (Abweichung von Ruhelage) wird gelb angezeigt

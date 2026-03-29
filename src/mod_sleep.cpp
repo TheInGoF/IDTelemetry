@@ -39,6 +39,9 @@ void sleep_init() {
     if (g_wake_cause == ESP_SLEEP_WAKEUP_EXT1) {
         syslog("WAKE", "Deep Sleep beendet: Gyro-Interrupt (GPIO3)");
         Serial.printf("[SLEEP] Aufgewacht: Gyro-Motion-Interrupt GPIO%d\n", (int)GYRO_WAKE_PIN);
+    } else if (g_wake_cause == ESP_SLEEP_WAKEUP_EXT0) {
+        syslog("WAKE", "Deep Sleep beendet: PMU VBUS-Insert (GPIO6)");
+        Serial.printf("[SLEEP] Aufgewacht: AXP2101 VBUS-Insert GPIO%d\n", (int)PMU_INT_PIN);
     } else {
         syslog("BOOT", "Normaler Start (PowerOn / Reset)");
         Serial.println("[SLEEP] Normaler Boot (kein Deep Sleep)");
@@ -217,25 +220,32 @@ static void enter_deep_sleep(const char* reason) {
     Serial.flush();
     delay(100);
 
-    // ── 4. Gyro Wake-up konfigurieren ──
-    gyro_configure_sleep_int();
-    Serial.println("[SLEEP] Gyro INT konfiguriert");
-
-    // GPIO3 als RTC-GPIO für Deep Sleep konfigurieren
+    // ── 4. Wake-up Quellen konfigurieren ──
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);  // RTC-Peripherie an
+
+    // EXT1: GPIO3 HIGH → Gyro Motion Interrupt
+    gyro_configure_sleep_int();
     rtc_gpio_init(GYRO_WAKE_PIN);
     rtc_gpio_set_direction(GYRO_WAKE_PIN, RTC_GPIO_MODE_INPUT_ONLY);
-    rtc_gpio_pulldown_en(GYRO_WAKE_PIN);   // Pull-Down: Pin ist LOW wenn kein INT
-    rtc_gpio_pullup_dis(GYRO_WAKE_PIN);    // Pull-Up aus
-
-    // Aktuellen Pin-Zustand prüfen (sollte LOW sein, MPU-6050 INT nicht aktiv)
-    int pin_state = rtc_gpio_get_level(GYRO_WAKE_PIN);
-    Serial.printf("[SLEEP] GPIO%d Zustand: %s\n", (int)GYRO_WAKE_PIN,
-                  pin_state ? "HIGH (INT aktiv!)" : "LOW (bereit)");
-
-    // EXT1 Wake-up: GPIO3 HIGH = MPU-6050 Motion Interrupt
+    rtc_gpio_pulldown_en(GYRO_WAKE_PIN);
+    rtc_gpio_pullup_dis(GYRO_WAKE_PIN);
+    int gyro_pin_state = rtc_gpio_get_level(GYRO_WAKE_PIN);
+    Serial.printf("[SLEEP] GPIO%d (Gyro): %s\n", (int)GYRO_WAKE_PIN,
+                  gyro_pin_state ? "HIGH (INT aktiv!)" : "LOW (bereit)");
     esp_sleep_enable_ext1_wakeup(1ULL << GYRO_WAKE_PIN, ESP_EXT1_WAKEUP_ANY_HIGH);
-    Serial.println("[SLEEP] EXT1 Wake konfiguriert — schlafen...");
+    Serial.println("[SLEEP] EXT1 Gyro-Wake konfiguriert");
+
+    // EXT0: GPIO6 LOW → AXP2101 VBUS-Insert Interrupt (active-low)
+    pmu_enable_vbus_wake();
+    rtc_gpio_init(PMU_INT_PIN);
+    rtc_gpio_set_direction(PMU_INT_PIN, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pullup_en(PMU_INT_PIN);     // Pull-Up: Pin ist HIGH wenn kein INT
+    rtc_gpio_pulldown_dis(PMU_INT_PIN);
+    int pmu_pin_state = rtc_gpio_get_level(PMU_INT_PIN);
+    Serial.printf("[SLEEP] GPIO%d (PMU INT): %s\n", (int)PMU_INT_PIN,
+                  pmu_pin_state ? "HIGH (bereit)" : "LOW (IRQ aktiv!)");
+    esp_sleep_enable_ext0_wakeup(PMU_INT_PIN, 0);  // 0 = wake on LOW
+    Serial.println("[SLEEP] EXT0 PMU-Wake konfiguriert — schlafen...");
     Serial.flush();
     delay(100);  // MPU-6050 Zeit geben sich zu stabilisieren
 

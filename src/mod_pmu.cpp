@@ -42,6 +42,12 @@ void pmu_init() {
     // TS-Pin Messung deaktivieren (wie LilyGo-Beispiel — sonst blockiert Laden)
     PMU.disableTSPinMeasure();
 
+    // Nach EXT0-Wake (PMU INT): pending IRQ löschen, damit INT-Pin wieder HIGH geht
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
+        PMU.clearIRQ();
+        Serial.println("[PMU] Wake-IRQ gelöscht (EXT0 VBUS-Insert)");
+    }
+
     // ---- Lade-Parameter (wie LilyGo-Beispiel) ----
     PMU.setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_300MA);
     PMU.setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V1);
@@ -78,6 +84,18 @@ void pmu_set_charging(bool on) {
         PMU.disableCellbatteryCharge();
     }
     Serial.printf("[PMU] Laden %s\n", on ? "aktiviert" : "deaktiviert");
+}
+
+void pmu_enable_vbus_wake() {
+    if (!s_pmu_ok) return;
+    PMU.disableIRQ(XPOWERS_AXP2101_ALL_IRQ);          // Slate clean
+    PMU.enableIRQ(XPOWERS_AXP2101_VBUS_INSERT_IRQ);   // Nur VBUS-Insert
+    Serial.println("[PMU] VBUS-Insert IRQ aktiviert");
+}
+
+void pmu_clear_wake_irq() {
+    if (!s_pmu_ok) return;
+    PMU.clearIRQ();
 }
 
 void pmu_set_gps_power(bool on) {
