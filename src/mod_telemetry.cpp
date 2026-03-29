@@ -12,6 +12,7 @@
 #include "mod_rtc.h"
 #include "mod_logs.h"
 #include "mod_elm327.h"
+#include "mod_gps_ext.h"
 #include "config.h"
 #include "mod_config.h"
 #include <Arduino.h>
@@ -497,8 +498,9 @@ static void telem_task(void* /*param*/) {
             if (y > s_yaw_peak) s_yaw_peak = y;
         }
 
-        // GPS-getriggerter Zeilen-Capture alle 3 s
-        if (now - last_gps_cap_ms >= 3000UL) {
+        // GPS-Capture: extern 1s (M10 liefert 1Hz), intern 3s (SIM7080G 5s-Takt)
+        uint32_t cap_interval = gps_ext_ok() ? 1000UL : 3000UL;
+        if (now - last_gps_cap_ms >= cap_interval) {
             row_try_capture();
             last_gps_cap_ms = now;
         }
