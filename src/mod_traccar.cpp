@@ -14,6 +14,7 @@
 #include "mod_logs.h"    // syslog()
 #include "config.h"      // GPS_INTERVAL_MS
 #include "mod_config.h"  // cfg_traccar_host(), cfg_traccar_id()
+#include "mod_compass.h" // compass_ok(), compass_heading_deg()
 #include <Arduino.h>
 
 // ---- Extern: TinyGsm-Instanz aus mod_modem ----------------
@@ -49,11 +50,12 @@ static void send_to_traccar(const GpsSnapshot& fix) {
     http.setHttpResponseTimeout(15000);
 
     char path[256];
+    float bearing = compass_ok() ? compass_heading_deg() : fix.course_deg;
     snprintf(path, sizeof(path),
              "/?id=%s&lat=%.6f&lon=%.6f&speed=%.1f&bearing=%.1f&batt=%d",
              cfg_traccar_id(),
              (float)fix.lat, (float)fix.lon,
-             fix.speed_kmh, fix.course_deg,
+             fix.speed_kmh, bearing,
              batt);
 
     Serial.printf("[TRACCAR] → https://%s%s\n", cfg_traccar_host(), path);
@@ -66,9 +68,10 @@ static void send_to_traccar(const GpsSnapshot& fix) {
     }
 
     int status = http.responseStatusCode();
-    Serial.printf("[TRACCAR] HTTP %d  lat=%.6f lon=%.6f spd=%.1f° brg=%.1f° batt=%d%%\n",
+    Serial.printf("[TRACCAR] HTTP %d  lat=%.6f lon=%.6f spd=%.1f brg=%.1f%s batt=%d%%\n",
                   status, (float)fix.lat, (float)fix.lon,
-                  fix.speed_kmh, fix.course_deg, batt);
+                  fix.speed_kmh, bearing,
+                  compass_ok() ? "(compass)" : "(gps)", batt);
     http.stop();
 
     char tlog[96];

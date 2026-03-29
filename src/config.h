@@ -90,6 +90,7 @@
 #define TELEM_GPS_MAX_INTERVAL_MS  20000UL  // max. 20 s ohne neuen Punkt (Zeitlimit)
 #define TELEM_GPS_DIST_HI_M         200.0f  // Distanz-Schwelle (einzige)
 #define TELEM_YAW_TURN_DPS             7    // Drehrate-Schwelle für Kurven-Trigger (°/s)
+#define TELEM_COMPASS_TURN_DEG        10    // Kompass-Heading-Änderung für Kurven-Trigger (°)
 
 // ---- WiFi Guard ----
 #define BLE_RSSI_THRESHOLD    -72    // dBm (Legacy, nicht mehr genutzt)

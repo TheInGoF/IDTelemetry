@@ -13,6 +13,7 @@
 #include "mod_logs.h"
 #include "mod_elm327.h"
 #include "mod_gps_ext.h"
+#include "mod_compass.h"
 #include "config.h"
 #include "mod_config.h"
 #include <Arduino.h>
@@ -81,7 +82,8 @@ static uint16_t     s_row_pending   = 0;   // ausstehende (ungesendete) Zeilen
 static double   s_cap_lat = 0.0;
 static double   s_cap_lon = 0.0;
 static uint32_t s_cap_ms  = 0;
-static float    s_yaw_peak        = 0.0f; // max |yaw_dps| seit letztem Capture-Tick
+static float    s_yaw_peak        = 0.0f;  // max |yaw_dps| seit letztem Capture-Tick
+static float    s_cap_heading     = -1.0f; // Kompass-Heading beim letzten Capture (-1 = noch keiner)
 
 // ── Delta-Kompression: nur geänderte Werte senden ──────────
 static float s_prev_val[TELEM_FIELD_COUNT];  // letzte gesendete Werte
@@ -181,9 +183,22 @@ static void row_try_capture() {
     bool        do_capture = false;
     const char* reason     = "";
 
-    if      (dist    >= TELEM_GPS_DIST_HI_M)       { do_capture = true; reason = "Distanz"; }
-    else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) { do_capture = true; reason = "Kurve";   }
-    else if (elapsed >= TELEM_GPS_MAX_INTERVAL_MS && dist >= 15.0f) { do_capture = true; reason = "Zeit"; }
+    if (dist >= TELEM_GPS_DIST_HI_M) {
+        do_capture = true; reason = "Distanz";
+    } else if (compass_ok()) {
+        // Kompass aktiv: Heading-Delta statt Gyro-Drehrate
+        float heading = compass_heading_deg();
+        if (s_cap_heading >= 0.0f) {
+            float delta = fabsf(heading - s_cap_heading);
+            if (delta > 180.0f) delta = 360.0f - delta;
+            if (delta >= (float)TELEM_COMPASS_TURN_DEG) { do_capture = true; reason = "Kurve"; }
+        }
+    } else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) {
+        do_capture = true; reason = "Kurve";
+    }
+    if (!do_capture && elapsed >= TELEM_GPS_MAX_INTERVAL_MS && dist >= 15.0f) {
+        do_capture = true; reason = "Zeit";
+    }
 
     s_yaw_peak = 0.0f;  // immer zurücksetzen
 
@@ -234,8 +249,12 @@ static void row_try_capture() {
     row.valid[TELEM_GPS_LON]  = true;
     row.eq_mask &= ~((1UL << TELEM_GPS_LAT) | (1UL << TELEM_GPS_LON));
     row.na_mask &= ~((1UL << TELEM_GPS_LAT) | (1UL << TELEM_GPS_LON));
-    // Heading aus vorherigem → aktuellem Punkt berechnen
-    if (s_cap_ms > 0 && haversine_m(s_cap_lat, s_cap_lon, lat, lon) >= 5.0f) {
+    // Heading: Kompass direkt (wenn aktiv) oder aus GPS-Fixes berechnen
+    if (compass_ok()) {
+        row.values[TELEM_GPS_HEADING] = compass_heading_deg();
+        row.valid[TELEM_GPS_HEADING]  = true;
+        row.eq_mask &= ~(1UL << TELEM_GPS_HEADING);
+    } else if (s_cap_ms > 0 && haversine_m(s_cap_lat, s_cap_lon, lat, lon) >= 5.0f) {
         row.values[TELEM_GPS_HEADING] = bearing_deg(s_cap_lat, s_cap_lon, lat, lon);
         row.valid[TELEM_GPS_HEADING]  = true;
         row.eq_mask &= ~(1UL << TELEM_GPS_HEADING);
@@ -260,9 +279,10 @@ static void row_try_capture() {
     }
     xSemaphoreGive(s_mutex);
 
-    s_cap_lat = lat;
-    s_cap_lon = lon;
-    s_cap_ms  = now;
+    s_cap_lat     = lat;
+    s_cap_lon     = lon;
+    s_cap_ms      = now;
+    if (compass_ok()) s_cap_heading = compass_heading_deg();
     {
         char _msg[48];
         snprintf(_msg, sizeof(_msg), "GPS-Capture: %s (%.0fm, %lus)",
