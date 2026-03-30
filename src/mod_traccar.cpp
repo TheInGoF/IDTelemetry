@@ -22,13 +22,15 @@
 
 extern TinyGsm& modem_get();
 
+// ---- Persistente TLS-Verbindung (kein Re-Handshake) --------
+static TinyGsmClientSecure* s_client = nullptr;
+
 // ---- Letzte gesendete Position (Duplikat-Filter) ----------
 static double s_last_sent_lat = 0.0;
 static double s_last_sent_lon = 0.0;
 static bool   s_ever_sent     = false;
 
-// ~10 Meter Schwelle (≈0.0001°) — vermeidet GPS-Sprünge im Stand
-static constexpr double POS_THRESHOLD = 0.0001;
+static constexpr double POS_THRESHOLD = TRACCAR_MIN_MOVE_DEG;
 
 static bool position_changed(const GpsSnapshot& fix) {
     if (!s_ever_sent) return true;
@@ -45,8 +47,8 @@ static void send_to_traccar(const GpsSnapshot& fix) {
     int batt = pmu_batt_pct();
     if (batt < 0) batt = 0;
 
-    TinyGsmClientSecure client(modem_get());
-    HttpClient          http(client, cfg_traccar_host(), 443);
+    if (!s_client) s_client = new TinyGsmClientSecure(modem_get());
+    HttpClient http(*s_client, cfg_traccar_host(), 443);
     http.setHttpResponseTimeout(15000);
 
     char path[256];
@@ -63,7 +65,7 @@ static void send_to_traccar(const GpsSnapshot& fix) {
     int err = http.get(path);
     if (err != 0) {
         Serial.printf("[TRACCAR] HTTP-Fehler: %d\n", err);
-        http.stop();
+        s_client->stop();  // Verbindung zurücksetzen bei Fehler
         return;
     }
 
@@ -72,7 +74,7 @@ static void send_to_traccar(const GpsSnapshot& fix) {
                   status, (float)fix.lat, (float)fix.lon,
                   fix.speed_kmh, bearing,
                   compass_ok() ? "(compass)" : "(gps)", batt);
-    http.stop();
+    if (status != 200) s_client->stop();  // Bei Fehler neu verbinden
 
     char tlog[96];
     if (status == 200) {

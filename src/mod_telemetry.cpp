@@ -1,6 +1,7 @@
 // TINY_GSM_MODEM_SIM7080 wird ausschließlich über platformio.ini build_flags gesetzt.
 #include <TinyGsmClient.h>
 #include <ArduinoHttpClient.h>
+#include <miniz.h>
 
 #include "mod_telemetry.h"
 #include "mod_sleep.h"
@@ -26,6 +27,9 @@
 
 // TinyGsm-Instanz aus mod_modem (nicht im öffentlichen Header)
 extern TinyGsm& modem_get();
+
+// ---- Persistente TLS-Verbindung (kein Re-Handshake) --------
+static TinyGsmClientSecure* s_influx_client = nullptr;
 
 // ── ECU-Adressen (VW MEB) ────────────────────────────────────
 // 29-Bit extended IDs (VW MEB: Priority 0x17 + Adresse)
@@ -184,14 +188,14 @@ static void row_try_capture() {
     bool        do_capture = false;
     const char* reason     = "";
 
-    if (dist >= TELEM_GPS_DIST_HI_M) {
+    if (dist >= TELEM_GPS_DIST_M) {
         do_capture = true; reason = "Distanz";
     } else if (compass_ok()) {
         if (s_compass_peak_delta >= (float)TELEM_COMPASS_TURN_DEG) { do_capture = true; reason = "Kurve"; }
     } else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) {
         do_capture = true; reason = "Kurve";
     }
-    if (!do_capture && elapsed >= TELEM_GPS_MAX_INTERVAL_MS && dist >= 15.0f) {
+    if (!do_capture && elapsed >= TELEM_GPS_MAX_INTERVAL_MS && dist >= TELEM_GPS_MIN_MOVE_M) {
         do_capture = true; reason = "Zeit";
     }
 
@@ -847,27 +851,83 @@ void telem_send_influx() {
         return;
     }
 
-    // ── Schritt 3: HTTP POST ─────────────────────────────────────
-    TinyGsmClientSecure client(modem_get());
-    HttpClient          http(client, cfg_influx_host(), 443);
+    // ── Schritt 3: gzip-Kompression ──────────────────────────────
+    // gzip = 10-Byte Header + raw deflate + CRC32 + Originalsize (8 Byte Footer)
+    static const int ZBUF_SIZE = BODY_SIZE + 64;
+    static uint8_t* zbuf = nullptr;
+    if (!zbuf) {
+        zbuf = (uint8_t*)ps_calloc(1, ZBUF_SIZE);
+        if (!zbuf) zbuf = (uint8_t*)calloc(1, ZBUF_SIZE);
+    }
+
+    int         send_len   = pos;
+    const void* send_buf   = body;
+    bool        compressed = false;
+
+    if (zbuf) {
+        // gzip-Header schreiben
+        static const uint8_t GZ_HDR[10] = {
+            0x1f, 0x8b,  // Magic
+            0x08,        // Methode: deflate
+            0x00,        // Flags: keine
+            0,0,0,0,     // Modification time: unbekannt
+            0x00,        // Extra flags
+            0xff         // OS: unbekannt
+        };
+        memcpy(zbuf, GZ_HDR, 10);
+
+        // raw deflate in zbuf+10 (window_bits negativ → kein zlib-Header)
+        mz_stream zs = {};
+        if (mz_deflateInit2(&zs, MZ_DEFAULT_COMPRESSION, MZ_DEFLATED,
+                            -MZ_DEFAULT_WINDOW_BITS, 8, MZ_DEFAULT_STRATEGY) == MZ_OK) {
+            zs.next_in   = (const unsigned char*)body;
+            zs.avail_in  = (mz_uint32)pos;
+            zs.next_out  = zbuf + 10;
+            zs.avail_out = (mz_uint32)(ZBUF_SIZE - 18);  // 10 Header + 8 Footer reserviert
+            int zret = mz_deflate(&zs, MZ_FINISH);
+            mz_deflateEnd(&zs);
+
+            if (zret == MZ_STREAM_END) {
+                int deflate_len = (int)zs.total_out;
+                // gzip-Footer: CRC32 + Originalsize (little-endian)
+                uint32_t crc  = (uint32_t)mz_crc32(MZ_CRC32_INIT,
+                                    (const uint8_t*)body, (size_t)pos);
+                uint32_t orig = (uint32_t)pos;
+                uint8_t* ft   = zbuf + 10 + deflate_len;
+                ft[0] = crc & 0xff;  ft[1] = (crc>>8)&0xff;
+                ft[2] = (crc>>16)&0xff; ft[3] = (crc>>24)&0xff;
+                ft[4] = orig&0xff;   ft[5] = (orig>>8)&0xff;
+                ft[6] = (orig>>16)&0xff; ft[7] = (orig>>24)&0xff;
+                send_len   = 10 + deflate_len + 8;
+                send_buf   = zbuf;
+                compressed = true;
+            }
+        }
+    }
+
+    Serial.printf("[INFLUX] %d/%d Zeilen · %d Bytes → %d Bytes%s · ausstehend: %d\n",
+                  lines_ok, rows_to_send, pos, send_len,
+                  compressed ? " (gzip)" : " (plain)", s_row_pending);
+
+    // ── Schritt 4: HTTP POST ─────────────────────────────────────
+    if (!s_influx_client) s_influx_client = new TinyGsmClientSecure(modem_get());
+    HttpClient http(*s_influx_client, cfg_influx_host(), 443);
     http.setHttpResponseTimeout(15000);
 
     char path[192];
     snprintf(path, sizeof(path), "/api/v2/write?org=%s&bucket=%s&precision=s",
              cfg_influx_org(), cfg_influx_bucket());
 
-    Serial.printf("[INFLUX] %d/%d Zeilen · %d Bytes ausstehend: %d\n",
-                  lines_ok, rows_to_send, pos, s_row_pending);
     Serial.printf("[INFLUX] POST https://%s%s\n", cfg_influx_host(), path);
-    Serial.printf("[INFLUX] Body (%d bytes): %.80s%s\n", pos, body, pos > 80 ? "..." : "");
 
     http.beginRequest();
     http.post(path);
     { char auth[300]; snprintf(auth, sizeof(auth), "Token %s", cfg_influx_token()); http.sendHeader("Authorization", auth); }
     http.sendHeader("Content-Type", "text/plain; charset=utf-8");
-    http.sendHeader("Content-Length", pos);
+    if (compressed) http.sendHeader("Content-Encoding", "gzip");
+    http.sendHeader("Content-Length", send_len);
     http.beginBody();
-    http.print(body);
+    http.write((const uint8_t*)send_buf, send_len);
     http.endRequest();
 
     int status = http.responseStatusCode();
@@ -875,7 +935,7 @@ void telem_send_influx() {
     // ── Schritt 4: Buffer-Pointer bei Erfolg vorrücken ───────────
     if (status == 204) {
         s_influx_ok = true;
-        http.stop();
+        // Verbindung bewusst NICHT schließen — TLS-Session bleibt für nächstes Fenster
         if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
             s_row_send_tail = (uint16_t)((s_row_send_tail + rows_to_send) % TELEM_ROW_BUF_SIZE);
             s_row_pending  -= rows_to_send;
@@ -889,7 +949,7 @@ void telem_send_influx() {
         s_influx_ok = false;
         // Response-Body lesen (InfluxDB liefert JSON-Fehlermeldung)
         String rbody = http.responseBody();
-        http.stop();
+        s_influx_client->stop();  // Bei Fehler Verbindung zurücksetzen
         rbody.trim();
         char msg[48];
         snprintf(msg, sizeof(msg), "Fehler HTTP %d", status);

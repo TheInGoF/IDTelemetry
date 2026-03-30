@@ -59,6 +59,20 @@ void web_init() {
         r->redirect("/daten");
     });
 
+    // ── Captive-Portal-Fake: iOS/Android denkt der AP hat Internet ──
+    // iOS testet /hotspot-detect.html, Android /generate_204
+    // Exakte Antwort nötig damit iOS "Internet OK" markiert und verbunden bleibt
+    auto captive = [](AsyncWebServerRequest* r) {
+        r->send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
+    };
+    server.on("/hotspot-detect.html",          HTTP_GET, captive);  // iOS
+    server.on("/library/test/success.html",    HTTP_GET, captive);  // iOS alt
+    server.on("/success.txt",                  HTTP_GET, captive);  // iOS neu
+    server.on("/generate_204",                 HTTP_GET, [](AsyncWebServerRequest* r) {
+        r->send(204);  // Android/Chrome erwartet leere 204-Antwort
+    });
+    server.on("/ncsi.txt",                     HTTP_GET, captive);  // Windows
+
     server.on("/send", HTTP_POST, [](AsyncWebServerRequest* r) {},
         nullptr,
         [](AsyncWebServerRequest* r, uint8_t* data, size_t len, size_t, size_t) {
@@ -260,7 +274,7 @@ void web_ap_stop() {
     server.end();
     WiFi.softAPdisconnect(true);
     Serial.println("[WEB] AP + WebServer abgeschaltet (Timeout)");
-    syslog("WEB", "AP abgeschaltet — kein Client in 10min");
+    syslog("WEB", "AP abgeschaltet — Timeout");
 }
 
 void ble_web_routes_init() {

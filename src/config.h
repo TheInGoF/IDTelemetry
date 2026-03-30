@@ -48,8 +48,8 @@
 #define LOG_INFO_LEN        48           // Max Info-String pro Eintrag
 
 // --- Log-Defaults (via Web-UI / NVS zur Laufzeit änderbar) ---
-#define LOG_CAN_ENABLED_DEFAULT   true  // CAN/ELM SPIFFS-Log initial aus
-#define LOG_BLE_ENABLED_DEFAULT   true  // BLE SPIFFS-Log initial aus
+#define LOG_CAN_ENABLED_DEFAULT   false  // CAN/ELM SPIFFS-Log initial aus
+#define LOG_BLE_ENABLED_DEFAULT   false  // BLE SPIFFS-Log initial aus
 #define LOG_WIFI_ENABLED_DEFAULT  false  // WiFi Guard Scan-Log initial aus
 
 // --- LTE deaktivieren (GPS-Only Modus) ---
@@ -91,11 +91,20 @@
 // ---- Telemetrie Zeilen-Puffer ----
 #define TELEM_ROW_BUF_SIZE       500    // max. gespeicherte Zeilen im RAM-Ringpuffer (~83 min bei 6/min)
 #define INFLUX_ROWS_PER_SEND      50    // max. Zeilen pro LTE-Fenster (50 × ~220 B ≈ 11 kB Body)
-// GPS-basierte Capture-Schwellen (sequentiell: Distanz → Yaw → Zeit):
-#define TELEM_GPS_MAX_INTERVAL_MS  20000UL  // max. 20 s ohne neuen Punkt (Zeitlimit)
-#define TELEM_GPS_DIST_HI_M         200.0f  // Distanz-Schwelle (einzige)
-#define TELEM_YAW_TURN_DPS             7    // Drehrate-Schwelle für Kurven-Trigger (°/s)
-#define TELEM_COMPASS_TURN_DEG        10    // Kompass-Heading-Änderung für Kurven-Trigger (°)
+
+// ---- GPS Capture-Schwellen ----
+// Reihenfolge: Distanz → Kurve (Kompass/Yaw) → Zeit
+#define TELEM_GPS_DIST_M          300.0f  // Distanz-Trigger: neuer Punkt ab X Metern
+#define TELEM_GPS_MAX_INTERVAL_MS 30000UL // Zeit-Trigger: max. Sekunden ohne Punkt
+#define TELEM_GPS_MIN_MOVE_M       30.0f  // Mindestbewegung für Zeit-Trigger (filtert GPS-Drift im Stand)
+#define TELEM_COMPASS_TURN_DEG     10     // Kurven-Trigger (Kompass): Heading-Änderung in Grad
+#define TELEM_YAW_TURN_DPS          7     // Kurven-Trigger (Gyro/Yaw): Drehrate in °/s
+
+// ---- Traccar Duplikat-Filter ----
+#define TRACCAR_MIN_MOVE_DEG    0.0001   // ~10 m in Grad — verhindert Traccar-Ping bei GPS-Drift im Stand
+
+// ---- WiFi / Access Point ----
+#define AP_TIMEOUT_MIN         60    // AP abschalten nach X Minuten ohne Client (0 = nie abschalten)
 
 // ---- WiFi Guard ----
 #define BLE_RSSI_THRESHOLD    -72    // dBm (Legacy, nicht mehr genutzt)

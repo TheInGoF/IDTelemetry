@@ -725,7 +725,8 @@ static void modem_task(void* /*param*/) {
                         s_prev_fix_lat = (double)lat;
                         s_prev_fix_lon = (double)lon;
                         s_prev_fix_ok  = true;
-                        gps_update((double)lat, (double)lon, speed * 1.852f, course);
+                        if (speed < 0.0f || speed >= 200.0f) speed = 0.0f;  // Glitch-Filter
+                        gps_update((double)lat, (double)lon, speed, course);  // getGPS() liefert km/h (AT+CGNSINF)
 
                         // Unplausible Werte bereinigen (TinyGSM gibt -9999 oder 0 bei leeren Feldern)
                         if (vsat < 0) vsat = 0;

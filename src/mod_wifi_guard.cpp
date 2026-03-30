@@ -292,12 +292,12 @@ static void wifi_log_entry(int n) {
 
 static void ap_monitor_task(void*) {
     vTaskDelay(pdMS_TO_TICKS(3000)); // AP erst stabil
-    const uint32_t AP_TIMEOUT_MS = 10UL * 60UL * 1000UL; // 10 Minuten
+    const uint32_t AP_TIMEOUT_MS = (uint32_t)AP_TIMEOUT_MIN * 60UL * 1000UL;
     uint32_t ap_no_client_since = millis(); // Zeitpunkt seit dem kein Client verbunden
 
     while (!g_shutdown) {
-        // AP-Timeout: kein Client für 10min → abschalten
-        if (web_ap_active() && WiFi.softAPgetStationNum() == 0) {
+        // AP-Timeout: kein Client für X min → abschalten (0 = deaktiviert)
+        if (AP_TIMEOUT_MS > 0 && web_ap_active() && WiFi.softAPgetStationNum() == 0) {
             if (millis() - ap_no_client_since >= AP_TIMEOUT_MS) {
                 web_ap_stop();
             }
