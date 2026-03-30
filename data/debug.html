@@ -436,7 +436,7 @@ async function loadRtcTime() {
       // Automatisch Browser-Zeit setzen wenn RTC nicht läuft
       const n = new Date();
       fetch('/wifi/set-time', {method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({year:n.getFullYear(), month:n.getMonth()+1, day:n.getDate(), hour:n.getHours(), minute:n.getMinutes(), second:n.getSeconds()})
+        body: JSON.stringify({year:n.getUTCFullYear(), month:n.getUTCMonth()+1, day:n.getUTCDate(), hour:n.getUTCHours(), minute:n.getUTCMinutes(), second:n.getUTCSeconds()})
       }).then(() => setTimeout(loadRtcTime, 500));
     } else {
       okEl.innerHTML = '<span style="color:var(--muted)">' + t('dbg.rtc_not_found') + '</span>';
@@ -465,10 +465,10 @@ setInterval(() => {
 // ── Manuelle Zeiteinstellung ───────────────────────────
 function prefillBrowserTime() {
   const now = new Date();
-  document.getElementById('set-date').value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
-  document.getElementById('set-hour').value = now.getHours();
-  document.getElementById('set-min').value  = now.getMinutes();
-  document.getElementById('set-sec').value  = now.getSeconds();
+  document.getElementById('set-date').value = now.getUTCFullYear() + '-' + String(now.getUTCMonth()+1).padStart(2,'0') + '-' + String(now.getUTCDate()).padStart(2,'0');
+  document.getElementById('set-hour').value = now.getUTCHours();
+  document.getElementById('set-min').value  = now.getUTCMinutes();
+  document.getElementById('set-sec').value  = now.getUTCSeconds();
 }
 
 async function setRtcTime() {
@@ -477,9 +477,9 @@ async function setRtcTime() {
   const s = parseInt(document.getElementById('set-sec').value) || 0;
   const dateVal = document.getElementById('set-date').value;
   const dp = dateVal ? dateVal.split('-').map(Number) : [];
-  const yr = dp[0] || new Date().getFullYear();
-  const mo = dp[1] || new Date().getMonth()+1;
-  const dy = dp[2] || new Date().getDate();
+  const yr = dp[0] || new Date().getUTCFullYear();
+  const mo = dp[1] || new Date().getUTCMonth()+1;
+  const dy = dp[2] || new Date().getUTCDate();
 
   if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
     toast(t('dbg.rtc_invalid'), false);

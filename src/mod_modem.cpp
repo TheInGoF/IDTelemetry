@@ -9,6 +9,7 @@
 #include "config.h"
 #include "mod_config.h"
 #include "mod_gps_ext.h"
+#include "mod_rtc.h"
 #include "mod_logs.h"
 #include <Arduino.h>
 #include <SPIFFS.h>
@@ -1129,6 +1130,44 @@ void modem_start_task() {
     );
 }
 
+// NTP-Sync via SIM7080G — setzt RTC auf UTC.
+// Nur einmalig nach erster GPRS-Verbindung aufrufen.
+static void modem_ntp_sync() {
+    // AT+CNTP="pool.ntp.org",0  (timezone=0 → UTC)
+    s_modem.sendAT("+CNTP=\"pool.ntp.org\",0");
+    if (s_modem.waitResponse(3000L) != 1) {
+        syslog("MODEM", "NTP-Sync: CNTP Konfiguration fehlgeschlagen");
+        return;
+    }
+    // NTP-Sync starten
+    s_modem.sendAT("+CNTP");
+    // URC "+CNTP: 1" = Erfolg, Timeout 10s
+    if (s_modem.waitResponse(10000L, "+CNTP: 1") != 1) {
+        syslog("MODEM", "NTP-Sync: kein Erfolg-URC");
+        return;
+    }
+    // UTC-Zeit aus CCLK lesen (timezone=0 → direkt UTC)
+    s_modem.sendAT("+CCLK?");
+    String resp;
+    if (s_modem.waitResponse(3000L, resp) != 1) {
+        syslog("MODEM", "NTP-Sync: CCLK Lesefehler");
+        return;
+    }
+    // Format: +CCLK: "YY/MM/DD,HH:MM:SS+TZ"
+    int yy,mo,dd,hh,mi,ss;
+    const char* p = strstr(resp.c_str(), "+CCLK: \"");
+    if (!p) { syslog("MODEM", "NTP-Sync: CCLK Parse-Fehler"); return; }
+    if (sscanf(p + 8, "%d/%d/%d,%d:%d:%d", &yy, &mo, &dd, &hh, &mi, &ss) != 6) {
+        syslog("MODEM", "NTP-Sync: CCLK Format-Fehler");
+        return;
+    }
+    rtc_set_datetime(2000 + yy, mo, dd, hh, mi, ss);
+    char msg[64];
+    snprintf(msg, sizeof(msg), "NTP-Sync OK · UTC %04d-%02d-%02d %02d:%02d:%02d",
+             2000+yy, mo, dd, hh, mi, ss);
+    syslog("MODEM", msg);
+}
+
 bool modem_ensure_connected() {
     if (s_modem.isGprsConnected()) {
         return true;
@@ -1142,10 +1181,17 @@ bool modem_ensure_connected() {
         return false;
     }
     s_connected = true;
-    s_had_lte   = true;
+    static bool s_ntp_synced = false;
     char syslog_msg[64];
     snprintf(syslog_msg, sizeof(syslog_msg), "GPRS OK: %s", s_modem.getLocalIP().c_str());
     syslog("MODEM", syslog_msg);
+    if (!s_ntp_synced) {
+        s_ntp_synced = true;
+        s_had_lte    = true;
+        modem_ntp_sync();
+    } else {
+        s_had_lte = true;
+    }
     return true;
 }
 
