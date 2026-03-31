@@ -1,6 +1,7 @@
 #include "mod_compass.h"
 #include "mod_logs.h"
 #include "mod_config.h"
+#include "mod_gyro.h"
 #include <Wire.h>
 #include <math.h>
 #include <Arduino.h>
@@ -72,7 +73,7 @@ static bool qmc_write(uint8_t reg, uint8_t val) {
     return Wire.endTransmission() == 0;
 }
 
-static bool qmc_read_raw(int16_t& x, int16_t& y) {
+static bool qmc_read_raw(int16_t& x, int16_t& y, int16_t& z) {
     Wire.beginTransmission(QMC_ADDR);
     Wire.write(QMC_REG_DATA);
     if (Wire.endTransmission() != 0) return false;
@@ -80,7 +81,7 @@ static bool qmc_read_raw(int16_t& x, int16_t& y) {
     if (Wire.available() < 6) return false;
     x = (int16_t)(Wire.read() | (Wire.read() << 8));
     y = (int16_t)(Wire.read() | (Wire.read() << 8));
-    Wire.read(); Wire.read();
+    z = (int16_t)(Wire.read() | (Wire.read() << 8));
     return true;
 }
 
@@ -115,13 +116,37 @@ bool compass_ok() { return s_ok; }
 // ── Heading lesen (kalibriert) ────────────────────────────────
 float compass_heading_deg() {
     if (!s_ok) return 0.0f;
-    int16_t rx, ry;
-    if (!qmc_read_raw(rx, ry)) return 0.0f;
+    int16_t rx, ry, rz;
+    if (!qmc_read_raw(rx, ry, rz)) return 0.0f;
 
-    float x = (float)rx - s_off_x;
-    float y = (float)ry - s_off_y;
+    // Hard-Iron-Korrektur
+    float bx = (float)rx - s_off_x;
+    float by = (float)ry - s_off_y;
+    float bz = (float)rz;
 
-    float h = atan2f(y, x) * (180.0f / M_PI) + s_drv_off;
+    float h;
+    if (gyro_ok()) {
+        // ── Tilt-Kompensation mit MPU-6050 Accel ──────────────
+        float ax, ay, az;
+        gyro_get_accel_xyz(ax, ay, az);
+
+        // Roll + Pitch aus Beschleunigung
+        float roll  = atan2f(ay, az);
+        float pitch = atan2f(-ax, sqrtf(ay*ay + az*az));
+
+        // Tilt-kompensierte Magnetfeld-Komponenten
+        float xh = bx * cosf(pitch) + bz * sinf(pitch);
+        float yh = bx * sinf(roll) * sinf(pitch)
+                 + by * cosf(roll)
+                 - bz * sinf(roll) * cosf(pitch);
+
+        h = atan2f(-yh, xh) * (180.0f / M_PI);
+    } else {
+        // Kein Gyro → flache Montage angenommen
+        h = atan2f(by, bx) * (180.0f / M_PI);
+    }
+
+    h += s_drv_off;
     h = fmodf(h + 360.0f, 360.0f);
     return h;
 }
@@ -130,8 +155,8 @@ float compass_heading_deg() {
 void compass_auto_cal(float speed_kmh, float gps_course_deg, bool gps_ok) {
     if (!s_ok) return;
 
-    int16_t rx, ry;
-    if (!qmc_read_raw(rx, ry)) return;
+    int16_t rx, ry, rz;
+    if (!qmc_read_raw(rx, ry, rz)) return;
 
     // ─ Hard-Iron: Min/Max erweitern ──────────────────────────
     bool hi_changed = false;

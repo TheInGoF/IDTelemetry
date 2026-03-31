@@ -31,6 +31,7 @@ enum GyroState {
 void       gyro_init();
 GyroState  gyro_get_state();
 float      gyro_get_accel_g();      // letzter Gesamtbeschleunigungswert in G
+void       gyro_get_accel_xyz(float& ax, float& ay, float& az);  // Rohwerte in G (Tilt-Kompensation)
 float      gyro_get_yaw_dps();     // Drehrate Z-Achse (Yaw) in °/s
 bool       gyro_ok();               // true wenn MPU-6050 gefunden
 void       gyro_set_threshold(float g);  // Schwelle zur Laufzeit ändern (0.005–1.0)

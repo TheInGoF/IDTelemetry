@@ -22,6 +22,7 @@
 
 static GyroState  g_state         = GYRO_ERROR;
 static float      g_accel         = 0.0f;
+static float      g_ax = 0.0f, g_ay = 0.0f, g_az = 1.0f;  // Accel in G (Tilt-Kompensation)
 static bool       g_ok            = false;
 static uint32_t   g_shake_last_ms = 0;
 static int        g_shake_cnt     = 0;
@@ -124,7 +125,7 @@ static bool calibrate_i2c(float& out_mean, float& out_stddev) {
 
 // ── Gyro Task ────────────────────────────────────────────────
 static void gyro_task(void*) {
-    float fx=0, fy=0, fz=1.0f;  // Accel-Achsen für WebSocket
+    float fx=0, fy=0, fz=1.0f;
     const float GYRO_ALPHA = 0.3f; // Tiefpass für Drehrate
     while (!g_shutdown) {
         uint8_t buf[6];
@@ -138,6 +139,7 @@ static void gyro_task(void*) {
             fx = ax / 16384.0f;
             fy = ay / 16384.0f;
             fz = az / 16384.0f;
+            g_ax = fx; g_ay = fy; g_az = fz;
 
             float total = sqrtf(fx*fx + fy*fy + fz*fz);
             g_raw_total = total;  // für gyro_recalibrate() bereitstellen
@@ -340,6 +342,7 @@ void gyro_init() {
 // ── Getter / Setter ──────────────────────────────────────────
 GyroState gyro_get_state()     { return g_state; }
 float     gyro_get_accel_g()   { return g_accel; }
+void      gyro_get_accel_xyz(float& ax, float& ay, float& az) { ax = g_ax; ay = g_ay; az = g_az; }
 float     gyro_get_yaw_dps()  { return g_yaw_dps; }
 bool      gyro_ok()            { return g_ok; }
 uint32_t  gyro_last_shake_ms() { return g_last_shake_ms; }
