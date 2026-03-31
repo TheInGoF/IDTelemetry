@@ -188,8 +188,10 @@ void web_init() {
         doc["gps_loc"]     = gps_location_str();
         doc["gps_sat"]     = modem_gps_usat();
         doc["gps_vsat"]    = modem_gps_vsat();
-        doc["compass_ok"]      = compass_ok();
-        doc["compass_heading"] = compass_ok() ? compass_heading_deg() : 0.0f;
+        doc["compass_ok"]        = compass_ok();
+        doc["compass_heading"]   = compass_ok() ? compass_heading_deg() : 0.0f;
+        doc["compass_hi_ok"]     = compass_cal_has_hard_iron();
+        doc["compass_drv_off"]   = compass_cal_drive_offset();
         doc["modem_ok"]    = modem_is_connected();
         doc["modem_sig"]   = (int)modem_signal_quality();
         doc["modem_op"]    = modem_operator();
@@ -242,6 +244,12 @@ void web_init() {
         doc["stddev"]   = serialized(String(stddev, 4));
         String out; serializeJson(doc, out);
         r->send(200, "application/json", out);
+    });
+
+    // Kompass-Kalibrierung zurücksetzen
+    server.on("/api/compass/cal-reset", HTTP_POST, [](AsyncWebServerRequest* r) {
+        compass_cal_reset();
+        r->send(200, "application/json", "{\"ok\":true}");
     });
 
     // GPS — Standort als JSON

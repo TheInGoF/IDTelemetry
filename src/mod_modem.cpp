@@ -11,6 +11,7 @@
 #include "mod_gps_ext.h"
 #include "mod_rtc.h"
 #include "mod_logs.h"
+#include "mod_pmu.h"
 #include <Arduino.h>
 #include <SPIFFS.h>
 #include <math.h>
@@ -555,8 +556,11 @@ static void modem_task(void* /*param*/) {
     bool       traccar_first   = true;  // erster Traccar-Versand nach TRACCAR_SEND_INTERVAL_MS
 
     // Externes GPS: eigene Sende-Timer (kein GPS/LTE-Wechsel)
-    uint32_t   last_ext_traccar_ms = 0;
     uint32_t   last_ext_influx_ms  = 0;
+
+    // Fahrtende-Erkennung: VBUS weg → 1min warten → Capture + Flush + Schlafen
+    bool       vbus_was_in      = pmu_is_vbus_in();
+    uint32_t   vbus_lost_ms     = 0;
 
     int        scan_fail_count = 0;        // Fehlversuche STATE_WAIT_FOR_NETWORK
     bool       radio_initialized = false;  // CFUN-Sequenz bereits ausgeführt
@@ -827,18 +831,39 @@ static void modem_task(void* /*param*/) {
 
 
 
+                // ── Sleep-Anforderung vom Inaktivitäts-Timer ────────────────────────
+                if (g_sleep_requested) {
+                    g_sleep_requested = false;
+                    syslog("MODEM", "Sleep · letzter GPS-Punkt + Flush");
+                    modem_pre_sleep_flush();
+                    sleep_force();
+                }
+
+                // ── Fahrtende-Erkennung: VBUS weg → 1min → Capture + Flush + Sleep ──
+                {
+                    bool vbus_now = pmu_is_vbus_in();
+                    if (vbus_now) {
+                        vbus_was_in  = true;
+                        vbus_lost_ms = 0;
+                    } else if (vbus_was_in) {
+                        if (vbus_lost_ms == 0) {
+                            vbus_lost_ms = now;
+                            syslog("MODEM", "VBUS weg — Fahrtende in 60s");
+                        } else if (now - vbus_lost_ms >= 60000UL) {
+                            syslog("MODEM", "Fahrtende · letzter GPS-Punkt + Flush");
+                            telem_force_capture("Fahrtende");
+                            vTaskDelay(pdMS_TO_TICKS(500));
+                            if (modem_ensure_connected()) telem_send_influx();
+                            sleep_force();
+                        }
+                    }
+                }
+
                 #ifndef LTE_DISABLED
                 // ── Externes GPS: kein GPS/LTE-Wechsel ──────────────────────────
                 // SIM7080G bleibt in LTE-Modus, ext. GPS liefert Fixes über UART2.
                 // Bestehende GPS/LTE-Wechsel-Logik (unten) bleibt komplett unverändert.
                 if (gps_ext_ok()) {
-                    if (s_sim_ok && gps_valid() &&
-                        (now - last_ext_traccar_ms) >= EXT_GPS_TRACCAR_INTERVAL_MS) {
-                        last_ext_traccar_ms = now;
-                        if (modem_ensure_connected()) {
-                            traccar_on_gps_tick(gps_snapshot());
-                        }
-                    }
                     if (s_sim_ok &&
                         (now - last_ext_influx_ms) >= EXT_GPS_INFLUX_INTERVAL_MS) {
                         last_ext_influx_ms = now;
@@ -1200,6 +1225,12 @@ bool        modem_is_connected()    { return s_connected; }
 int8_t      modem_signal_quality()  { return s_sig_quality; }
 const char* modem_operator()        { return s_operator; }
 bool        modem_sim_ok()          { return s_sim_ok; }
+
+void modem_pre_sleep_flush() {
+    telem_force_capture("Schlafen · ig=0");
+    vTaskDelay(pdMS_TO_TICKS(300));
+    if (modem_ensure_connected()) telem_send_influx();
+}
 
 void modem_poweroff() {
     syslog("MODEM", "Power-Off fuer Deep Sleep...");

@@ -32,6 +32,7 @@ bool        modem_sim_ok();         // SIM vorhanden und bereit
 // GPS + GPRS deaktivieren, dann AT+CPOF — vor Deep Sleep aufrufen.
 // Nach Wake-up startet modem_init() das Modem automatisch neu (PWRKEY-Puls).
 void modem_poweroff();
+void modem_pre_sleep_flush();  // Letzter GPS-Punkt (ig=0) + InfluxDB leeren vor Sleep
 
 // GPS Satelliten (SIM7080G liefert keine Aufschlüsselung nach Konstellation)
 int  modem_gps_vsat();     // Gesamt sichtbar

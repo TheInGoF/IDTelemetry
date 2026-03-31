@@ -10,7 +10,7 @@
 //  Hardware: LILYGO T-SIM7080G-S3 (ESP32-S3-WROOM-1-N16R8) + SN65HVD230
 // ============================================================
 
-#define FW_VERSION  "1.0.4"
+#define FW_VERSION  "1.0.5"
 
 // --- WiFi Access Point ---
 #define WIFI_SSID           SECRET_AP_SSID
@@ -85,8 +85,7 @@
 #define TRACCAR_SEND_INTERVAL_MS (SEND_INTERVAL_S * 1000UL) // abgeleitet — nicht separat ändern
 
 // Externes GPS: kein GPS/LTE-Wechsel, eigene Sende-Intervalle
-#define EXT_GPS_TRACCAR_INTERVAL_MS  60000UL   // Traccar alle 60s
-#define EXT_GPS_INFLUX_INTERVAL_MS  120000UL   // InfluxDB-Puffer alle 120s leeren
+#define EXT_GPS_INFLUX_INTERVAL_MS   30000UL   // InfluxDB-Puffer alle 30s leeren (ext. GPS)
 
 // ---- Telemetrie Zeilen-Puffer ----
 #define TELEM_ROW_BUF_SIZE       500    // max. gespeicherte Zeilen im RAM-Ringpuffer (~83 min bei 6/min)
@@ -95,8 +94,8 @@
 // ---- GPS Capture-Schwellen ----
 // Reihenfolge: Distanz → Kurve (Kompass/Yaw) → Zeit
 #define TELEM_GPS_DIST_M          300.0f  // Distanz-Trigger: neuer Punkt ab X Metern
-#define TELEM_GPS_MAX_INTERVAL_MS 30000UL // Zeit-Trigger: max. Sekunden ohne Punkt
-#define TELEM_GPS_MIN_MOVE_M       30.0f  // Mindestbewegung für Zeit-Trigger (filtert GPS-Drift im Stand)
+#define TELEM_GPS_MAX_INTERVAL_MS 60000UL // Zeit-Trigger: 1 Minute ohne Punkt (nur wenn speed >= 3 km/h)
+#define TELEM_GPS_MIN_SPEED_KMH    3.0f   // Mindestgeschwindigkeit für Zeit-Trigger (filtert GPS-Drift im Stand)
 #define TELEM_COMPASS_TURN_DEG     10     // Kurven-Trigger (Kompass): Heading-Änderung in Grad
 #define TELEM_YAW_TURN_DPS          7     // Kurven-Trigger (Gyro/Yaw): Drehrate in °/s
 

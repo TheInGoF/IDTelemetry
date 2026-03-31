@@ -22,8 +22,9 @@
 // Globales Shutdown-Flag: wird von enter_deep_sleep() gesetzt.
 // Alle FreeRTOS-Tasks prüfen dies in ihrer Loop und beenden sich sauber,
 // damit shared Resources (I2C, CAN, WiFi) nicht im gesperrten Zustand bleiben.
-volatile bool g_shutdown = false;
-volatile bool g_nosleep  = false;
+volatile bool g_shutdown       = false;
+volatile bool g_nosleep        = false;
+volatile bool g_sleep_requested = false;
 
 static uint32_t g_boot_ms = 0;
 static uint32_t g_last_guard_seen_ms = 0;  // letzter Zeitpunkt mit Guard in Range
@@ -43,8 +44,21 @@ void sleep_init() {
         syslog("WAKE", "Deep Sleep beendet: PMU VBUS-Insert (GPIO6)");
         Serial.printf("[SLEEP] Aufgewacht: AXP2101 VBUS-Insert GPIO%d\n", (int)PMU_INT_PIN);
     } else {
-        syslog("BOOT", "Normaler Start (PowerOn / Reset)");
-        Serial.println("[SLEEP] Normaler Boot (kein Deep Sleep)");
+        esp_reset_reason_t reason = esp_reset_reason();
+        char msg[48];
+        switch (reason) {
+            case ESP_RST_PANIC:   snprintf(msg, sizeof(msg), "Neustart  Grund: PANIC/CRASH");   break;
+            case ESP_RST_INT_WDT: snprintf(msg, sizeof(msg), "Neustart  Grund: WDT_INTERRUPT"); break;
+            case ESP_RST_TASK_WDT:snprintf(msg, sizeof(msg), "Neustart  Grund: WDT_TASK");      break;
+            case ESP_RST_WDT:     snprintf(msg, sizeof(msg), "Neustart  Grund: WDT");           break;
+            case ESP_RST_BROWNOUT:snprintf(msg, sizeof(msg), "Neustart  Grund: BROWNOUT");      break;
+            case ESP_RST_SW:      snprintf(msg, sizeof(msg), "Neustart  Grund: Software");      break;
+            default:              snprintf(msg, sizeof(msg), "Normaler Start (PowerOn / Reset)"); break;
+        }
+        syslog("BOOT", msg);
+        if (reason == ESP_RST_PANIC || reason == ESP_RST_TASK_WDT || reason == ESP_RST_INT_WDT) {
+            Serial.printf("[BOOT] *** CRASH: %s — Serial-Monitor beim nächsten Fehler offen lassen! ***\n", msg);
+        }
     }
 }
 
@@ -130,7 +144,10 @@ void sleep_update() {
         snprintf(msg, sizeof(msg), "Deep Sleep: %lu min keine Gyro-Bewegung",
                  SLEEP_INACTIVITY_MS / 60000UL);
     }
-    enter_deep_sleep(msg);
+    // Modem-Task soll Flush durchführen, dann schläft er selbst ein.
+    // Direkt enter_deep_sleep() würde den Modem-Task blockieren (WDT).
+    syslog("SLEEP", msg);
+    g_sleep_requested = true;
 }
 
 // ── Force Sleep: sofort einschlafen (Serial-Befehl / Debug) ──

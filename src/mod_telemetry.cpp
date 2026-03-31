@@ -76,6 +76,11 @@ static SemaphoreHandle_t s_mutex = NULL;
 static char  s_operator_str[32] = "";
 static bool  s_influx_ok        = false;
 
+// ── ig-Hysterese: 1→0 erst nach 60s ohne ext. GPS ───────────
+static uint8_t   s_ig_value       = 0;       // aktuell gesendeter ig-Wert
+static uint32_t  s_ig_loss_ms     = 0;       // Zeitpunkt des letzten ext-GPS-Verlusts
+static const uint32_t IG_HYSTERESIS_MS = 60000UL;
+
 // ── Zeilen-Ringpuffer (GPS-getriggert, PSRAM) ───────────────
 static TelemetryRow* s_row_buf = nullptr;   // allokiert in telem_init()
 static uint16_t     s_row_head      = 0;   // nächste Schreibposition
@@ -195,7 +200,7 @@ static void row_try_capture() {
     } else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) {
         do_capture = true; reason = "Kurve";
     }
-    if (!do_capture && elapsed >= TELEM_GPS_MAX_INTERVAL_MS && dist >= TELEM_GPS_MIN_MOVE_M) {
+    if (!do_capture && elapsed >= TELEM_GPS_MAX_INTERVAL_MS && g_gps.speed_kmh >= TELEM_GPS_MIN_SPEED_KMH) {
         do_capture = true; reason = "Zeit";
     }
 
@@ -217,6 +222,14 @@ static void row_try_capture() {
     row.unix_s  = (uint32_t)unix_s;
     row.eq_mask = 0;
     row.na_mask = 0;
+    if (pmu_is_vbus_in()) {
+        s_ig_value   = 1;
+        s_ig_loss_ms = 0;
+    } else if (s_ig_value == 1) {
+        if (s_ig_loss_ms == 0) s_ig_loss_ms = millis();
+        if (millis() - s_ig_loss_ms >= IG_HYSTERESIS_MS) s_ig_value = 0;
+    }
+    row.ig = s_ig_value;
 
     for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
         float val = s_cache[f].value;
@@ -290,6 +303,16 @@ static void row_try_capture() {
                  reason, dist, (unsigned long)(elapsed / 1000UL));
         syslog("TELEM", _msg);
     }
+}
+
+// ── Erzwungener Capture (Fahrtende / extern) ─────────────────
+void telem_force_capture(const char* reason) {
+    if (!gps_valid()) return;
+    // Zeit- und Distanz-Schwellen überspringen — direkt in row_try_capture einsteigen
+    // indem wir s_cap_ms auf 0 setzen (gilt als "erster Fix")
+    s_cap_ms = 0;
+    row_try_capture();  // wird sofort feuern weil dist = 9999 (s_cap_ms == 0)
+    syslog("TELEM", reason);
 }
 
 // ── Wert aktualisieren ──────────────────────────────────────
@@ -521,12 +544,14 @@ static void telem_task(void* /*param*/) {
         if (compass_ok()) {
             float h = compass_heading_deg();
             if (s_compass_ref < 0.0f) {
-                s_compass_ref = h;  // erste Initialisierung
+                s_compass_ref = h;
             } else {
                 float d = fabsf(h - s_compass_ref);
                 if (d > 180.0f) d = 360.0f - d;
                 if (d > s_compass_peak_delta) s_compass_peak_delta = d;
             }
+            // Automatische Kalibrierung: Hard-Iron + Fahrtrichtungs-Offset
+            compass_auto_cal(g_gps.speed_kmh, g_gps.course_deg, gps_valid());
         }
 
         // GPS-Capture: extern 1s (M10 liefert 1Hz), intern 3s (SIM7080G 5s-Takt)
@@ -790,7 +815,7 @@ void telem_send_influx() {
         if (pos + 64 >= (int)BODY_SIZE) break;  // kein Platz mehr
 
         pos += snprintf(body + pos, BODY_SIZE - pos,
-                        "v,d=%s ", cfg_influx_device());
+                        "v,d=%s,ig=%u ", cfg_influx_device(), (unsigned)row.ig);
 
         for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
             if (!s_fields[f].key) continue;

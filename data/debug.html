@@ -255,6 +255,12 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
         <div id="compass-status" style="font-size:10px;color:var(--muted)">Warte auf Sensor...</div>
       </div>
     </div>
+    <!-- Kalibrierung -->
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <div class="lbl" style="margin-bottom:6px">Automatische Kalibrierung</div>
+      <div id="compass-cal-info" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
+      <button onclick="compassCalReset()" style="padding:5px 10px;font-size:11px;opacity:0.7">Kalibrierung zurücksetzen</button>
+    </div>
   </div>
   </div>
 
@@ -966,8 +972,23 @@ function compassUpdate(d) {
   const stEl  = document.getElementById('compass-status');
   if (degEl) degEl.textContent = Math.round(heading);
   if (carEl) carEl.textContent = compassCardinal(heading);
-  if (stEl)  stEl.textContent  = 'QMC5883L · Echtzeit · flach montiert';
+
+  // Kalibrierungs-Status
+  const hiOk      = d.compass_hi_ok     || false;
+  const drvOff    = d.compass_drv_off   != null ? d.compass_drv_off.toFixed(1) : '0.0';
+  const infoEl    = document.getElementById('compass-cal-info');
+  if (stEl) stEl.textContent = 'QMC5883L · Echtzeit · automatische Kalibrierung';
+  if (infoEl) {
+    const hiTxt  = hiOk ? '✓ Hard-Iron OK' : '⏳ Hard-Iron läuft (mehr Kurven fahren)';
+    const drvTxt = `Fahrtrichtungs-Offset: ${drvOff}°`;
+    infoEl.textContent = `${hiTxt}  ·  ${drvTxt}`;
+  }
   compassDraw(heading);
+}
+
+async function compassCalReset() {
+  if (!confirm('Kalibrierung wirklich zurücksetzen?')) return;
+  await fetch('/api/compass/cal-reset', {method:'POST'});
 }
 
 // ── InfluxDB Preview ──────────────────────────────────

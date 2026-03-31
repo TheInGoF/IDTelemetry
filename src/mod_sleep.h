@@ -28,3 +28,6 @@ extern volatile bool g_shutdown;
 
 // Sleep-Sperre: true = Deep Sleep fuer diese Session deaktiviert (Serial: "nosleep")
 extern volatile bool g_nosleep;
+
+// Sleep-Anforderung: von sleep_update() gesetzt, Modem-Task führt Flush durch + sleep_force()
+extern volatile bool g_sleep_requested;
