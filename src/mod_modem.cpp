@@ -1,7 +1,9 @@
 // TINY_GSM_MODEM_SIM7080 wird ausschließlich über platformio.ini build_flags gesetzt.
 #include <TinyGsmClient.h>
+#include <Preferences.h>
 
 #include "mod_modem.h"
+#include "secrets.h"
 #include "mod_sleep.h"
 #include "mod_traccar.h"
 #include "mod_telemetry.h"
@@ -69,6 +71,12 @@ static void modem_pwrkey_pulse() {
     digitalWrite(MODEM_PWRKEY_PIN, HIGH);
     delay(1000);
     digitalWrite(MODEM_PWRKEY_PIN, LOW);
+}
+
+// Hardware Power-Off via PMU — kein AT erforderlich, kein UART nötig
+static void modem_pmu_poweroff() {
+    pmu_set_modem_power(false);  // DC3 aus → Modem stromlos
+    delay(200);
 }
 
 
@@ -421,42 +429,25 @@ static bool ensure_sim_ready() {
     return false;
 }
 
-// Radio konfigurieren: CFUN=0 → CNMP=38 / CMNB=3 / APN → CFUN=1.
-// Offizieller LilyGo-Zyklus — immer vollstaendig ausfuehren.
-// Gibt true zurueck wenn alles OK.
+// Radio konfigurieren — schlanke Variante wie LilyGo-Beispiel.
+// Kein CFUN=0/1 Zyklus (nur nötig für GPS↔LTE Toggle).
+// Setzt LTE-M, APN und Registrierungs-URCs.
 static bool configure_radio() {
-    syslog("MODEM", "Radio konfigurieren (CFUN=0/1 Zyklus)...");
+    syslog("MODEM", "Radio konfigurieren...");
 
     // UART-Buffer leeren — nach PIN-Eingabe kommen URCs die den Parser stoeren
     while (s_serial.available()) s_serial.read();
 
-    // CFUN=0 braucht auf SIM7080G nach PIN-Eingabe bis zu 35s — 45s Timeout
-    if (!at_ok("+CFUN=0", 45000L)) {
-        // Nochmal versuchen — manchmal kommt der Befehl durch aber die Antwort ist spaet
-        while (s_serial.available()) s_serial.read();
-        at_ok("+CFUN=0", 45000L);
-    }
-    vTaskDelay(pdMS_TO_TICKS(500));
-
-    at_ok("+CNMP=2");                    // Auto (wie LilyGo-Beispiel: kein LTE-only Zwang)
-    at_ok("+CMNB=3");                    // CAT-M + NB-IoT
+    at_ok("+CNMP=38");                   // LTE only
+    at_ok("+CMNB=1");                    // CAT-M only (kein NB-IoT)
     { char cmd[80]; snprintf(cmd, sizeof(cmd), "+CGDCONT=1,\"IP\",\"%s\"", cfg_apn()); at_ok(cmd); }
     { char cmd[80]; snprintf(cmd, sizeof(cmd), "+CNCFG=0,1,\"%s\"",       cfg_apn()); at_ok(cmd); }
 
-    at_ok("+CFUN=1", 30000L);           // RF an
-    vTaskDelay(pdMS_TO_TICKS(3000));    // SIM braucht Zeit um zurueckzukommen
+    at_ok("+CEREG=2");                   // Netz-Registrierung mit Location-Info
+    at_ok("+CPSMS=0");                   // Power Save Mode aus
+    at_ok("+CEDRXS=0");                  // eDRX aus
 
-    // PIN ggf. erneut eingeben (CFUN-Zyklus setzt SIM-State zurueck)
-    if (!ensure_sim_ready()) {
-        syslog("MODEM", "SIM nach CFUN=1 nicht READY");
-        return false;
-    }
-
-    at_ok("+CEREG=2");
-    at_ok("+CPSMS=0");
-    at_ok("+CEDRXS=0");
-
-    syslog("MODEM", "Radio konfiguriert: LTE CAT-M+NB-IoT");
+    syslog("MODEM", "Radio konfiguriert: LTE CAT-M");
     return true;
 }
 
@@ -481,10 +472,10 @@ static bool try_register(char* operator_out, size_t op_size) {
         if (reg_s == REG_OK_HOME || reg_s == REG_OK_ROAMING) break;
         vTaskDelay(pdMS_TO_TICKS(1000));
         elapsed_s++;
-        // Alle 30s kurzer Status-Log
-        if (millis() - log_ms >= 30000UL) {
+        // Alle 15s Status-Log mit RegStatus-Wert
+        if (millis() - log_ms >= 15000UL) {
             snprintf(syslog_msg, sizeof(syslog_msg),
-                     "Netzsuche laeuft... (%lus)", (unsigned long)elapsed_s);
+                     "Netzsuche laeuft... (%lus) RegStatus=%d", (unsigned long)elapsed_s, (int)reg_s);
             syslog("MODEM", syslog_msg);
             log_ms = millis();
         }
@@ -623,7 +614,6 @@ static void modem_task(void* /*param*/) {
                         syslog("MODEM", "GPS-Aktivierung fehlgeschlagen");
                         state = STATE_RUNNING;
                     }
-
                 }
 
                 continue; // Nächste Iteration, um Zustand neu zu prüfen
@@ -636,7 +626,7 @@ static void modem_task(void* /*param*/) {
 
             // =================================================================
 
-                // 1. SIM pruefen (PIN ggf. erneut eingeben nach CFUN-Reset)
+                // 1. SIM pruefen — stellt sicher dass Modem nach modem_init() stabil ist
                 if (!ensure_sim_ready()) {
                     syslog("MODEM", "SIM nicht READY · warte 10s");
                     vTaskDelay(pdMS_TO_TICKS(10000));
@@ -666,7 +656,16 @@ static void modem_task(void* /*param*/) {
                         snprintf(syslog_msg, sizeof(syslog_msg), "Netz verbunden · %s · %d/5 Balken · CSQ %d", s_operator, bars, s_sig_quality);
                         syslog("MODEM", syslog_msg);
 
-                        if (gps_enable_with_config()) {
+                        if (GPS_EXT_ENABLED) {
+                            // Externes GPS aktiv → internes SIM7080G-GPS nicht starten
+                            syslog("GPS", "Intern deaktiviert — ext. GPS übernimmt");
+                            s_gps_enabled = false;
+                            state = STATE_RUNNING;
+                            last_stat_ms = now;
+                            stat_interval = 5000;
+                            last_traccar_ms = now;
+                            traccar_first = true;
+                        } else if (gps_enable_with_config()) {
                             s_gps_enabled = true;
                             syslog("GPS", "Aktiviert · suche Fix");
                             first_fix = true; had_fix = false; no_fix_log_ms = now;
@@ -707,12 +706,12 @@ static void modem_task(void* /*param*/) {
 
                 if ((now - last_stat_ms) >= stat_interval) {
 
-                    // GPS-Daten abfragen — vollständig wie LilyGo AllFunction/modem.cpp
+                    // GPS-Daten abfragen — nur wenn internes GPS aktiv
                     float lat = 0, lon = 0, speed = 0, alt = 0, accuracy = 0;
                     int   vsat = 0, usat = 0;
                     int   year = 0, month = 0, day = 0, hour = 0, gmin = 0, sec = 0;
 
-                    if (s_modem.getGPS(&lat, &lon, &speed, &alt, &vsat, &usat, &accuracy,
+                    if (s_gps_enabled && s_modem.getGPS(&lat, &lon, &speed, &alt, &vsat, &usat, &accuracy,
                                        &year, &month, &day, &hour, &gmin, &sec)) {
 
                         // Kurs aus letztem → aktuellem Fix berechnen
@@ -767,20 +766,18 @@ static void modem_task(void* /*param*/) {
                         }
                         // Im Normalbetrieb kein Log-Spam — g_gps wird still aktualisiert
 
-                    } else {
+                    } else if (s_gps_enabled) {
 
                         gps_invalidate();
                         s_gps_has_fix = false;
 
                         if (had_fix) {
-                            // Fix verloren — sofort melden
                             snprintf(syslog_msg, sizeof(syslog_msg),
                                      "Fix verloren · Sat sichtbar: %d", vsat);
                             syslog("GPS", syslog_msg);
                             had_fix      = false;
                             no_fix_log_ms = now;
                         } else if (now - no_fix_log_ms >= 30000UL) {
-                            // Alle 30s Satelliten-Status loggen
                             snprintf(syslog_msg, sizeof(syslog_msg),
                                      "Suche Fix · Sat sichtbar: %d · verwendet: %d", vsat, usat);
                             syslog("GPS", syslog_msg);
@@ -833,7 +830,7 @@ static void modem_task(void* /*param*/) {
 
                 // ── Sleep-Anforderung vom Inaktivitäts-Timer ────────────────────────
                 if (g_sleep_requested) {
-                    g_sleep_requested = false;
+                    // g_sleep_requested NICHT zurücksetzen — verhindert Log-Spam in sleep_update()
                     syslog("MODEM", "Sleep · letzter GPS-Punkt + Flush");
                     modem_pre_sleep_flush();
                     sleep_force();
@@ -869,6 +866,8 @@ static void modem_task(void* /*param*/) {
                         last_ext_influx_ms = now;
                         if (modem_ensure_connected()) {
                             telem_send_influx();
+                            // Keep-Alive: leichte CSQ-Abfrage damit PDP-Session aktiv bleibt
+                            s_sig_quality = (int8_t)s_modem.getSignalQuality();
                         }
                     }
                 }
@@ -950,8 +949,10 @@ void modem_init() {
     // 1. Pins vorbereiten
     pinMode(MODEM_PWRKEY_PIN, OUTPUT);
     digitalWrite(MODEM_PWRKEY_PIN, LOW);
+#if MODEM_FLIGHT_PIN != -1
     pinMode(MODEM_FLIGHT_PIN, OUTPUT);
     digitalWrite(MODEM_FLIGHT_PIN, LOW);   // Flight-Mode aus
+#endif
     pinMode(MODEM_STATUS_PIN, INPUT);
 
     // 2. UART starten
@@ -1142,8 +1143,12 @@ void modem_init() {
 
 void modem_start_task() {
     char syslog_msg[64];
-    snprintf(syslog_msg, sizeof(syslog_msg), "Task gestartet, GPS alle %ds", GPS_INTERVAL_MS / 1000);
-    syslog("MODEM", syslog_msg);
+    if (GPS_EXT_ENABLED)
+        syslog("MODEM", "Task gestartet, internes GPS deaktiviert (ext. GPS aktiv)");
+    else {
+        snprintf(syslog_msg, sizeof(syslog_msg), "Task gestartet, GPS alle %ds", GPS_INTERVAL_MS / 1000);
+        syslog("MODEM", syslog_msg);
+    }
 
     xTaskCreatePinnedToCore(
         modem_task,
@@ -1194,6 +1199,7 @@ static void modem_ntp_sync() {
     syslog("MODEM", msg);
 }
 
+
 bool modem_ensure_connected() {
     if (s_modem.isGprsConnected()) {
         return true;
@@ -1235,9 +1241,7 @@ void modem_pre_sleep_flush() {
 void modem_poweroff() {
     syslog("MODEM", "Power-Off fuer Deep Sleep...");
 
-    // Task wurde bereits von sleep_update() per xTaskGetHandle() gelöscht,
-    // oder ist noch aktiv wenn modem_poweroff() direkt aufgerufen wird.
-    // xTaskGetHandle() gibt NULL zurück wenn der Task nicht mehr existiert.
+    // Task beenden falls noch aktiv
     TaskHandle_t h = xTaskGetHandle("MODEM");
     if (h) {
         vTaskDelete(h);
@@ -1245,29 +1249,9 @@ void modem_poweroff() {
     }
     s_modem_task_handle = nullptr;
 
-
-    // 2. GPS deaktivieren
-    s_modem.disableGPS();
-
-    // 3. GPRS trennen falls verbunden
-    if (s_modem.isGprsConnected()) {
-        s_modem.gprsDisconnect();
-    }
-
-    // 4. Modem software-seitig ausschalten (AT+CPOF)
-    s_modem.sendAT("+CPOF");
-    s_modem.waitResponse(3000L);
-    delay(1500);  // CPOF braucht Zeit zum Abschalten
-
-    // 5. PWRKEY-Puls nur wenn Modem noch an (STATUS=HIGH → aktiv)
-    if (digitalRead(MODEM_STATUS_PIN) == HIGH) {
-        Serial.println("[MODEM] STATUS noch HIGH → PWRKEY-Puls");
-        modem_pwrkey_pulse();
-        delay(1500);
-    }
-
-    // 6. UART deaktivieren — kein Strom mehr auf TX/RX-Leitungen
-    s_serial.end();
+    // Hardware Power-Off via PMU: DC3 (Modem VDD) abschalten
+    // Kein s_serial.end() — würde auf TX-Flush warten und hängen
+    modem_pmu_poweroff();
 
     syslog("MODEM", "Power-Off OK");
 }

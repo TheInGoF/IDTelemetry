@@ -11,7 +11,10 @@
 // ============================================================
 //  MODUL-SCHALTER  ← hier ein-/ausschalten
 // ============================================================
-#define GPS_EXT_ENABLED     true   // BLITZ Mini M10 GPS  (I2C QWIIC 0x42)
+#define GPS_EXT_ENABLED     true   // BLITZ Mini M10 GPS  (UART, QWIIC-Connector GPIO43/44)
+#define GPS_EXT_RX_PIN       1     // GPIO1  ← GPS TX
+#define GPS_EXT_TX_PIN       2     // GPIO2  → GPS RX
+#define GPS_EXT_BAUD        115200
                                    // false = nur internes SIM7080G-GPS + LTE
 
 // ELM327 Mock-Modus: Antwortet auf alle OBD-Anfragen mit Dummy-Werten
@@ -100,6 +103,6 @@
 #define MODEM_PWRKEY_PIN    41
 #define MODEM_DTR_PIN       42
 #define MODEM_STATUS_PIN    40
-#define MODEM_FLIGHT_PIN    44
+#define MODEM_FLIGHT_PIN    44   // SIM7080G FLIGHT/RFKILL — LOW = RF aktiv (intern verdrahtet)
 #define MODEM_BAUD          115200
 #define GPS_INTERVAL_MS     5000

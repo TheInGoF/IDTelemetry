@@ -122,6 +122,7 @@ bool can_init(uint32_t kbps) {
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
     g.rx_queue_len = 64;
     g.tx_queue_len = 16;
+    g.intr_flags   = ESP_INTR_FLAG_LEVEL3;  // L1-Slots auf S3 oft erschöpft → L3
 
     twai_timing_config_t t;
     switch (kbps) {
