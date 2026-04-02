@@ -31,3 +31,6 @@ extern volatile bool g_nosleep;
 
 // Sleep-Anforderung: von sleep_update() gesetzt, Modem-Task führt Flush durch + sleep_force()
 extern volatile bool g_sleep_requested;
+
+// Fahrtende: VBUS weg, Countdown läuft. Telem-Task stoppt GPS-Captures.
+extern volatile bool g_trip_ending;

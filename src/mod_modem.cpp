@@ -813,9 +813,15 @@ static void modem_task(void* /*param*/) {
                     {
                         GpsSnapshot snap = gps_snapshot();
                         if (snap.valid && now - gps_log_ms >= 30000UL) {
-                            snprintf(syslog_msg, sizeof(syslog_msg),
-                                     "Pos: %.6f %.6f · Sat: %d/%d · HDOP: %.1f",
-                                     snap.lat, snap.lon, usat, vsat, accuracy);
+                            if (GPS_EXT_ENABLED) {
+                                snprintf(syslog_msg, sizeof(syslog_msg),
+                                         "Pos: %.6f %.6f · Sat: %d/%d (ext)",
+                                         snap.lat, snap.lon, gps_ext_sat_count(), gps_ext_sat_visible());
+                            } else {
+                                snprintf(syslog_msg, sizeof(syslog_msg),
+                                         "Pos: %.6f %.6f · Sat: %d/%d · HDOP: %.1f",
+                                         snap.lat, snap.lon, usat, vsat, accuracy);
+                            }
                             syslog("GPS", syslog_msg);
                             gps_log_ms = now;
                         }
@@ -842,15 +848,19 @@ static void modem_task(void* /*param*/) {
                     if (vbus_now) {
                         vbus_was_in  = true;
                         vbus_lost_ms = 0;
+                        g_trip_ending = false;
                     } else if (vbus_was_in) {
                         if (vbus_lost_ms == 0) {
                             vbus_lost_ms = now;
-                            syslog("MODEM", "VBUS weg — Fahrtende in 60s");
-                        } else if (now - vbus_lost_ms >= 60000UL) {
+                            g_trip_ending = true;
+                            syslog("MODEM", "VBUS weg — Fahrtende in 30s");
+                        } else if (now - vbus_lost_ms >= 30000UL) {
                             syslog("MODEM", "Fahrtende · letzter GPS-Punkt + Flush");
                             telem_force_capture("Fahrtende");
                             vTaskDelay(pdMS_TO_TICKS(500));
-                            if (modem_ensure_connected()) telem_send_influx();
+                            // Nur senden wenn GPRS bereits steht — kein neuer Connect-Versuch,
+                            // da nach VBUS-Verlust jederzeit der Strom komplett wegfallen kann.
+                            if (s_modem.isGprsConnected()) telem_send_influx();
                             sleep_force();
                         }
                     }
@@ -865,6 +875,11 @@ static void modem_task(void* /*param*/) {
                         (now - last_ext_influx_ms) >= EXT_GPS_INFLUX_INTERVAL_MS) {
                         last_ext_influx_ms = now;
                         if (modem_ensure_connected()) {
+                            // NTP einmalig nach erstem GPRS-Connect (nicht in ensure_connected,
+                            // da 10s Timeout die PDP-Session destabilisiert)
+                            static bool s_ntp_synced = false;
+                            if (!s_ntp_synced) s_ntp_synced = modem_ntp_sync();
+
                             telem_send_influx();
                             // Keep-Alive: leichte CSQ-Abfrage damit PDP-Session aktiv bleibt
                             s_sig_quality = (int8_t)s_modem.getSignalQuality();
@@ -1163,40 +1178,41 @@ void modem_start_task() {
 
 // NTP-Sync via SIM7080G — setzt RTC auf UTC.
 // Nur einmalig nach erster GPRS-Verbindung aufrufen.
-static void modem_ntp_sync() {
+static bool modem_ntp_sync() {
     // AT+CNTP="pool.ntp.org",0  (timezone=0 → UTC)
     s_modem.sendAT("+CNTP=\"pool.ntp.org\",0");
     if (s_modem.waitResponse(3000L) != 1) {
         syslog("MODEM", "NTP-Sync: CNTP Konfiguration fehlgeschlagen");
-        return;
+        return false;
     }
     // NTP-Sync starten
     s_modem.sendAT("+CNTP");
     // URC "+CNTP: 1" = Erfolg, Timeout 10s
     if (s_modem.waitResponse(10000L, "+CNTP: 1") != 1) {
         syslog("MODEM", "NTP-Sync: kein Erfolg-URC");
-        return;
+        return false;
     }
     // UTC-Zeit aus CCLK lesen (timezone=0 → direkt UTC)
     s_modem.sendAT("+CCLK?");
     String resp;
     if (s_modem.waitResponse(3000L, resp) != 1) {
         syslog("MODEM", "NTP-Sync: CCLK Lesefehler");
-        return;
+        return false;
     }
     // Format: +CCLK: "YY/MM/DD,HH:MM:SS+TZ"
     int yy,mo,dd,hh,mi,ss;
     const char* p = strstr(resp.c_str(), "+CCLK: \"");
-    if (!p) { syslog("MODEM", "NTP-Sync: CCLK Parse-Fehler"); return; }
+    if (!p) { syslog("MODEM", "NTP-Sync: CCLK Parse-Fehler"); return false; }
     if (sscanf(p + 8, "%d/%d/%d,%d:%d:%d", &yy, &mo, &dd, &hh, &mi, &ss) != 6) {
         syslog("MODEM", "NTP-Sync: CCLK Format-Fehler");
-        return;
+        return false;
     }
     rtc_set_datetime(2000 + yy, mo, dd, hh, mi, ss);
     char msg[64];
     snprintf(msg, sizeof(msg), "NTP-Sync OK · UTC %04d-%02d-%02d %02d:%02d:%02d",
              2000+yy, mo, dd, hh, mi, ss);
     syslog("MODEM", msg);
+    return true;
 }
 
 
@@ -1213,17 +1229,10 @@ bool modem_ensure_connected() {
         return false;
     }
     s_connected = true;
-    static bool s_ntp_synced = false;
     char syslog_msg[64];
     snprintf(syslog_msg, sizeof(syslog_msg), "GPRS OK: %s", s_modem.getLocalIP().c_str());
     syslog("MODEM", syslog_msg);
-    if (!s_ntp_synced) {
-        s_ntp_synced = true;
-        s_had_lte    = true;
-        modem_ntp_sync();
-    } else {
-        s_had_lte = true;
-    }
+    s_had_lte = true;
     return true;
 }
 

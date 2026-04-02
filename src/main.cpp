@@ -191,12 +191,13 @@ void setup() {
     sleep_init();        // Wake-Grund aus Deep Sleep ermitteln + loggen
     ble_web_routes_init();
 
-    // 2. I2C Sensoren (RTC zuerst — startet Wire.begin)
-    rtc_init();
-    gyro_init();     // Wire bereits aktiv, kein zweites begin()
-    compass_init();  // QMC5883L — gleicher Wire-Bus, nur wenn mod_compass=1
-    sleep_log_wake();  // Gyro-Wake Details loggen (braucht gyro_init)
-    pmu_init();              // Wire1 (SDA=GPIO15, SCL=GPIO7) für AXP2101 PMU
+    // 2. I2C Sensoren
+    rtc_init();              // Wire.begin(45,21) — startet externen I2C-Bus
+    gyro_init();             // Wire: MPU-6050
+    sleep_log_wake();        // Gyro-Wake Details loggen (braucht gyro_init)
+    pmu_init();              // Wire1.begin(15,7) — startet QWIIC-Bus (AXP2101 + Kompass + GPS)
+    compass_init();          // Wire1: QMC5883L (auf BLITZ Modul, QWIIC)
+
     { int b = pmu_batt_pct();
       char msg[40];
       if (b >= 0) snprintf(msg, sizeof(msg), "Akku: %d%%", b);
@@ -208,7 +209,6 @@ void setup() {
         pmu_set_gps_power(false);  // BLDO2 (GPS-Antenne) abschalten
         syslog("GPS", "Modul deaktiviert (cfg mod_gps=0) — BLDO2 aus");
     }
-    gps_ext_init();      // UART2 (RX=GPIO1, TX=GPIO2) Externes GPS — nur wenn mod_gps_ext=1
     modem_init();        // UART1 (TX=GPIO5, RX=GPIO4) SIM7080G — übernimmt Modem exklusiv
     modem_start_task();  // FreeRTOS: GPS alle 5s + Traccar alle 60s
 
@@ -243,6 +243,7 @@ void setup() {
     wifi_guard_init();
 
     // 6. CAN
+    gps_ext_init();      // Ext. GPS (BLITZ Mini M10, UART2) — nach CAN damit TWAI-Interrupts Vorrang haben
     if (!can_init(CAN_SPEED_KBPS)) {
         Serial.println("[CAN] FEHLER - Checklist:");
         Serial.println("  GPIO17→CTX, GPIO18→CRX");

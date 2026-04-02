@@ -10,5 +10,8 @@
 // ============================================================
 
 void gps_ext_init();
+void gps_ext_sleep();     // Backup-Mode (µA) — wacht per UART-Byte beim nächsten Init auf
 bool gps_ext_ok();        // true = Modul gefunden + mind. 1 gültiger Fix
-int  gps_ext_sat_count(); // Satelliten (SIV), -1 = noch kein Fix
+int  gps_ext_sat_count();     // Satelliten in use, -1 = noch kein Fix
+int  gps_ext_sat_visible();   // Satelliten in view (alle Konstellationen)
+void gps_ext_inject_assistnow(int year, int month, int day);  // MGA-ANO aus SPIFFS injizieren

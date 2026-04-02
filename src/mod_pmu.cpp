@@ -37,7 +37,13 @@ void pmu_init() {
     // BLDO2 = Modem GPS  1400~3700mV → 3300mV
     PMU.setBLDO2Voltage(3300);
     PMU.enableBLDO2();
-    Serial.println("[PMU] Modem-Power aktiviert: DC3=3000mV, BLDO2=3300mV");
+    // DC1  = VIN1 / QWIIC 3300mV (ESP32S3 Core VDD, default on — explizit setzen)
+    PMU.setDC1Voltage(3300);
+    PMU.enableDC1();
+    // DC5  = Ext. GPS 3300mV
+    PMU.setDC5Voltage(3300);
+    PMU.enableDC5();
+    Serial.println("[PMU] Modem-Power aktiviert: DC3=3000mV, BLDO2=3300mV, DC5=3300mV (ext. GPS)");
 
     // TS-Pin Messung deaktivieren (wie LilyGo-Beispiel — sonst blockiert Laden)
     PMU.disableTSPinMeasure();
@@ -89,6 +95,7 @@ void pmu_set_charging(bool on) {
 void pmu_enable_vbus_wake() {
     if (!s_pmu_ok) return;
     PMU.disableIRQ(XPOWERS_AXP2101_ALL_IRQ);          // Slate clean
+    PMU.clearIrqStatus();                              // Pending IRQs löschen → INT-Pin geht HIGH
     PMU.enableIRQ(XPOWERS_AXP2101_VBUS_INSERT_IRQ);   // Nur VBUS-Insert
     Serial.println("[PMU] VBUS-Insert IRQ aktiviert");
 }
@@ -96,6 +103,28 @@ void pmu_enable_vbus_wake() {
 void pmu_clear_wake_irq() {
     if (!s_pmu_ok) return;
     PMU.clearIrqStatus();
+}
+
+void pmu_set_modem_power(bool on) {
+    if (!s_pmu_ok) return;
+    if (on) {
+        PMU.setDC3Voltage(3000);
+        PMU.enableDC3();
+    } else {
+        PMU.disableDC3();
+    }
+    Serial.printf("[PMU] DC3 (Modem VDD) %s\n", on ? "an" : "aus");
+}
+
+void pmu_set_ext_power(bool on) {
+    if (!s_pmu_ok) return;
+    if (on) {
+        PMU.setDC5Voltage(3300);
+        PMU.enableDC5();
+    } else {
+        PMU.disableDC5();
+    }
+    Serial.printf("[PMU] DC5 (ext. GPS) %s\n", on ? "an" : "aus");
 }
 
 void pmu_set_gps_power(bool on) {

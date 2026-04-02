@@ -195,10 +195,13 @@ static void row_try_capture() {
 
     if (dist >= TELEM_GPS_DIST_M) {
         do_capture = true; reason = "Distanz";
-    } else if (compass_ok()) {
-        if (s_compass_peak_delta >= (float)TELEM_COMPASS_TURN_DEG) { do_capture = true; reason = "Kurve"; }
-    } else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) {
-        do_capture = true; reason = "Kurve";
+    } else if (g_gps.speed_kmh >= TELEM_GPS_MIN_SPEED_KMH) {
+        // Kurven-Trigger nur bei Fahrt — im Stand erzeugt Kompass/Gyro-Drift Phantom-Punkte
+        if (compass_ok() && s_compass_peak_delta >= (float)TELEM_COMPASS_TURN_DEG) {
+            do_capture = true; reason = "Kurve";
+        } else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) {
+            do_capture = true; reason = "Kurve";
+        }
     }
     if (!do_capture && elapsed >= TELEM_GPS_MAX_INTERVAL_MS && g_gps.speed_kmh >= TELEM_GPS_MIN_SPEED_KMH) {
         do_capture = true; reason = "Zeit";
@@ -555,10 +558,13 @@ static void telem_task(void* /*param*/) {
         }
 
         // GPS-Capture: extern 1s (M10 liefert 1Hz), intern 3s (SIM7080G 5s-Takt)
-        uint32_t cap_interval = gps_ext_ok() ? 1000UL : 3000UL;
-        if (now - last_gps_cap_ms >= cap_interval) {
-            row_try_capture();
-            last_gps_cap_ms = now;
+        // Bei Fahrtende (VBUS weg) keine Captures mehr — nur Kompass-Wackler
+        if (!g_trip_ending) {
+            uint32_t cap_interval = gps_ext_ok() ? 1000UL : 3000UL;
+            if (now - last_gps_cap_ms >= cap_interval) {
+                row_try_capture();
+                last_gps_cap_ms = now;
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -814,8 +820,32 @@ void telem_send_influx() {
 
         if (pos + 64 >= (int)BODY_SIZE) break;  // kein Platz mehr
 
-        pos += snprintf(body + pos, BODY_SIZE - pos,
-                        "v,d=%s,ig=%u ", cfg_influx_device(), (unsigned)row.ig);
+        // Operator-Tag nur wenn nicht leer
+        char op_tag[48] = "";
+        {
+            char op_copy[32];
+            if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                memcpy(op_copy, s_operator_str, sizeof(op_copy));
+                xSemaphoreGive(s_mutex);
+            } else {
+                op_copy[0] = '\0';
+            }
+            if (op_copy[0]) {
+                // InfluxDB-Tag: Leerzeichen/Komma escapen
+                int oi = 0;
+                for (int ci = 0; op_copy[ci] && oi < (int)sizeof(op_tag) - 1; ci++) {
+                    if (op_copy[ci] == ' ' || op_copy[ci] == ',') { if (oi < (int)sizeof(op_tag) - 2) { op_tag[oi++] = '\\'; } }
+                    op_tag[oi++] = op_copy[ci];
+                }
+                op_tag[oi] = '\0';
+            }
+        }
+        if (op_tag[0])
+            pos += snprintf(body + pos, BODY_SIZE - pos,
+                            "v,d=%s,ig=%u,op=%s ", cfg_influx_device(), (unsigned)row.ig, op_tag);
+        else
+            pos += snprintf(body + pos, BODY_SIZE - pos,
+                            "v,d=%s,ig=%u ", cfg_influx_device(), (unsigned)row.ig);
 
         for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
             if (!s_fields[f].key) continue;

@@ -6,8 +6,10 @@
 #include "mod_can.h"
 #include "mod_wifi_guard.h"
 #include "mod_pmu.h"
+#include "mod_gps_ext.h"
 #include "config.h"
 #include <esp_sleep.h>
+#include <esp_wifi.h>
 #include <driver/rtc_io.h>
 #include <Arduino.h>
 #include <WiFi.h>
@@ -25,6 +27,7 @@
 volatile bool g_shutdown       = false;
 volatile bool g_nosleep        = false;
 volatile bool g_sleep_requested = false;
+volatile bool g_trip_ending    = false;
 
 static uint32_t g_boot_ms = 0;
 static uint32_t g_last_guard_seen_ms = 0;  // letzter Zeitpunkt mit Guard in Range
@@ -145,14 +148,22 @@ void sleep_update() {
                  SLEEP_INACTIVITY_MS / 60000UL);
     }
     // Modem-Task soll Flush durchführen, dann schläft er selbst ein.
-    // Direkt enter_deep_sleep() würde den Modem-Task blockieren (WDT).
-    syslog("SLEEP", msg);
-    g_sleep_requested = true;
+    // Falls Modem-Task nicht in STATE_RUNNING (z.B. Netzsuche), reagiert er nie →
+    // nach 30s Timeout direkt einschlafen.
+    static uint32_t s_sleep_req_ms = 0;
+    if (!g_sleep_requested) {
+        syslog("SLEEP", msg);
+        g_sleep_requested = true;
+        s_sleep_req_ms = now;
+    } else if ((now - s_sleep_req_ms) >= 120000UL) {
+        // Modem hat 2 min nicht reagiert (z.B. Netzsuche) → direkt einschlafen
+        enter_deep_sleep(msg);
+    }
 }
 
 // ── Force Sleep: sofort einschlafen (Serial-Befehl / Debug) ──
 void sleep_force() {
-    enter_deep_sleep("Deep Sleep: manuell ausgelöst (Serial)");
+    enter_deep_sleep("Deep Sleep: Shutdown abgeschlossen");
 }
 
 // ── Hilfsfunktion: prüfen ob ein Task noch existiert ──
@@ -181,14 +192,15 @@ static void enter_deep_sleep(const char* reason) {
         "TELEM", "MODEM", "GYRO", "WIFI_SCAN", "AP_MON", "MON", "RTC_SYNC", "elm_worker", "GPS_EXT"
     };
     uint32_t wait_start = millis();
+    // Warte auf Tasks — NICHT auf den aktuell ausführenden Task warten
+    // (enter_deep_sleep() kann vom MODEM-Task aufgerufen werden)
+    TaskHandle_t caller = xTaskGetCurrentTaskHandle();
     bool all_stopped = false;
     while (millis() - wait_start < 2000) {
         all_stopped = true;
         for (auto name : task_names) {
-            if (task_alive(name)) {
-                all_stopped = false;
-                break;
-            }
+            TaskHandle_t h = xTaskGetHandle(name);
+            if (h && h != caller) { all_stopped = false; break; }
         }
         if (all_stopped) break;
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -197,11 +209,10 @@ static void enter_deep_sleep(const char* reason) {
     if (all_stopped) {
         Serial.println("[SLEEP] Alle Tasks sauber beendet");
     } else {
-        // Fallback: noch lebende Tasks brutal killen
         Serial.println("[SLEEP] WARNUNG: Timeout — erzwinge Task-Stop");
         for (auto name : task_names) {
             TaskHandle_t h = xTaskGetHandle(name);
-            if (h && h != xTaskGetCurrentTaskHandle()) {
+            if (h && h != caller) {
                 Serial.printf("[SLEEP]   Kill: %s\n", name);
                 vTaskDelete(h);
             }
@@ -213,7 +224,15 @@ static void enter_deep_sleep(const char* reason) {
     // Laden deaktivieren — AXP2101 behaelt Einstellung im Deep Sleep
     pmu_set_charging(false);
 
-    modem_poweroff();
+    // Ext. GPS in Backup-Mode (µA) — behält Orbit-Daten, wacht per UART auf
+    gps_ext_sleep();
+    // DC5 (ext. GPS) abschalten — UBX-Backup allein reicht nicht,
+    // Modul zieht sonst weiter Strom im Deep Sleep
+    pmu_set_ext_power(false);
+    Serial.println("[SLEEP] GPS ext aus (DC5 off)");
+
+    // Modem-Power via PMU abschalten (DC3) — kein AT, kein UART, kein Hänger
+    pmu_set_modem_power(false);
     Serial.println("[SLEEP] Modem aus");
 
     can_stop();
@@ -228,10 +247,11 @@ static void enter_deep_sleep(const char* reason) {
     delay(100);
     Serial.println("[SLEEP] BLE aus");
 
-    // WiFi komplett aus
+    // WiFi komplett aus — esp_wifi_stop() statt WiFi.mode(WIFI_OFF),
+    // da mode(WIFI_OFF) nach Force-Kill des WIFI_SCAN-Tasks hängen kann.
     WiFi.scanDelete();
     WiFi.softAPdisconnect(false);
-    WiFi.mode(WIFI_OFF);
+    esp_wifi_stop();
     Serial.println("[SLEEP] WiFi aus");
 
     Serial.flush();
