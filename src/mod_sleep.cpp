@@ -33,19 +33,32 @@ static uint32_t g_boot_ms = 0;
 static uint32_t g_last_guard_seen_ms = 0;  // letzter Zeitpunkt mit Guard in Range
 static esp_sleep_wakeup_cause_t g_wake_cause = ESP_SLEEP_WAKEUP_UNDEFINED;
 
+bool sleep_was_deep() {
+    return g_wake_cause == ESP_SLEEP_WAKEUP_EXT0 ||
+           g_wake_cause == ESP_SLEEP_WAKEUP_EXT1;
+}
+
 static void enter_deep_sleep(const char* reason);
 
 // ── Init: Wake-Grund loggen ───────────────────────────────
 void sleep_init() {
-    g_boot_ms = millis();
-
+    // Wake-Cause SOFORT lesen — vor WiFi/delay/alles
+    g_boot_ms    = millis();
     g_wake_cause = esp_sleep_get_wakeup_cause();
+    // Serial-Output (syslog noch nicht verfügbar — kommt in sleep_log_wakeup_syslog)
     if (g_wake_cause == ESP_SLEEP_WAKEUP_EXT1) {
-        syslog("WAKE", "Deep Sleep beendet: Gyro-Interrupt (GPIO3)");
         Serial.printf("[SLEEP] Aufgewacht: Gyro-Motion-Interrupt GPIO%d\n", (int)GYRO_WAKE_PIN);
     } else if (g_wake_cause == ESP_SLEEP_WAKEUP_EXT0) {
-        syslog("WAKE", "Deep Sleep beendet: PMU VBUS-Insert (GPIO6)");
         Serial.printf("[SLEEP] Aufgewacht: AXP2101 VBUS-Insert GPIO%d\n", (int)PMU_INT_PIN);
+    }
+}
+
+// Syslog-Ausgabe des Wake-Grundes — nach logs_init() aufrufen
+void sleep_log_wakeup_syslog() {
+    if (g_wake_cause == ESP_SLEEP_WAKEUP_EXT1) {
+        syslog("WAKE", "Deep Sleep beendet: Gyro-Interrupt (GPIO3)");
+    } else if (g_wake_cause == ESP_SLEEP_WAKEUP_EXT0) {
+        syslog("WAKE", "Deep Sleep beendet: PMU VBUS-Insert (GPIO6)");
     } else {
         esp_reset_reason_t reason = esp_reset_reason();
         char msg[48];
@@ -60,7 +73,7 @@ void sleep_init() {
         }
         syslog("BOOT", msg);
         if (reason == ESP_RST_PANIC || reason == ESP_RST_TASK_WDT || reason == ESP_RST_INT_WDT) {
-            Serial.printf("[BOOT] *** CRASH: %s — Serial-Monitor beim nächsten Fehler offen lassen! ***\n", msg);
+            Serial.printf("[BOOT] *** CRASH: %s ***\n", msg);
         }
     }
 }
@@ -220,9 +233,25 @@ static void enter_deep_sleep(const char* reason) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    // ── 3. Hardware herunterfahren ──
-    // Laden deaktivieren — AXP2101 behaelt Einstellung im Deep Sleep
-    pmu_set_charging(false);
+    // ── 3. Wake-Pins vorab prüfen (noch vor WiFi-Shutdown → syslog geht raus) ──
+    {
+        int gyro_lvl = digitalRead(GYRO_WAKE_PIN);
+        int pmu_lvl  = digitalRead(PMU_INT_PIN);
+        char pin_msg[96];
+        snprintf(pin_msg, sizeof(pin_msg),
+                 "Wake-Pins: GPIO%d(Gyro)=%s  GPIO%d(PMU)=%s",
+                 (int)GYRO_WAKE_PIN, gyro_lvl ? "HIGH!" : "LOW",
+                 (int)PMU_INT_PIN,   pmu_lvl  ? "HIGH"  : "LOW!");
+        syslog("SLEEP", pin_msg);
+    }
+
+    // Laden im Sleep: an lassen wenn VBUS vorhanden, sonst deaktivieren
+    if (pmu_is_vbus_in()) {
+        pmu_set_charging(true);
+        syslog("SLEEP", "VBUS vorhanden · Laden bleibt aktiv im Sleep");
+    } else {
+        pmu_set_charging(false);
+    }
 
     // Ext. GPS in Backup-Mode (µA) — behält Orbit-Daten, wacht per UART auf
     gps_ext_sleep();

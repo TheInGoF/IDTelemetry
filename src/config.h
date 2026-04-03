@@ -26,18 +26,20 @@
 // ============================================================
 //  GPS Capture-Schwellen
 // ============================================================
-#define TELEM_GPS_DIST_M          300.0f  // Distanz-Trigger: neuer Punkt ab X Metern
+//  Distanz-Trigger: geschwindigkeitsabhängig (berechnet in mod_telemetry)
+//    <50 km/h → 100m, 50-80 → 150m, 80-110 → 200m, >110 → 250m
 #define TELEM_GPS_MAX_INTERVAL_MS 60000UL // Zeit-Trigger: max. 1 Minute ohne Punkt
 #define TELEM_GPS_MIN_SPEED_KMH    3.0f   // Zeit-Trigger nur ab dieser Geschwindigkeit
 #define TELEM_COMPASS_TURN_DEG     10     // Kurven-Trigger (Kompass): Heading-Änderung in Grad
-#define TELEM_YAW_TURN_DPS          7     // Kurven-Trigger (Gyro/Yaw): Drehrate in °/s
+#define TELEM_YAW_TURN_DPS          6     // Kurven-Trigger (Gyro/Yaw): Drehrate in °/s
+#define TELEM_CURVE_COOLDOWN_MS  3000UL   // Kurven-Cooldown: kein neuer Kurven-Trigger für 3s
 
 // ============================================================
 //  Telemetrie / Senden
 // ============================================================
 #define SEND_INTERVAL_S          90                          // GPS→LTE Wechselzyklus
 #define TRACCAR_SEND_INTERVAL_MS (SEND_INTERVAL_S * 1000UL) // abgeleitet — nicht ändern
-#define EXT_GPS_INFLUX_INTERVAL_MS   30000UL   // InfluxDB-Puffer alle 30s (ext. GPS)
+#define EXT_GPS_INFLUX_INTERVAL_MS   60000UL   // InfluxDB-Puffer alle 60s (ext. GPS)
 #define TELEM_ROW_BUF_SIZE       500    // max. Zeilen im RAM-Ringpuffer
 #define INFLUX_ROWS_PER_SEND      50    // max. Zeilen pro LTE-Fenster
 #define TRACCAR_MIN_MOVE_DEG    0.0001  // ~10 m — verhindert Traccar-Ping bei GPS-Drift

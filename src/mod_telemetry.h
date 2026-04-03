@@ -88,7 +88,7 @@ uint16_t telem_get_row_pending();
 bool telem_influx_ok();
 
 // Phase 3: InfluxDB-Versand (im LTE-Fenster aus mod_modem aufrufen)
-void telem_force_capture(const char* reason);  // Sofort-Capture (Fahrtende)
+void telem_force_capture(const char* reason, bool force_ig_off = false);
 void telem_send_influx();
 
 // Phase 3: SPIFFS-Persistenz (vor Deep Sleep / nach Wake-Up)

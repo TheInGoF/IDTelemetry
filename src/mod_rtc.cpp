@@ -20,6 +20,21 @@ static uint32_t s_ref_unix      = 0;    // Unix-Timestamp beim letzten Sync
 static bool     s_has_date      = false; // true wenn Datum gesetzt wurde
 
 void rtc_init() {
+    // I2C Bus-Recovery: Falls SDA nach Deep Sleep LOW hängt,
+    // 9 Clock-Pulse senden um Slave-Zustand zu resetten
+    pinMode(RTC_SCL_PIN, OUTPUT);
+    pinMode(RTC_SDA_PIN, INPUT_PULLUP);
+    for (int i = 0; i < 9; i++) {
+        digitalWrite(RTC_SCL_PIN, HIGH); delayMicroseconds(5);
+        digitalWrite(RTC_SCL_PIN, LOW);  delayMicroseconds(5);
+    }
+    digitalWrite(RTC_SCL_PIN, HIGH); delayMicroseconds(5);
+    // STOP-Condition: SDA LOW→HIGH während SCL HIGH
+    pinMode(RTC_SDA_PIN, OUTPUT);
+    digitalWrite(RTC_SDA_PIN, LOW);  delayMicroseconds(5);
+    digitalWrite(RTC_SCL_PIN, HIGH); delayMicroseconds(5);
+    digitalWrite(RTC_SDA_PIN, HIGH); delayMicroseconds(5);
+
     Wire.begin(RTC_SDA_PIN, RTC_SCL_PIN);
 
     // CH-Bit pruefen — wenn gesetzt war die Uhr gestoppt (Batterie leer/neu)

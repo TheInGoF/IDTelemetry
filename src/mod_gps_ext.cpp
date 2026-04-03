@@ -51,7 +51,7 @@ static void inject_time() {
     p[8]  = (uint8_t)h;
     p[9]  = (uint8_t)mi;
     p[10] = (uint8_t)s;
-    p[16] = 2; p[17] = 0;  // tAccS = 2s Genauigkeit
+    p[16] = 60; p[17] = 0;  // tAccS = 60s — toleriert ungenaue RTC
 
     ubx_send(0x13, 0x40, p, 24);
     char msg[48];
@@ -330,6 +330,11 @@ static void process_line(char* line) {
         s_nmea_valid = true;
         s_ok = true;  // gps_ext_ok() erst jetzt true
         syslog("GPS_EXT", "NMEA-Daten empfangen — Modul antwortet");
+        // Warm-Start: RTC-Zeit + letzte bekannte Position injizieren
+        // tAccS=60s Toleranz → funktioniert auch bei leicht ungenauer RTC
+        // acc_m=50000m → M10 nutzt Position nur als Hinweis, erzwingt sie nicht
+        inject_time();
+        inject_last_pos();
     }
     if      (strncmp(line, "$GNRMC", 6) == 0 || strncmp(line, "$GPRMC", 6) == 0) parse_gnrmc(line);
     else if (strncmp(line, "$GNGGA", 6) == 0 || strncmp(line, "$GPGGA", 6) == 0) parse_gngga(line);

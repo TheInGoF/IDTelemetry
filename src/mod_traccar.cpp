@@ -52,7 +52,7 @@ static void send_to_traccar(const GpsSnapshot& fix) {
     http.setHttpResponseTimeout(15000);
 
     char path[256];
-    float bearing = compass_ok() ? compass_heading_deg() : fix.course_deg;
+    float bearing = fix.course_deg;
     snprintf(path, sizeof(path),
              "/?id=%s&lat=%.6f&lon=%.6f&speed=%.1f&bearing=%.1f&batt=%d",
              cfg_traccar_id(),
@@ -73,7 +73,7 @@ static void send_to_traccar(const GpsSnapshot& fix) {
     Serial.printf("[TRACCAR] HTTP %d  lat=%.6f lon=%.6f spd=%.1f brg=%.1f%s batt=%d%%\n",
                   status, (float)fix.lat, (float)fix.lon,
                   fix.speed_kmh, bearing,
-                  compass_ok() ? "(compass)" : "(gps)", batt);
+                  "(gps)", batt);
     if (status != 200) s_client->stop();  // Bei Fehler neu verbinden
 
     char tlog[96];

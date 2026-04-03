@@ -92,8 +92,7 @@ static double   s_cap_lat = 0.0;
 static double   s_cap_lon = 0.0;
 static uint32_t s_cap_ms  = 0;
 static float    s_yaw_peak           = 0.0f;   // max |yaw_dps| seit letztem Capture-Tick
-static float    s_compass_peak_delta = 0.0f;   // max Heading-Delta seit letztem Capture-Tick
-static float    s_compass_ref        = -1.0f;  // Kompass-Referenz-Heading für aktuelles Fenster
+static uint32_t s_curve_cooldown_ms  = 0;      // Kurven-Cooldown: Zeitpunkt letzter Kurven-Capture
 
 // ── Delta-Kompression: nur geänderte Werte senden ──────────
 static float s_prev_val[TELEM_FIELD_COUNT];  // letzte gesendete Werte
@@ -190,27 +189,31 @@ static void row_try_capture() {
                      : haversine_m(s_cap_lat, s_cap_lon, lat, lon);
     uint32_t elapsed = (s_cap_ms == 0) ? 99999UL : (now - s_cap_ms);
 
+    // Geschwindigkeitsabhängige Distanzschwelle
+    float spd = g_gps.speed_kmh;
+    float dist_thresh = (spd > 110.0f) ? 250.0f :
+                        (spd >  80.0f) ? 200.0f :
+                        (spd >  50.0f) ? 150.0f : 100.0f;
+
     bool        do_capture = false;
     const char* reason     = "";
 
-    if (dist >= TELEM_GPS_DIST_M) {
+    if (dist >= dist_thresh) {
         do_capture = true; reason = "Distanz";
-    } else if (g_gps.speed_kmh >= TELEM_GPS_MIN_SPEED_KMH) {
-        // Kurven-Trigger nur bei Fahrt — im Stand erzeugt Kompass/Gyro-Drift Phantom-Punkte
-        if (compass_ok() && s_compass_peak_delta >= (float)TELEM_COMPASS_TURN_DEG) {
+    } else if (spd >= TELEM_GPS_MIN_SPEED_KMH) {
+        // Kurven-Trigger: Gyro-Yaw mit Cooldown
+        bool cooldown_ok = (now - s_curve_cooldown_ms) >= TELEM_CURVE_COOLDOWN_MS;
+        if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS && cooldown_ok) {
             do_capture = true; reason = "Kurve";
-        } else if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS) {
-            do_capture = true; reason = "Kurve";
+            s_curve_cooldown_ms = now;
         }
     }
     if (!do_capture && elapsed >= TELEM_GPS_MAX_INTERVAL_MS && g_gps.speed_kmh >= TELEM_GPS_MIN_SPEED_KMH) {
         do_capture = true; reason = "Zeit";
     }
 
-    // Peaks zurücksetzen + neue Kompass-Referenz für nächstes Fenster
-    s_yaw_peak           = 0.0f;
-    s_compass_peak_delta = 0.0f;
-    if (compass_ok()) s_compass_ref = compass_heading_deg();
+    // Peak zurücksetzen
+    s_yaw_peak = 0.0f;
 
     if (!do_capture) return;
 
@@ -267,13 +270,9 @@ static void row_try_capture() {
     row.valid[TELEM_GPS_LON]  = true;
     row.eq_mask &= ~((1UL << TELEM_GPS_LAT) | (1UL << TELEM_GPS_LON));
     row.na_mask &= ~((1UL << TELEM_GPS_LAT) | (1UL << TELEM_GPS_LON));
-    // Heading: Kompass direkt (wenn aktiv) oder aus GPS-Fixes berechnen
-    if (compass_ok()) {
-        row.values[TELEM_GPS_HEADING] = compass_heading_deg();
-        row.valid[TELEM_GPS_HEADING]  = true;
-        row.eq_mask &= ~(1UL << TELEM_GPS_HEADING);
-    } else if (s_cap_ms > 0 && haversine_m(s_cap_lat, s_cap_lon, lat, lon) >= 5.0f) {
-        row.values[TELEM_GPS_HEADING] = bearing_deg(s_cap_lat, s_cap_lon, lat, lon);
+    // Heading: GPS Course-Over-Ground (GNRMC Feld 8) — zuverlässiger als Kompass
+    if (g_gps.speed_kmh >= TELEM_GPS_MIN_SPEED_KMH) {
+        row.values[TELEM_GPS_HEADING] = g_gps.course_deg;
         row.valid[TELEM_GPS_HEADING]  = true;
         row.eq_mask &= ~(1UL << TELEM_GPS_HEADING);
         row.na_mask &= ~(1UL << TELEM_GPS_HEADING);
@@ -309,8 +308,12 @@ static void row_try_capture() {
 }
 
 // ── Erzwungener Capture (Fahrtende / extern) ─────────────────
-void telem_force_capture(const char* reason) {
+void telem_force_capture(const char* reason, bool force_ig_off) {
     if (!gps_valid()) return;
+    if (force_ig_off) {
+        s_ig_value   = 0;
+        s_ig_loss_ms = 0;
+    }
     // Zeit- und Distanz-Schwellen überspringen — direkt in row_try_capture einsteigen
     // indem wir s_cap_ms auf 0 setzen (gilt als "erster Fix")
     s_cap_ms = 0;
@@ -544,18 +547,7 @@ static void telem_task(void* /*param*/) {
             float y = fabsf(gyro_get_yaw_dps());
             if (y > s_yaw_peak) s_yaw_peak = y;
         }
-        if (compass_ok()) {
-            float h = compass_heading_deg();
-            if (s_compass_ref < 0.0f) {
-                s_compass_ref = h;
-            } else {
-                float d = fabsf(h - s_compass_ref);
-                if (d > 180.0f) d = 360.0f - d;
-                if (d > s_compass_peak_delta) s_compass_peak_delta = d;
-            }
-            // Automatische Kalibrierung: Hard-Iron + Fahrtrichtungs-Offset
-            compass_auto_cal(g_gps.speed_kmh, g_gps.course_deg, gps_valid());
-        }
+        // (COG-Kurvenerkennung entfernt — GPS-Drift erzeugt false positives im Stand)
 
         // GPS-Capture: extern 1s (M10 liefert 1Hz), intern 3s (SIM7080G 5s-Takt)
         // Bei Fahrtende (VBUS weg) keine Captures mehr — nur Kompass-Wackler
@@ -769,7 +761,7 @@ static const InfluxField s_fields[TELEM_FIELD_COUNT] = {
     { "ca", 'f' },   // TELEM_CAPACITY     — float kWh
     { "kw", 'f' },   // TELEM_KWH_CHARGED  — float kWh
     { "pk", 'b' },   // TELEM_IS_PARKED    — bool
-    { "od", 'f' },   // TELEM_ODOMETER     — float km
+    { "od", 'i' },   // TELEM_ODOMETER     — int km
     { "bd", 'i' },   // TELEM_BATT_DEVICE  — int %
 };
 
@@ -1122,11 +1114,23 @@ void telem_restore_from_spiffs() {
         }
     }
 
+    // GPS-Felder aus Restore löschen — alte Koordinaten dürfen nie in neue Trip-Daten einfließen
+    cache_snap[TELEM_GPS_LAT].valid        = false;
+    cache_snap[TELEM_GPS_LAT].timestamp_ms = 0;
+    cache_snap[TELEM_GPS_LON].valid        = false;
+    cache_snap[TELEM_GPS_LON].timestamp_ms = 0;
+    cache_snap[TELEM_GPS_HEADING].valid        = false;
+    cache_snap[TELEM_GPS_HEADING].timestamp_ms = 0;
+
     // In Cache + Buffer schreiben
     if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
         memcpy(s_cache, cache_snap, sizeof(s_cache));
         for (int i = 0; i < TELEM_FIELD_COUNT; i++)
             s_last_sent[i] = last_sent[i];
+        // prev_val für GPS zurücksetzen — kein Delta-Vergleich mit alten Koordinaten
+        s_prev_has[TELEM_GPS_LAT]     = false;
+        s_prev_has[TELEM_GPS_LON]     = false;
+        s_prev_has[TELEM_GPS_HEADING] = false;
         xSemaphoreGive(s_mutex);
     }
 

@@ -17,7 +17,9 @@
 //   loop():  sleep_update() (blockiert nicht, prüft nur Timer)
 // ============================================================
 
-void sleep_init();       // Wake-Grund ermitteln + in sys.log schreiben
+void sleep_init();               // Wake-Grund ermitteln (SOFORT am Boot-Anfang aufrufen!)
+void sleep_log_wakeup_syslog();  // Wake-Log via syslog senden (nach logs_init aufrufen)
+bool sleep_was_deep();   // true = Aufwachen aus Deep Sleep (EXT0/EXT1)
 void sleep_log_wake();   // Nach gyro_init(): Wake-Details mit G-Wert loggen
 void sleep_update();     // 10-min-Inaktivitätsprüfung → ggf. Deep Sleep
 void sleep_force();      // Sofort Deep Sleep (Serial-Befehl / Debug)

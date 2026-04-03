@@ -13,6 +13,7 @@
 #include "mod_gps_ext.h"
 #include "mod_rtc.h"
 #include "mod_logs.h"
+#include "mod_wifi_guard.h"
 #include "mod_pmu.h"
 #include <Arduino.h>
 #include <SPIFFS.h>
@@ -80,6 +81,8 @@ static void modem_pmu_poweroff() {
 }
 
 
+
+static bool modem_ntp_sync();  // Forward-Declaration
 
 static TaskHandle_t s_modem_task_handle = nullptr;
 static volatile bool s_task_paused = false;  // "at stop" → Modem-Task pausiert
@@ -451,38 +454,100 @@ static bool configure_radio() {
     return true;
 }
 
-// Netz-Registrierung via getRegistrationStatus() Loop.
-// Kein Timeout — wie LilyGo-Beispiel (MinimalModemNBIOTExample).
-// Der Anrufer muss g_shutdown pruefen; der Task-Loop bricht bei Shutdown ab.
-static bool try_register(char* operator_out, size_t op_size) {
+// Warte auf Registrierung (max wait_s Sekunden). Gibt REG_OK_HOME/ROAMING zurueck oder letzten Status.
+static RegStatus wait_for_reg(uint32_t wait_s) {
     char syslog_msg[128];
+    RegStatus  reg_s     = REG_UNKNOWN;
+    uint32_t   log_ms    = millis();
+    uint32_t   denied_cnt = 0;
 
-    syslog("MODEM", "Netz-Registrierung (auto, warte unbegrenzt)...");
-
-    // Auto-Modus sicherstellen
-    s_modem.sendAT("+COPS=0");
-    s_modem.waitResponse(10000L);
-
-    RegStatus  reg_s      = REG_UNKNOWN;
-    uint32_t   log_ms     = millis();
-    uint32_t   elapsed_s  = 0;
-
-    while (!g_shutdown) {
+    for (uint32_t s = 0; s < wait_s && !g_shutdown; s++) {
         reg_s = s_modem.getRegistrationStatus();
-        if (reg_s == REG_OK_HOME || reg_s == REG_OK_ROAMING) break;
+        if (reg_s == REG_OK_HOME || reg_s == REG_OK_ROAMING) return reg_s;
+
+        // RegStatus=3 (denied): Netz lehnt SIM ab → nach 10s abbrechen
+        if (reg_s == REG_DENIED) {
+            if (++denied_cnt >= 10) {
+                // Aktuelles PLMN abfragen und loggen
+                s_modem.sendAT("+COPS=3,2");
+                s_modem.waitResponse(3000L);
+                String dresp = "";
+                s_modem.sendAT("+COPS?");
+                s_modem.waitResponse(3000L, dresp);
+                int dq1 = dresp.indexOf('"');
+                int dq2 = (dq1 >= 0) ? dresp.indexOf('"', dq1 + 1) : -1;
+                if (dq1 >= 0 && dq2 > dq1) {
+                    String dplmn = dresp.substring(dq1 + 1, dq2);
+                    snprintf(syslog_msg, sizeof(syslog_msg), "Netz verweigert (denied 10x) · PLMN %s", dplmn.c_str());
+                } else {
+                    snprintf(syslog_msg, sizeof(syslog_msg), "Netz verweigert (denied 10x) · PLMN unbekannt");
+                }
+                syslog("MODEM", syslog_msg);
+                return REG_DENIED;
+            }
+        } else {
+            denied_cnt = 0;
+        }
+
         vTaskDelay(pdMS_TO_TICKS(1000));
-        elapsed_s++;
-        // Alle 15s Status-Log mit RegStatus-Wert
         if (millis() - log_ms >= 15000UL) {
             snprintf(syslog_msg, sizeof(syslog_msg),
-                     "Netzsuche laeuft... (%lus) RegStatus=%d", (unsigned long)elapsed_s, (int)reg_s);
+                     "Netzsuche laeuft... (%lus) RegStatus=%d", (unsigned long)s, (int)reg_s);
             syslog("MODEM", syslog_msg);
             log_ms = millis();
         }
     }
-    if (g_shutdown || (reg_s != REG_OK_HOME && reg_s != REG_OK_ROAMING)) {
-        return false;
+    return reg_s;
+}
+
+// Netz-Registrierung: erst Green-List PLMNs manuell, dann PLMN_TABLE, dann Auto.
+// Bei denied wird das PLMN soft-geblockt und das naechste probiert.
+static bool try_register(char* operator_out, size_t op_size) {
+    char syslog_msg[128];
+
+    // --- Phase 1: Green-List PLMNs manuell (zuletzt erfolgreich) ---
+    for (int i = 0; i < s_green_count && !g_shutdown; i++) {
+        if (is_plmn_blocked(s_green[i])) continue;
+        snprintf(syslog_msg, sizeof(syslog_msg), "Versuche Green-PLMN %s...", s_green[i]);
+        syslog("MODEM", syslog_msg);
+        // COPS=1,2,"PLMN",7  → manuell, numerisch, LTE-M
+        s_modem.sendAT("+COPS=1,2,\"", s_green[i], "\",7");
+        if (s_modem.waitResponse(30000L) == 1) {
+            RegStatus r = wait_for_reg(30);
+            if (r == REG_OK_HOME || r == REG_OK_ROAMING) goto registered;
+            if (r == REG_DENIED) block_plmn(s_green[i], BLOCK_SOFT);
+        }
     }
+
+    // --- Phase 2: PLMN_TABLE durchgehen (nicht geblockt, nicht in Green-List) ---
+    for (int i = 0; i < PLMN_COUNT && !g_shutdown; i++) {
+        if (is_plmn_blocked(PLMN_TABLE[i].plmn)) continue;
+        if (is_green(PLMN_TABLE[i].plmn)) continue;  // schon in Phase 1 probiert
+        snprintf(syslog_msg, sizeof(syslog_msg), "Versuche %s (%s)...", PLMN_TABLE[i].name, PLMN_TABLE[i].plmn);
+        syslog("MODEM", syslog_msg);
+        s_modem.sendAT("+COPS=1,2,\"", PLMN_TABLE[i].plmn, "\",7");
+        if (s_modem.waitResponse(30000L) == 1) {
+            RegStatus r = wait_for_reg(20);
+            if (r == REG_OK_HOME || r == REG_OK_ROAMING) goto registered;
+            if (r == REG_DENIED) block_plmn(PLMN_TABLE[i].plmn, BLOCK_SOFT);
+        } else {
+            // ERROR = Netz nicht verfuegbar → soft-block
+            block_plmn(PLMN_TABLE[i].plmn, BLOCK_SOFT);
+        }
+    }
+
+    // --- Phase 3: Auto-Modus als Fallback (60s) ---
+    syslog("MODEM", "Kein PLMN manuell erreichbar · Auto-Modus 60s");
+    s_modem.sendAT("+COPS=0");
+    s_modem.waitResponse(10000L);
+    {
+        RegStatus r = wait_for_reg(60);
+        if (r == REG_OK_HOME || r == REG_OK_ROAMING) goto registered;
+    }
+
+    return false;
+
+registered:
 
     // Registriert — Operator-Name abfragen
     String op = s_modem.getOperator();
@@ -842,9 +907,13 @@ static void modem_task(void* /*param*/) {
                     sleep_force();
                 }
 
-                // ── Fahrtende-Erkennung: VBUS weg → 1min → Capture + Flush + Sleep ──
+                // ── Fahrtende-Erkennung: VBUS weg + Guard-SSID weg → Sleep ──
+                // VW schaltet 12V kurz ab bei Fahrer-Aufstehen → VBUS allein reicht nicht.
+                // Nur schlafen wenn VBUS weg UND Guard-SSID nicht mehr sichtbar.
                 {
-                    bool vbus_now = pmu_is_vbus_in();
+                    bool vbus_now  = pmu_is_vbus_in();
+                    bool guard_vis = wifi_guard_in_range();
+
                     if (vbus_now) {
                         vbus_was_in  = true;
                         vbus_lost_ms = 0;
@@ -853,16 +922,20 @@ static void modem_task(void* /*param*/) {
                         if (vbus_lost_ms == 0) {
                             vbus_lost_ms = now;
                             g_trip_ending = true;
-                            syslog("MODEM", "VBUS weg — Fahrtende in 30s");
-                        } else if (now - vbus_lost_ms >= 30000UL) {
-                            syslog("MODEM", "Fahrtende · letzter GPS-Punkt + Flush");
-                            telem_force_capture("Fahrtende");
-                            vTaskDelay(pdMS_TO_TICKS(500));
-                            // Nur senden wenn GPRS bereits steht — kein neuer Connect-Versuch,
-                            // da nach VBUS-Verlust jederzeit der Strom komplett wegfallen kann.
-                            if (s_modem.isGprsConnected()) telem_send_influx();
+                            syslog("MODEM", "VBUS weg — warte auf Guard-Wegfall");
+                        } else if (!guard_vis && now - vbus_lost_ms >= 30000UL) {
+                            // VBUS weg + Guard weg + mind. 30s → echtes Fahrtende
+                            syslog("MODEM", "Fahrtende · VBUS+Guard weg · ig=0 + Flush");
+                            telem_force_capture("Fahrtende", true);
+                            vTaskDelay(pdMS_TO_TICKS(300));
+                            if (s_modem.isGprsConnected()) {
+                                telem_send_influx();
+                                for (int i = 0; i < 10 && telem_get_row_pending() > 0; i++)
+                                    vTaskDelay(pdMS_TO_TICKS(500));
+                            }
                             sleep_force();
                         }
+                        // VBUS weg aber Guard noch da → VW-Kurzzeitabschaltung, weiter warten
                     }
                 }
 
@@ -874,14 +947,13 @@ static void modem_task(void* /*param*/) {
                     if (s_sim_ok &&
                         (now - last_ext_influx_ms) >= EXT_GPS_INFLUX_INTERVAL_MS) {
                         last_ext_influx_ms = now;
-                        if (modem_ensure_connected()) {
-                            // NTP einmalig nach erstem GPRS-Connect (nicht in ensure_connected,
-                            // da 10s Timeout die PDP-Session destabilisiert)
+                        // Nur verbinden wenn tatsächlich Zeilen zum Senden da sind
+                        if (telem_get_row_pending() > 0 && modem_ensure_connected()) {
+                            // NTP einmalig nach erstem GPRS-Connect
                             static bool s_ntp_synced = false;
                             if (!s_ntp_synced) s_ntp_synced = modem_ntp_sync();
 
                             telem_send_influx();
-                            // Keep-Alive: leichte CSQ-Abfrage damit PDP-Session aktiv bleibt
                             s_sig_quality = (int8_t)s_modem.getSignalQuality();
                         }
                     }
@@ -1242,9 +1314,13 @@ const char* modem_operator()        { return s_operator; }
 bool        modem_sim_ok()          { return s_sim_ok; }
 
 void modem_pre_sleep_flush() {
-    telem_force_capture("Schlafen · ig=0");
+    telem_force_capture("Schlafen · ig=0", true);  // ig=0 erzwingen
     vTaskDelay(pdMS_TO_TICKS(300));
-    if (modem_ensure_connected()) telem_send_influx();
+    if (modem_ensure_connected()) {
+        telem_send_influx();
+        for (int i = 0; i < 10 && telem_get_row_pending() > 0; i++)
+            vTaskDelay(pdMS_TO_TICKS(500));
+    }
 }
 
 void modem_poweroff() {

@@ -34,12 +34,14 @@ void pmu_init() {
     // DC3  = Modem VDD   2700~3400mV → 3000mV
     PMU.setDC3Voltage(3000);
     PMU.enableDC3();
+    delay(100);  // Rail stabilisieren vor nächstem
     // BLDO2 = Modem GPS  1400~3700mV → 3300mV
     PMU.setBLDO2Voltage(3300);
     PMU.enableBLDO2();
     // DC1  = VIN1 / QWIIC 3300mV (ESP32S3 Core VDD, default on — explizit setzen)
     PMU.setDC1Voltage(3300);
     PMU.enableDC1();
+    delay(100);  // Rail stabilisieren vor nächstem
     // DC5  = Ext. GPS 3300mV
     PMU.setDC5Voltage(3300);
     PMU.enableDC5();
@@ -94,10 +96,14 @@ void pmu_set_charging(bool on) {
 
 void pmu_enable_vbus_wake() {
     if (!s_pmu_ok) return;
-    PMU.disableIRQ(XPOWERS_AXP2101_ALL_IRQ);          // Slate clean
-    PMU.clearIrqStatus();                              // Pending IRQs löschen → INT-Pin geht HIGH
-    PMU.enableIRQ(XPOWERS_AXP2101_VBUS_INSERT_IRQ);   // Nur VBUS-Insert
-    Serial.println("[PMU] VBUS-Insert IRQ aktiviert");
+    PMU.disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
+    PMU.clearIrqStatus();
+    delay(10);
+    // Nur INSERT: beim Sleep-Einstieg ist VBUS weg → REMOVE würde sofort triggern
+    PMU.enableIRQ(XPOWERS_AXP2101_VBUS_INSERT_IRQ);
+    delay(10);
+    PMU.clearIrqStatus();  // Nochmal clearen nach enableIRQ
+    Serial.println("[PMU] VBUS Insert IRQ aktiviert");
 }
 
 void pmu_clear_wake_irq() {

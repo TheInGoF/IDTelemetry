@@ -171,8 +171,14 @@ static bool serial_log_cmd(const char* input, const char* cmd, const char* path)
 }
 
 void setup() {
+    // USB CDC Timeout verkürzen — sonst wartet ESP32-S3 nach Deep Sleep
+    // bis zu 60s auf USB-Host-Enumeration bevor setup() weiterläuft
+    // Wake-Grund SOFORT als allererstes — vor Serial, delay, allem
+    sleep_init();
+
+    Serial.setTxTimeoutMs(0);
     Serial.begin(115200);
-    delay(500);
+    delay(100);
     Serial.printf("\n=== Telemetry Stick v%s ===\n", FW_VERSION);
     Serial.println("Hardware: ESP32-S3 N16R8 + SN65HVD230 + DS1307 + MPU-6050");
     Serial.printf("CAN Pins: TX=GPIO%d  RX=GPIO%d  %dkbps\n",
@@ -188,15 +194,28 @@ void setup() {
     // 1. WiFi + Web
     web_init();
     logs_init();
-    sleep_init();        // Wake-Grund aus Deep Sleep ermitteln + loggen
+    sleep_log_wakeup_syslog();  // Wake-Log jetzt senden (logs_init muss vorher laufen)
     ble_web_routes_init();
 
     // 2. I2C Sensoren
-    rtc_init();              // Wire.begin(45,21) — startet externen I2C-Bus
-    gyro_init();             // Wire: MPU-6050
+    Serial.println("[BOOT] rtc_init...");
+    syslog("BOOT", "rtc_init...");
+    rtc_init();
+    syslog("BOOT", "rtc_init OK");              // Wire.begin(45,21) — startet externen I2C-Bus
+    syslog("BOOT", "gyro_init...");
+    Serial.println("[BOOT] gyro_init...");
+    gyro_init();
+    syslog("BOOT", "gyro_init OK");             // Wire: MPU-6050
+    Serial.println("[BOOT] sleep_log_wake...");
     sleep_log_wake();        // Gyro-Wake Details loggen (braucht gyro_init)
-    pmu_init();              // Wire1.begin(15,7) — startet QWIIC-Bus (AXP2101 + Kompass + GPS)
-    compass_init();          // Wire1: QMC5883L (auf BLITZ Modul, QWIIC)
+    syslog("BOOT", "pmu_init...");
+    Serial.println("[BOOT] pmu_init...");
+    pmu_init();
+    syslog("BOOT", "pmu_init OK");              // Wire1.begin(15,7) — startet QWIIC-Bus (AXP2101 + Kompass + GPS)
+    syslog("BOOT", "compass_init...");
+    Serial.println("[BOOT] compass_init...");
+    compass_init();
+    syslog("BOOT", "compass_init OK");          // Wire1: QMC5883L (auf BLITZ Modul, QWIIC)
 
     { int b = pmu_batt_pct();
       char msg[40];

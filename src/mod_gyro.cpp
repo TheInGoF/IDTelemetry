@@ -15,8 +15,8 @@
 // ── Kalibrierung ─────────────────────────────────────────────
 // gyro_init(): direkt via I2C (Task läuft noch nicht), 150 × 20ms = 3s
 // gyro_recalibrate(): liest g_raw_total vom laufenden Task, 30 × ~100ms = 3s
-#define GYRO_CAL_SAMPLES     150     // Samples für Init-Kalibrierung (direkt I2C)
-#define GYRO_CAL_SAMPLE_MS   20      // ms zwischen Samples bei direkter Messung
+#define GYRO_CAL_SAMPLES     30      // Samples für Init-Kalibrierung (direkt I2C)
+#define GYRO_CAL_SAMPLE_MS   10      // ms zwischen Samples bei direkter Messung
 #define GYRO_CAL_MAX_STDDEV  0.015f  // max erlaubte Streuung für "ruhig genug"
 #define GYRO_BASELINE_FILE   "/gyro_baseline.txt"
 
@@ -218,28 +218,36 @@ static void gyro_task(void*) {
 
 // ── Init ─────────────────────────────────────────────────────
 void gyro_init() {
-    // Wire bereits durch rtc_init() gestartet — nicht nochmal begin()
+    // I2C Reset: Wire neu initialisieren mit kurzem Timeout.
+    // MPU im Cycle-Mode nach Deep Sleep kann den Bus hängen lassen.
+    Wire.end();
+    delay(5);
+    Wire.begin(RTC_SDA_PIN, RTC_SCL_PIN);
+    Wire.setTimeOut(5);   // 5ms max pro Transaktion — hängende Calls scheitern schnell
+    delay(10);
 
-    // WHO_AM_I prüfen (MPU-6050 = 0x68, aber Adresse ist 0x69 durch AD0)
+    // WHO_AM_I prüfen — Retry weil MPU nach Deep Sleep im Cycle-Mode kurz schläft
     uint8_t who = 0;
-    if (!mpu_read(MPU_REG_WHO_AM_I, &who, 1)) {
-        Serial.println("[GYRO] MPU-6050 nicht gefunden! AD0 an 3.3V?");
-        Serial.printf("[GYRO] I2C Adresse: 0x%02X\n", MPU6050_ADDR);
+    bool found = false;
+    for (int i = 0; i < 5 && !found; i++) {
+        if (mpu_read(MPU_REG_WHO_AM_I, &who, 1)) found = true;
+        else delay(30);
+    }
+    if (!found) {
+        Serial.println("[GYRO] MPU-6050 nicht gefunden — überspringe Init");
         g_ok = false;
         g_state = GYRO_ERROR;
         return;
     }
 
-    // Sleep-Bit löschen → Sensor aufwecken
-    if (!mpu_write(MPU_REG_PWR_MGMT_1, 0x00)) {
-        Serial.println("[GYRO] MPU-6050 Wake-up fehlgeschlagen!");
-        g_ok = false;
-        g_state = GYRO_ERROR;
-        return;
+    // MPU aufwecken (aus Cycle-Mode: PWR_MGMT_1=0x20 → 0x00)
+    for (int retry = 0; retry < 5; retry++) {
+        if (mpu_write(MPU_REG_PWR_MGMT_1, 0x00)) break;
+        delay(30);
     }
     // Alle Achsen aktivieren (Accel + Gyro) — nach Deep Sleep steht hier 0xC7
     mpu_write(0x6C, 0x00);
-    delay(10);  // Accel stabilisieren lassen
+    delay(50);  // MPU vollständig hochfahren lassen
 
     // Beschleunigung beim Boot auslesen (vor Kalibrierung)
     {
@@ -273,49 +281,68 @@ void gyro_init() {
     // INT_ENABLE (0x38): Motion-Detection-Interrupt aktivieren (Bit 6)
     mpu_write(0x38, 0x40);
 
-    // ── Baseline-Kalibrierung (Task läuft noch nicht → direkt I2C) ───
-    Serial.printf("[GYRO] Kalibrierung läuft (%d Samples × %dms)…\n",
-                  GYRO_CAL_SAMPLES, GYRO_CAL_SAMPLE_MS);
-    float mean = 1.0f, stddev = 0.0f;
-    bool still = calibrate_i2c(mean, stddev);
-
-    if (still) {
-        g_baseline = mean;
-        File f = SPIFFS.open(GYRO_BASELINE_FILE, "w");
-        if (f) { f.printf("%.6f\n", mean); f.close(); }
-        Serial.printf("[GYRO] Kalibrierung OK: baseline=%.4f stddev=%.4f → SPIFFS gespeichert\n",
-                      mean, stddev);
-    } else {
-        // Board bewegt sich → SPIFFS laden
+    // ── Baseline: nach Deep Sleep aus SPIFFS laden, sonst kalibrieren ──
+    bool from_spiffs = sleep_was_deep();
+    Serial.printf("[GYRO] sleep_was_deep=%d → %s\n", (int)from_spiffs,
+                  from_spiffs ? "SPIFFS" : "Kalibrierung");
+    if (from_spiffs) {
         File f = SPIFFS.open(GYRO_BASELINE_FILE, "r");
         if (f) {
             float saved = f.readStringUntil('\n').toFloat();
             f.close();
             if (saved >= 0.5f && saved <= 1.5f) {
                 g_baseline = saved;
-                Serial.printf("[GYRO] Board unruhig — baseline=%.4f aus SPIFFS geladen\n", saved);
+                Serial.printf("[GYRO] Deep-Sleep-Wake — baseline=%.4f aus SPIFFS\n", saved);
             } else {
                 g_baseline = 1.0f;
-                Serial.println("[GYRO] SPIFFS-Wert ungültig — Fallback baseline=1.0");
+                Serial.println("[GYRO] Deep-Sleep-Wake — SPIFFS ungültig, Fallback 1.0");
             }
         } else {
             g_baseline = 1.0f;
-            Serial.println("[GYRO] Board unruhig, kein SPIFFS — Fallback baseline=1.0");
+            Serial.println("[GYRO] Deep-Sleep-Wake — kein SPIFFS, Fallback 1.0");
         }
-    }
-
-    // Gyro-Bias aus SPIFFS laden (falls Kalibrierung nicht frisch)
-    if (!still) {
+        // Gyro-Bias auch laden
         File fb = SPIFFS.open(GYRO_BIAS_FILE, "r");
         if (fb) {
             g_gyro_bias_x = fb.readStringUntil('\n').toFloat();
             g_gyro_bias_y = fb.readStringUntil('\n').toFloat();
             g_gyro_bias_z = fb.readStringUntil('\n').toFloat();
             fb.close();
-            Serial.printf("[GYRO] Bias aus SPIFFS: X=%.2f Y=%.2f Z=%.2f °/s\n",
-                          g_gyro_bias_x, g_gyro_bias_y, g_gyro_bias_z);
+        }
+    } else {
+        Serial.printf("[GYRO] Kalibrierung läuft (%d Samples × %dms)…\n",
+                      GYRO_CAL_SAMPLES, GYRO_CAL_SAMPLE_MS);
+        float mean = 1.0f, stddev = 0.0f;
+        bool still = calibrate_i2c(mean, stddev);
+        if (still) {
+            g_baseline = mean;
+            File f = SPIFFS.open(GYRO_BASELINE_FILE, "w");
+            if (f) { f.printf("%.6f\n", mean); f.close(); }
+            Serial.printf("[GYRO] Kalibrierung OK: baseline=%.4f stddev=%.4f\n", mean, stddev);
+        } else {
+            File f = SPIFFS.open(GYRO_BASELINE_FILE, "r");
+            if (f) {
+                float saved = f.readStringUntil('\n').toFloat();
+                f.close();
+                if (saved >= 0.5f && saved <= 1.5f) {
+                    g_baseline = saved;
+                    Serial.printf("[GYRO] Board unruhig — baseline=%.4f aus SPIFFS\n", saved);
+                } else {
+                    g_baseline = 1.0f;
+                }
+            } else {
+                g_baseline = 1.0f;
+            }
+            File fb = SPIFFS.open(GYRO_BIAS_FILE, "r");
+            if (fb) {
+                g_gyro_bias_x = fb.readStringUntil('\n').toFloat();
+                g_gyro_bias_y = fb.readStringUntil('\n').toFloat();
+                g_gyro_bias_z = fb.readStringUntil('\n').toFloat();
+                fb.close();
+            }
         }
     }
+
     // ─────────────────────────────────────────────────────────────────
 
     g_ok    = true;
