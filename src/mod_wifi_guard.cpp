@@ -132,7 +132,6 @@ static void spiffs_load() {
     } else if (strlen(SECRET_GUARD_SSID) > 0) {
         // Erster Start / NVS leer → Initial-SSID aus secrets.h übernehmen
         strncpy(guard_ssid, SECRET_GUARD_SSID, 63);
-        Serial.printf("[WGUARD] NVS leer — Initial-SSID aus secrets.h: \"%s\"\n", guard_ssid);
         prefs.end();
         prefs.begin("wguard", false);
         prefs.putString("ssid", guard_ssid);  // sofort in NVS sichern
@@ -140,8 +139,6 @@ static void spiffs_load() {
     rssi_threshold = prefs.getInt("rssi",   WIFI_RSSI_THRESHOLD_DEF);
     guard_mode     = prefs.getUChar("mode", GUARD_MODE_WIFI);
     prefs.end();
-    Serial.printf("[WGUARD] SSID geladen: \"%s\"\n", guard_ssid);
-    Serial.printf("[WGUARD] Schwelle: %d dBm, Mode: %d\n", rssi_threshold, guard_mode);
 
     // Laufzeit aus SPIFFS laden
     runtime_boot_ms = millis();
@@ -152,8 +149,6 @@ static void spiffs_load() {
             if (l1.length()) {
                 runtime_base_s = (uint32_t)l1.toInt();
                 uint32_t rt = runtime_base_s;
-                Serial.printf("[WGUARD] Laufzeit SPIFFS: %02d:%02d:%02d\n",
-                              rt/3600, (rt%3600)/60, rt%60);
             }
             ft.close();
         }
@@ -319,14 +314,14 @@ static void ap_monitor_task(void*) {
                     // Letzter Client weg → sofort Guard-Scan + AP-Timeout neu starten
                     scan_trigger = true;
                     ap_no_client_since = millis();
-                    Serial.println("[WGUARD] Client 0 → Guard-Rescan + AP-Timeout reset");
+                    syslog("GUARD", "Kein Client → AP-Timeout reset");
                 }
             }
             ap_clients_last = ap_now;
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    Serial.println("[WGUARD] AP-Monitor beendet (Shutdown)");
+    syslog("GUARD", "AP-Monitor beendet (Shutdown)");
     vTaskDelete(NULL);
 }
 
@@ -458,8 +453,7 @@ void wifi_guard_set_ssid(const char* ssid, int rssi_thresh) {
     g_miss_count    = 0;
     scan_trigger    = true;
     spiffs_save();
-    Serial.printf("[WGUARD] SSID gesetzt: \"%s\" Schwelle: %d dBm\n",
-                  guard_ssid, rssi_threshold);
+    { char m[64]; snprintf(m, sizeof(m), "SSID gesetzt: \"%.30s\" %d dBm", guard_ssid, rssi_threshold); syslog("GUARD", m); }
 }
 
 void wifi_guard_clear_ssid() {
@@ -467,7 +461,7 @@ void wifi_guard_clear_ssid() {
     wifi_in_range  = true;
     wstate         = WGUARD_IDLE;
     spiffs_clear();
-    Serial.println("[WGUARD] SSID gelöscht");
+    syslog("GUARD", "SSID gelöscht");
 }
 
 void wifi_guard_set_mode(uint8_t mode) {
@@ -477,7 +471,6 @@ void wifi_guard_set_mode(uint8_t mode) {
     if (mode == GUARD_MODE_BLE) wifi_in_range = true;
     else wifi_in_range = false;
     wstate = WGUARD_LOST;
-    Serial.printf("[WGUARD] Mode gesetzt: %d\n", mode);
 }
 
 const char* wifi_guard_get_ssid()      { return guard_ssid; }
@@ -505,7 +498,7 @@ bool guard_can_tx_allowed() {
 
 void wifi_guard_manual_tx_unlock() {
     g_manual_tx_unlock = true;
-    Serial.println("[WGUARD] TX manuell entsperrt");
+    syslog("GUARD", "TX manuell entsperrt");
     syslog_q_push("TX", "manuell entsperrt");
 }
 
