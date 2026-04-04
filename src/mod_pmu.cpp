@@ -1,4 +1,5 @@
 #include "mod_pmu.h"
+#include "mod_logs.h"
 #include "config.h"
 #include <Arduino.h>
 #include <XPowersLib.h>
@@ -16,11 +17,10 @@ static int            s_batt_pct = -1;
 
 void pmu_init() {
     if (!PMU.begin(Wire1, AXP2101_SLAVE_ADDRESS, PMU_SDA_PIN, PMU_SCL_PIN)) {
-        Serial.println("[PMU] AXP2101 nicht gefunden!");
+        syslog("PMU", "FEHLER: AXP2101 nicht gefunden");
         return;
     }
     s_pmu_ok = true;
-    Serial.printf("[PMU] AXP2101 OK  Pins: SDA=GPIO%d SCL=GPIO%d\n", PMU_SDA_PIN, PMU_SCL_PIN);
 
     // ---- Modem-Stromversorgung aktivieren (wie LilyGo MinimalModemNBIOTExample) ----
     // Beim ersten Boot (kein Deep-Sleep-Wake): DC3 kurz abschalten → sauberer Power-Cycle.
@@ -28,7 +28,7 @@ void pmu_init() {
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
         PMU.disableDC3();
         delay(200);
-        Serial.println("[PMU] Erster Boot: DC3 Power-Cycle");
+        syslog("PMU", "Erster Boot: DC3 Power-Cycle");
     }
 
     // DC3  = Modem VDD   2700~3400mV → 3000mV
@@ -45,7 +45,7 @@ void pmu_init() {
     // DC5  = Ext. GPS 3300mV
     PMU.setDC5Voltage(3300);
     PMU.enableDC5();
-    Serial.println("[PMU] Modem-Power aktiviert: DC3=3000mV, BLDO2=3300mV, DC5=3300mV (ext. GPS)");
+    syslog("PMU", "Power: DC3=3000mV BLDO2=3300mV DC5=3300mV");
 
     // TS-Pin Messung deaktivieren (wie LilyGo-Beispiel — sonst blockiert Laden)
     PMU.disableTSPinMeasure();
@@ -53,7 +53,7 @@ void pmu_init() {
     // Nach EXT0-Wake (PMU INT): pending IRQ löschen, damit INT-Pin wieder HIGH geht
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
         PMU.clearIrqStatus();
-        Serial.println("[PMU] Wake-IRQ gelöscht (EXT0 VBUS-Insert)");
+        syslog("PMU", "Wake-IRQ gelöscht (VBUS-Insert)");
     }
 
     // ---- Lade-Parameter (wie LilyGo-Beispiel) ----
@@ -91,7 +91,7 @@ void pmu_set_charging(bool on) {
     } else {
         PMU.disableCellbatteryCharge();
     }
-    Serial.printf("[PMU] Laden %s\n", on ? "aktiviert" : "deaktiviert");
+    { char m[32]; snprintf(m, sizeof(m), "Laden %s", on ? "aktiviert" : "deaktiviert"); syslog("PMU", m); }
 }
 
 void pmu_enable_vbus_wake() {
@@ -103,7 +103,7 @@ void pmu_enable_vbus_wake() {
     PMU.enableIRQ(XPOWERS_AXP2101_VBUS_INSERT_IRQ);
     delay(10);
     PMU.clearIrqStatus();  // Nochmal clearen nach enableIRQ
-    Serial.println("[PMU] VBUS Insert IRQ aktiviert");
+    syslog("PMU", "VBUS Insert IRQ aktiviert");
 }
 
 void pmu_clear_wake_irq() {
@@ -119,7 +119,7 @@ void pmu_set_modem_power(bool on) {
     } else {
         PMU.disableDC3();
     }
-    Serial.printf("[PMU] DC3 (Modem VDD) %s\n", on ? "an" : "aus");
+    { char m[32]; snprintf(m, sizeof(m), "DC3 Modem %s", on ? "an" : "aus"); syslog("PMU", m); }
 }
 
 void pmu_set_ext_power(bool on) {
@@ -130,7 +130,7 @@ void pmu_set_ext_power(bool on) {
     } else {
         PMU.disableDC5();
     }
-    Serial.printf("[PMU] DC5 (ext. GPS) %s\n", on ? "an" : "aus");
+    { char m[32]; snprintf(m, sizeof(m), "DC5 ext.GPS %s", on ? "an" : "aus"); syslog("PMU", m); }
 }
 
 void pmu_set_gps_power(bool on) {
@@ -141,5 +141,5 @@ void pmu_set_gps_power(bool on) {
     } else {
         PMU.disableBLDO2();
     }
-    Serial.printf("[PMU] BLDO2 (GPS-Antenne) %s\n", on ? "an" : "aus");
+    { char m[32]; snprintf(m, sizeof(m), "BLDO2 GPS-Ant %s", on ? "an" : "aus"); syslog("PMU", m); }
 }

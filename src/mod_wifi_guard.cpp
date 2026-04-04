@@ -374,8 +374,6 @@ static void wifi_scan_task(void*) {
             if (n >= 0) {
                 // Dedup: gleiche SSID nur einmal (stärkster RSSI behalten)
                 // Einfache Methode: beim Loggen und Guard-Check doppelte überspringen
-                Serial.printf("[WGUARD] Scan fertig: %d Netzwerke\n", n);
-
                 // Guard prüfen (bester RSSI der SSID)
                 bool found = false;
                 int  best_rssi = -999;
@@ -390,11 +388,8 @@ static void wifi_scan_task(void*) {
                     wifi_in_range = true;
                     if (wstate != WGUARD_LOCKED) { char _m[56]; snprintf(_m,56,"Locked · %.20s · %d dBm",guard_ssid,best_rssi); syslog("GUARD",_m); }
                     set_wstate(WGUARD_LOCKED);
-                    Serial.printf("[WGUARD] ✓ LOCKED: %s %d dBm\n", guard_ssid, best_rssi);
                 } else {
                     g_miss_count++;
-                    Serial.printf("[WGUARD] ✗ LOST (miss %d/2): %s RSSI %d dBm (Schwelle %d)\n",
-                                  g_miss_count, guard_ssid, best_rssi, rssi_threshold);
                     if (g_miss_count >= 2) {
                         wifi_in_range = false;
                         if (wstate != WGUARD_LOST) { char _m[56]; snprintf(_m,56,"Lost · %.20s · %d dBm",guard_ssid,best_rssi); syslog("GUARD",_m); }
@@ -533,17 +528,9 @@ bool guard_can_tx_allowed() {
     // AP-Client verbunden → immer erlaubt (z.B. Diagnose-App über eigenen Hotspot)
     if (WiFi.softAPgetStationNum() > 0) return true;
 
-    // VBUS Guard: externe Spannung = erlaubt
-    if (guard_mode == GUARD_MODE_VBUS) return pmu_is_vbus_in();
-
-    // Kein Guard konfiguriert → CAN frei
-    if (!wifi_guard_active()) return true;
-
-    // Guard konfiguriert aber Modus AUS → TX gesperrt
-    if (guard_mode == 0) return false;
-
-    // Guard aktiv → WiFi-Scan entscheidet: SSID sichtbar = erlaubt
-    return wifi_in_range;
+    // CAN TX nur bei externer Spannung — Auto schläft ohne VBUS,
+    // CAN-Writes könnten Steuergeräte aufwecken und Alarm auslösen
+    return pmu_is_vbus_in();
 }
 
 void wifi_guard_manual_tx_unlock() {
@@ -563,7 +550,6 @@ void wifi_guard_client_connected() {
     neopixelWrite(48, RGB_ORANGE_R, RGB_ORANGE_G, RGB_ORANGE_B);
     uint8_t n = WiFi.softAPgetStationNum();
     { char _m[48]; snprintf(_m, 48, "WebSocket verbunden  (AP: %d)", n); syslog_q_push("CLIENT", _m); }
-    Serial.printf("[WGUARD] WebSocket verbunden (AP-Clients: %d)\n", n);
 }
 
 void wifi_guard_client_disconnected() {
@@ -574,8 +560,6 @@ void wifi_guard_client_disconnected() {
         neopixelWrite(48, 0, 0, 0);
     }
     { char _m[48]; snprintf(_m, 48, "WebSocket getrennt   (AP: %d)", n); syslog_q_push("CLIENT", _m); }
-    Serial.printf("[WGUARD] WebSocket getrennt (AP-Clients: %d)%s\n",
-                  n, n == 0 ? " → Guard aktiv" : "");
 }
 
 bool wifi_guard_client_active() {

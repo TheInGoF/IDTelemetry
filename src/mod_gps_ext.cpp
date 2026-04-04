@@ -59,35 +59,6 @@ static void inject_time() {
     syslog("GPS_EXT", msg);
 }
 
-// ── UBX-MGA-INI-POS_LLH injizieren ───────────────────────
-static void inject_pos(double lat, double lon, float alt_m, float acc_m) {
-    uint8_t p[20] = {};
-    p[0] = 0x01;  // type: POS_LLH
-    int32_t  lat_i = (int32_t)(lat * 1e7);
-    int32_t  lon_i = (int32_t)(lon * 1e7);
-    int32_t  alt_i = (int32_t)(alt_m * 100.0f);
-    uint32_t acc_i = (uint32_t)(acc_m * 100.0f);
-    memcpy(&p[4],  &lat_i, 4);
-    memcpy(&p[8],  &lon_i, 4);
-    memcpy(&p[12], &alt_i, 4);
-    memcpy(&p[16], &acc_i, 4);
-    ubx_send(0x13, 0x40, p, 20);
-    char msg[64];
-    snprintf(msg, sizeof(msg), "UBX Pos: %.5f / %.5f ±%.0fm", lat, lon, acc_m);
-    syslog("GPS_EXT", msg);
-}
-
-// ── Letzte Position aus NVS laden + injizieren ────────────
-static void inject_last_pos() {
-    Preferences p;
-    p.begin("gpspos", true);
-    double lat = p.getDouble("lat", 0.0);
-    double lon = p.getDouble("lon", 0.0);
-    float  alt = p.getFloat ("alt", 0.0f);
-    p.end();
-    if (lat == 0.0 && lon == 0.0) return;
-    inject_pos(lat, lon, alt, 50000.0f);  // ±50km — nur grobe Hilfe, nicht Position erzwingen
-}
 
 // ── AssistNow Offline: MGA-ANO Pakete aus SPIFFS injizieren ──
 // Liest /assistnow.bin, filtert Pakete für heute ±1 Tag, sendet über UART.
@@ -200,19 +171,6 @@ static void enable_all_gnss() {
     syslog("GPS_EXT", "GNSS: GPS+GLONASS+Galileo+BeiDou");
 }
 
-// ── Letzte Position in NVS speichern ─────────────────────
-static uint32_t s_last_pos_save_ms = 0;
-static void maybe_save_pos(double lat, double lon, float alt) {
-    uint32_t now = millis();
-    if (now - s_last_pos_save_ms < 60000UL) return;  // max. 1×/min
-    s_last_pos_save_ms = now;
-    Preferences p;
-    p.begin("gpspos", false);
-    p.putDouble("lat", lat);
-    p.putDouble("lon", lon);
-    p.putFloat ("alt", alt);
-    p.end();
-}
 
 // ── NMEA-Koordinate DDMM.MMMM → Dezimalgrad ──────────────
 static double nmea_deg(const char* s, char dir) {
@@ -264,7 +222,6 @@ static void parse_gnrmc(char* buf) {
     }
 
     gps_update(lat, lon, spd, crs);
-    maybe_save_pos(lat, lon, 0.0f);
 
     // ── RTC einmalig aus GPS-UTC-Zeit setzen ──────────────────
     if (!s_rtc_synced) {
@@ -330,11 +287,8 @@ static void process_line(char* line) {
         s_nmea_valid = true;
         s_ok = true;  // gps_ext_ok() erst jetzt true
         syslog("GPS_EXT", "NMEA-Daten empfangen — Modul antwortet");
-        // Warm-Start: RTC-Zeit + letzte bekannte Position injizieren
-        // tAccS=60s Toleranz → funktioniert auch bei leicht ungenauer RTC
-        // acc_m=50000m → M10 nutzt Position nur als Hinweis, erzwingt sie nicht
+        // Warm-Start: RTC-Zeit injizieren → hilft bei Ephemeris-Zuordnung
         inject_time();
-        inject_last_pos();
     }
     if      (strncmp(line, "$GNRMC", 6) == 0 || strncmp(line, "$GPRMC", 6) == 0) parse_gnrmc(line);
     else if (strncmp(line, "$GNGGA", 6) == 0 || strncmp(line, "$GPGGA", 6) == 0) parse_gngga(line);
@@ -408,10 +362,6 @@ void gps_ext_init() {
     enable_all_gnss();  // GPS + GLONASS + Galileo + BeiDou
     enable_aop();       // AssistNow Autonomous: eigene Orbit-Vorhersagen im Modul
 
-    // Assist-Injection deaktiviert — verschlechtert Fix-Genauigkeit statt sie zu verbessern
-    // inject_time();
-    // inject_last_pos();
-    // gps_ext_inject_assistnow();
 
     // s_ok wird erst nach erstem validen NMEA-Paket gesetzt (in process_line)
     { char m[80]; snprintf(m, sizeof(m), "BLITZ Mini M10 — UART GPIO%d/%d %dBd (warte auf Fix)", GPS_EXT_RX_PIN, GPS_EXT_TX_PIN, GPS_EXT_BAUD); syslog("GPS_EXT", m); }

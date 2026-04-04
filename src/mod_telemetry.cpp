@@ -14,7 +14,6 @@
 #include "mod_logs.h"
 #include "mod_elm327.h"
 #include "mod_gps_ext.h"
-#include "mod_compass.h"
 #include "config.h"
 #include "mod_config.h"
 #include <Arduino.h>
@@ -300,9 +299,9 @@ static void row_try_capture() {
     s_cap_lon = lon;
     s_cap_ms  = now;
     {
-        char _msg[48];
-        snprintf(_msg, sizeof(_msg), "GPS-Capture: %s (%.0fm, %lus)",
-                 reason, dist, (unsigned long)(elapsed / 1000UL));
+        char _msg[64];
+        snprintf(_msg, sizeof(_msg), "!!!! GPS-Capture: %s (%.0fm, %lus) · %u ausstehend",
+                 reason, dist, (unsigned long)(elapsed / 1000UL), s_row_pending);
         syslog("TELEM", _msg);
     }
 }
@@ -561,7 +560,7 @@ static void telem_task(void* /*param*/) {
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    Serial.println("[TELEM] Task beendet (Shutdown)");
+    syslog("TELEM", "Task beendet (Shutdown)");
     vTaskDelete(NULL);
 }
 
@@ -576,7 +575,7 @@ void telem_init() {
     // Zeilen-Ringpuffer in PSRAM allokieren (spart ~57 KB internes RAM)
     s_row_buf = (TelemetryRow*)ps_calloc(TELEM_ROW_BUF_SIZE, sizeof(TelemetryRow));
     if (!s_row_buf) {
-        Serial.println("[TELEM] PSRAM alloc FEHLER — Fallback auf internes RAM");
+        syslog("TELEM", "PSRAM alloc FEHLER — Fallback internes RAM");
         s_row_buf = (TelemetryRow*)calloc(TELEM_ROW_BUF_SIZE, sizeof(TelemetryRow));
     }
     s_row_head      = 0;
@@ -590,12 +589,12 @@ void telem_init() {
         s_cache[i].valid = false;
     }
     s_influx_ok = false;
-    Serial.println("[TELEM] init OK");
+    syslog("TELEM", "init OK");
 }
 
 void telem_start_task() {
     xTaskCreatePinnedToCore(telem_task, "TELEM", 6144, NULL, 1, &s_telem_task_handle, 0);
-    Serial.println("[TELEM] Task gestartet");
+    syslog("TELEM", "Task gestartet");
 }
 
 void telem_stop_task() {
@@ -759,9 +758,9 @@ static const InfluxField s_fields[TELEM_FIELD_COUNT] = {
     { nullptr, 0 },  // TELEM_LTE_OPERATOR — String, skip
     // Langsam (30–60s)
     { "ca", 'f' },   // TELEM_CAPACITY     — float kWh
-    { "kw", 'f' },   // TELEM_KWH_CHARGED  — float kWh
+    { "kw", '1' },   // TELEM_KWH_CHARGED  — float kWh (1 Dez)
     { "pk", 'b' },   // TELEM_IS_PARKED    — bool
-    { "od", 'i' },   // TELEM_ODOMETER     — int km
+    { "od", '1' },   // TELEM_ODOMETER     — float km (1 Dez, InfluxDB erwartet float)
     { "bd", 'i' },   // TELEM_BATT_DEVICE  — int %
 };
 
@@ -952,10 +951,6 @@ void telem_send_influx() {
         }
     }
 
-    Serial.printf("[INFLUX] %d/%d Zeilen · %d Bytes → %d Bytes%s · ausstehend: %d\n",
-                  lines_ok, rows_to_send, pos, send_len,
-                  compressed ? " (gzip)" : " (plain)", s_row_pending);
-
     // ── Schritt 4: HTTP POST ─────────────────────────────────────
     if (!s_influx_client) s_influx_client = new TinyGsmClientSecure(modem_get());
     HttpClient http(*s_influx_client, cfg_influx_host(), 443);
@@ -965,7 +960,6 @@ void telem_send_influx() {
     snprintf(path, sizeof(path), "/api/v2/write?org=%s&bucket=%s&precision=s",
              cfg_influx_org(), cfg_influx_bucket());
 
-    Serial.printf("[INFLUX] POST https://%s%s\n", cfg_influx_host(), path);
 
     http.beginRequest();
     http.post(path);
@@ -988,8 +982,9 @@ void telem_send_influx() {
             s_row_pending  -= rows_to_send;
             xSemaphoreGive(s_mutex);
         }
-        char msg[40];
-        snprintf(msg, sizeof(msg), "OK · %d Zeilen", lines_ok);
+        char msg[64];
+        snprintf(msg, sizeof(msg), "OK · %d Zeilen · %d→%dB%s · %u ausstehend",
+                 lines_ok, pos, send_len, compressed ? " gz" : "", s_row_pending);
         syslog("INFLUX", msg);
     } else {
         // Fehler: send_tail bleibt → nächster Zyklus versucht es erneut
@@ -998,12 +993,11 @@ void telem_send_influx() {
         String rbody = http.responseBody();
         s_influx_client->stop();  // Bei Fehler Verbindung zurücksetzen
         rbody.trim();
-        char msg[48];
-        snprintf(msg, sizeof(msg), "Fehler HTTP %d", status);
+        char msg[80];
+        snprintf(msg, sizeof(msg), "Fehler HTTP %d · %u ausstehend", status, s_row_pending);
         syslog("INFLUX", msg);
-        Serial.printf("[INFLUX] Fehler: HTTP %d\n", status);
         if (rbody.length() > 0) {
-            Serial.printf("[INFLUX] Response: %.200s\n", rbody.c_str());
+            Serial.printf("[INFLUX] Body: %.200s\n", rbody.c_str());
         }
     }
 }
@@ -1013,7 +1007,9 @@ void telem_send_influx() {
 // ============================================================
 
 #define TELEM_PERSIST_FILE  "/telem.bin"
+#define TELEM_ROWS_FILE     "/telem_rows.bin"
 #define TELEM_PERSIST_MAGIC 0x544C4D02UL  // 'TLM' + Version 2 (eq_mask/na_mask)
+#define TELEM_ROWS_MAGIC    0x544C5201UL  // 'TLR' + Version 1
 
 struct PersistHeader {
     uint32_t magic;
@@ -1053,8 +1049,31 @@ void telem_persist_to_spiffs() {
     f.close();
 
     syslog("TELEM", "SPIFFS persist OK → /telem.bin");
-    Serial.printf("[TELEM] persist: %u Bytes nach /telem.bin\n",
-                  (unsigned)(sizeof(hdr) + sizeof(cache_snap) + sizeof(last_sent)));
+
+    // ── Ungesendete Zeilen persistieren ──────────────────────────
+    uint16_t pending = 0;
+    uint16_t tail    = 0;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+        pending = s_row_pending;
+        tail    = s_row_send_tail;
+        xSemaphoreGive(s_mutex);
+    }
+    if (pending > 0 && s_row_buf) {
+        File fr = SPIFFS.open(TELEM_ROWS_FILE, "w");
+        if (fr) {
+            uint32_t rows_magic = TELEM_ROWS_MAGIC;
+            fr.write((uint8_t*)&rows_magic, 4);
+            fr.write((uint8_t*)&pending, 2);
+            for (uint16_t i = 0; i < pending; i++) {
+                uint16_t idx = (uint16_t)((tail + i) % TELEM_ROW_BUF_SIZE);
+                fr.write((uint8_t*)&s_row_buf[idx], sizeof(TelemetryRow));
+            }
+            fr.close();
+            char msg[48];
+            snprintf(msg, sizeof(msg), "Rows persist: %u Zeilen", pending);
+            syslog("TELEM", msg);
+        }
+    }
 }
 
 void telem_restore_from_spiffs() {
@@ -1140,6 +1159,35 @@ void telem_restore_from_spiffs() {
     char msg[64];
     snprintf(msg, sizeof(msg), "SPIFFS restore OK · Sleep-Zeit %lu:%02lu h", eh, em);
     syslog("TELEM", msg);
+
+    // ── Ungesendete Zeilen wiederherstellen ──────────────────────
+    if (!SPIFFS.exists(TELEM_ROWS_FILE)) return;
+    File fr = SPIFFS.open(TELEM_ROWS_FILE, "r");
+    if (!fr) return;
+    uint32_t rows_magic = 0;
+    uint16_t row_count  = 0;
+    if (fr.read((uint8_t*)&rows_magic, 4) != 4 || rows_magic != TELEM_ROWS_MAGIC ||
+        fr.read((uint8_t*)&row_count, 2) != 2 || row_count == 0 || row_count > TELEM_ROW_BUF_SIZE) {
+        fr.close();
+        SPIFFS.remove(TELEM_ROWS_FILE);
+        return;
+    }
+    if (s_row_buf && s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+        uint16_t restored = 0;
+        for (uint16_t i = 0; i < row_count; i++) {
+            TelemetryRow row;
+            if (fr.read((uint8_t*)&row, sizeof(row)) != sizeof(row)) break;
+            s_row_buf[s_row_head] = row;
+            s_row_head = (uint16_t)((s_row_head + 1) % TELEM_ROW_BUF_SIZE);
+            if (s_row_pending < TELEM_ROW_BUF_SIZE) s_row_pending++;
+            restored++;
+        }
+        xSemaphoreGive(s_mutex);
+        snprintf(msg, sizeof(msg), "Rows restore: %u Zeilen", restored);
+        syslog("TELEM", msg);
+    }
+    fr.close();
+    SPIFFS.remove(TELEM_ROWS_FILE);
 }
 
 // ============================================================

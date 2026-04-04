@@ -500,7 +500,7 @@ static RegStatus wait_for_reg(uint32_t wait_s) {
     return reg_s;
 }
 
-// Netz-Registrierung: erst Green-List PLMNs manuell, dann PLMN_TABLE, dann Auto.
+// Netz-Registrierung: erst Green-List PLMNs manuell, dann Auto-Modus.
 // Bei denied wird das PLMN soft-geblockt und das naechste probiert.
 static bool try_register(char* operator_out, size_t op_size) {
     char syslog_msg[128];
@@ -519,25 +519,8 @@ static bool try_register(char* operator_out, size_t op_size) {
         }
     }
 
-    // --- Phase 2: PLMN_TABLE durchgehen (nicht geblockt, nicht in Green-List) ---
-    for (int i = 0; i < PLMN_COUNT && !g_shutdown; i++) {
-        if (is_plmn_blocked(PLMN_TABLE[i].plmn)) continue;
-        if (is_green(PLMN_TABLE[i].plmn)) continue;  // schon in Phase 1 probiert
-        snprintf(syslog_msg, sizeof(syslog_msg), "Versuche %s (%s)...", PLMN_TABLE[i].name, PLMN_TABLE[i].plmn);
-        syslog("MODEM", syslog_msg);
-        s_modem.sendAT("+COPS=1,2,\"", PLMN_TABLE[i].plmn, "\",7");
-        if (s_modem.waitResponse(30000L) == 1) {
-            RegStatus r = wait_for_reg(20);
-            if (r == REG_OK_HOME || r == REG_OK_ROAMING) goto registered;
-            if (r == REG_DENIED) block_plmn(PLMN_TABLE[i].plmn, BLOCK_SOFT);
-        } else {
-            // ERROR = Netz nicht verfuegbar → soft-block
-            block_plmn(PLMN_TABLE[i].plmn, BLOCK_SOFT);
-        }
-    }
-
-    // --- Phase 3: Auto-Modus als Fallback (60s) ---
-    syslog("MODEM", "Kein PLMN manuell erreichbar · Auto-Modus 60s");
+    // --- Phase 2: Auto-Modus (Modem wählt bestes verfügbares Netz) ---
+    syslog("MODEM", "Green-List erschoepft · Auto-Modus 60s");
     s_modem.sendAT("+COPS=0");
     s_modem.waitResponse(10000L);
     {
@@ -907,12 +890,11 @@ static void modem_task(void* /*param*/) {
                     sleep_force();
                 }
 
-                // ── Fahrtende-Erkennung: VBUS weg + Guard-SSID weg → Sleep ──
-                // VW schaltet 12V kurz ab bei Fahrer-Aufstehen → VBUS allein reicht nicht.
-                // Nur schlafen wenn VBUS weg UND Guard-SSID nicht mehr sichtbar.
+                // ── Fahrtende-Erkennung: VBUS weg → Flush + Sleep ──
+                // Sleep-Entscheidung trifft mod_sleep (VBUS-basiert, 5 min Schonfrist).
+                // Hier nur: letzten Punkt capturen + Daten senden solange Netz da.
                 {
-                    bool vbus_now  = pmu_is_vbus_in();
-                    bool guard_vis = wifi_guard_in_range();
+                    bool vbus_now = pmu_is_vbus_in();
 
                     if (vbus_now) {
                         vbus_was_in  = true;
@@ -922,10 +904,7 @@ static void modem_task(void* /*param*/) {
                         if (vbus_lost_ms == 0) {
                             vbus_lost_ms = now;
                             g_trip_ending = true;
-                            syslog("MODEM", "VBUS weg — warte auf Guard-Wegfall");
-                        } else if (!guard_vis && now - vbus_lost_ms >= 30000UL) {
-                            // VBUS weg + Guard weg + mind. 30s → echtes Fahrtende
-                            syslog("MODEM", "Fahrtende · VBUS+Guard weg · ig=0 + Flush");
+                            syslog("MODEM", "VBUS weg — Fahrtende, Flush läuft");
                             telem_force_capture("Fahrtende", true);
                             vTaskDelay(pdMS_TO_TICKS(300));
                             if (s_modem.isGprsConnected()) {
@@ -933,7 +912,6 @@ static void modem_task(void* /*param*/) {
                                 for (int i = 0; i < 10 && telem_get_row_pending() > 0; i++)
                                     vTaskDelay(pdMS_TO_TICKS(500));
                             }
-                            sleep_force();
                         }
                         // VBUS weg aber Guard noch da → VW-Kurzzeitabschaltung, weiter warten
                     }

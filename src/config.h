@@ -30,7 +30,6 @@
 //    <50 km/h → 100m, 50-80 → 150m, 80-110 → 200m, >110 → 250m
 #define TELEM_GPS_MAX_INTERVAL_MS 60000UL // Zeit-Trigger: max. 1 Minute ohne Punkt
 #define TELEM_GPS_MIN_SPEED_KMH    3.0f   // Zeit-Trigger nur ab dieser Geschwindigkeit
-#define TELEM_COMPASS_TURN_DEG     10     // Kurven-Trigger (Kompass): Heading-Änderung in Grad
 #define TELEM_YAW_TURN_DPS          6     // Kurven-Trigger (Gyro/Yaw): Drehrate in °/s
 #define TELEM_CURVE_COOLDOWN_MS  3000UL   // Kurven-Cooldown: kein neuer Kurven-Trigger für 3s
 

@@ -38,7 +38,6 @@
 #include "mod_wifi_guard.h"
 #include "mod_rtc.h"
 #include "mod_gyro.h"
-#include "mod_compass.h"
 #include "mod_gps_ext.h"
 #include "mod_pmu.h"
 #include "mod_modem.h"
@@ -198,30 +197,21 @@ void setup() {
     ble_web_routes_init();
 
     // 2. I2C Sensoren
-    Serial.println("[BOOT] rtc_init...");
     syslog("BOOT", "rtc_init...");
     rtc_init();
-    syslog("BOOT", "rtc_init OK");              // Wire.begin(45,21) — startet externen I2C-Bus
+    syslog("BOOT", "rtc_init OK");
     syslog("BOOT", "gyro_init...");
-    Serial.println("[BOOT] gyro_init...");
     gyro_init();
-    syslog("BOOT", "gyro_init OK");             // Wire: MPU-6050
-    Serial.println("[BOOT] sleep_log_wake...");
-    sleep_log_wake();        // Gyro-Wake Details loggen (braucht gyro_init)
+    syslog("BOOT", "gyro_init OK");
+    sleep_log_wake();
     syslog("BOOT", "pmu_init...");
-    Serial.println("[BOOT] pmu_init...");
     pmu_init();
-    syslog("BOOT", "pmu_init OK");              // Wire1.begin(15,7) — startet QWIIC-Bus (AXP2101 + Kompass + GPS)
-    syslog("BOOT", "compass_init...");
-    Serial.println("[BOOT] compass_init...");
-    compass_init();
-    syslog("BOOT", "compass_init OK");          // Wire1: QMC5883L (auf BLITZ Modul, QWIIC)
+    syslog("BOOT", "pmu_init OK");
 
     { int b = pmu_batt_pct();
       char msg[40];
       if (b >= 0) snprintf(msg, sizeof(msg), "Akku: %d%%", b);
       else        snprintf(msg, sizeof(msg), "Akku: nicht angeschlossen");
-      Serial.printf("[PMU] %s\n", msg);
       syslog("PMU", msg);
     }
     if (!cfg_mod_gps()) {
@@ -239,9 +229,9 @@ void setup() {
         int h, m, s;
         if (rtc_get_time(h, m, s)) {
             wifi_guard_set_time(h, m, s);
-            Serial.printf("[RTC] Zeit uebernommen: %02d:%02d:%02d\n", h, m, s);
+            char m2[32]; snprintf(m2, sizeof(m2), "Zeit übernommen: %02d:%02d:%02d", h, m, s); syslog("RTC", m2);
         } else {
-            Serial.println("[RTC] Zeituebernahme fehlgeschlagen - DS1307 nicht erreichbar?");
+            syslog("RTC", "Zeitübernahme fehlgeschlagen");
         }
     }
     rtc_time_sync_task_init();  // Sync sofort + periodischer Task

@@ -711,6 +711,8 @@ async function loadSysLog() {
                 : l.includes('OK')                                                  ? 'var(--green)'
                 : l.includes('gesendet')                                            ? 'var(--yellow)'
                 : l.includes('GPS gestoppt')                                        ? 'var(--orange)'
+                : l.includes('!!!! GPS-Capture')                                      ? '#ff79c6'
+                : l.includes('INFLUX')                                              ? '#ff79c6'
                 : l.includes('AKKU')                                                ? '#ff79c6'
                 : l.includes('WAKE')                                                ? 'var(--accent)'
                 : (l.includes('SLEEP') || l.includes('pausiert'))                  ? 'var(--yellow)'

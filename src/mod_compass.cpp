@@ -87,7 +87,8 @@ static bool qmc_read_raw(int16_t& x, int16_t& y, int16_t& z) {
 
 // ── Init ─────────────────────────────────────────────────────
 void compass_init() {
-    if (!cfg_mod_compass()) return;
+    // Kompass deaktiviert — Heading kommt aus GPS COG
+    return;
 
     Wire.beginTransmission(QMC_ADDR);
     if (Wire.endTransmission() != 0) {

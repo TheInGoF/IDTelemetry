@@ -6,6 +6,7 @@
 #include "mod_can.h"
 #include "mod_wifi_guard.h"
 #include "mod_pmu.h"
+#include "shared.h"
 #include "mod_gps_ext.h"
 #include "config.h"
 #include <esp_sleep.h>
@@ -98,63 +99,74 @@ void sleep_update() {
 
     uint32_t now = millis();
 
-    // ─── Guard-Status ermitteln (WiFi oder VBUS) ──────────
-    uint8_t mode = wifi_guard_get_mode();
-    bool guard_active = false;
-    bool guard_in_range = false;
-
-    if (mode == GUARD_MODE_VBUS) {
-        guard_active   = true;
-        guard_in_range = pmu_is_vbus_in();  // ext. Spannung = "in Range"
-    } else if (wifi_guard_active()) {
-        guard_active   = true;
-        guard_in_range = wifi_guard_in_range();
-    }
-
-    // Guard-Tracking: merken wann Guard zuletzt in Range war
-    if (!guard_active || guard_in_range) {
+    // ─── VBUS = Auto an → wach bleiben ─────────────────────
+    bool vbus = pmu_is_vbus_in();
+    if (vbus) {
         g_last_guard_seen_ms = now;
+        return;
     }
 
-    // Guard aktiv + in Range → wach bleiben
-    if (guard_active && guard_in_range) return;
+    // VBUS weg → 5 min Schonfrist (Kurzunterbrechung, Tankpause)
+    bool vbus_sleep = (now - g_last_guard_seen_ms) >= SLEEP_NO_GUARD_MS;
 
-    // Guard aktiv aber nicht sichtbar → 5 min → Sleep
-    bool guard_sleep = false;
-    if (guard_active && !guard_in_range) {
-        guard_sleep = (now - g_last_guard_seen_ms) >= SLEEP_NO_GUARD_MS;
-    }
-
-    // Kein Guard → Gyro-Fallback (10 min Ruhe)
+    // Gyro-Fallback: kein VBUS aber Bewegung → wach bleiben (z.B. Transport)
     bool gyro_sleep = false;
-    if (!guard_active && gyro_ok()) {
+    if (!vbus_sleep && gyro_ok()) {
         uint32_t last_shake = gyro_last_shake_ms();
         uint32_t idle_since = (last_shake > 0) ? last_shake : g_boot_ms;
         gyro_sleep = (now - idle_since) >= SLEEP_INACTIVITY_MS;
     }
 
-    if (!gyro_sleep && !guard_sleep) return;
+    if (!vbus_sleep && !gyro_sleep) return;
 
     // ─── Sleep-Schwelle erreicht ─────────────────────────
-    static uint32_t s_last_client_ms = 0;  // letzter Zeitpunkt mit Client
-    if (WiFi.softAPgetStationNum() > 0) {
-        s_last_client_ms = now;
-        static uint32_t last_log_ms = 0;
-        if (now - last_log_ms >= 60000UL) {
-            last_log_ms = now;
-            syslog("SLEEP", "Sleep verhindert: Client verbunden");
-            Serial.println("[SLEEP] Sleep verhindert: Client verbunden");
+    // Ghost-Client-Erkennung: softAPgetStationNum() kann Stationen halten die
+    // sich ohne Deauth getrennt haben (Handy-Screen gesperrt, WiFi kurz weg).
+    // Echter Client = AP-Station UND aktiver WebSocket. Ghost = AP-Station aber
+    // kein WebSocket → nach 3 min ignorieren.
+    static uint32_t s_last_client_ms  = 0;  // letzter Zeitpunkt mit echtem Client
+    static uint32_t s_ghost_since_ms  = 0;  // wann Ghost-Zustand begann
+    {
+        bool ap_station = (WiFi.softAPgetStationNum() > 0);
+        bool ws_active  = (ws.count() > 0);
+        bool real_client = ap_station && ws_active;
+        bool ghost       = ap_station && !ws_active;
+
+        if (real_client) {
+            s_last_client_ms = now;
+            s_ghost_since_ms = 0;
+            static uint32_t last_log_ms = 0;
+            if (now - last_log_ms >= 60000UL) {
+                last_log_ms = now;
+                syslog("SLEEP", "Sleep verhindert: Client verbunden");
+            }
+            return;
         }
-        return;
+
+        if (ghost) {
+            if (s_ghost_since_ms == 0) s_ghost_since_ms = now;
+            // Ghost-Timeout: 3 min ohne echten WebSocket → ignorieren
+            if (now - s_ghost_since_ms < 3UL * 60UL * 1000UL) {
+                static uint32_t last_ghost_log = 0;
+                if (now - last_ghost_log >= 60000UL) {
+                    last_ghost_log = now;
+                    syslog("SLEEP", "Ghost-Client (kein WebSocket) · ignoriert");
+                }
+                return;
+            }
+            // Ghost-Timeout abgelaufen → sleep erlauben
+        } else {
+            s_ghost_since_ms = 0;
+        }
     }
 
-    // Schonfrist: 30s nach letztem Client warten (Browser-Seitenwechsel)
+    // Schonfrist: 30s nach letztem echten Client warten (Browser-Seitenwechsel)
     if (s_last_client_ms > 0 && (now - s_last_client_ms) < 30000UL) return;
 
     // ─── Kein Client → Deep Sleep ───────────────────────
     char msg[96];
-    if (guard_sleep) {
-        snprintf(msg, sizeof(msg), "Deep Sleep: Guard-SSID %lu min nicht sichtbar",
+    if (vbus_sleep) {
+        snprintf(msg, sizeof(msg), "Deep Sleep: VBUS weg seit %lu min",
                  SLEEP_NO_GUARD_MS / 60000UL);
     } else {
         snprintf(msg, sizeof(msg), "Deep Sleep: %lu min keine Gyro-Bewegung",

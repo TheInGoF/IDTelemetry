@@ -1,5 +1,6 @@
 #include "mod_gyro.h"
 #include "mod_sleep.h"
+#include "mod_logs.h"
 #include <Wire.h>
 #include <SPIFFS.h>
 
@@ -116,8 +117,7 @@ static bool calibrate_i2c(float& out_mean, float& out_stddev) {
         g_gyro_bias_z = sum_gz / gyro_cnt;
         File f = SPIFFS.open(GYRO_BIAS_FILE, "w");
         if (f) { f.printf("%.4f\n%.4f\n%.4f\n", g_gyro_bias_x, g_gyro_bias_y, g_gyro_bias_z); f.close(); }
-        Serial.printf("[GYRO] Bias kalibriert: X=%.2f Y=%.2f Z=%.2f °/s\n",
-                      g_gyro_bias_x, g_gyro_bias_y, g_gyro_bias_z);
+        { char m[64]; snprintf(m, sizeof(m), "Bias: X=%.2f Y=%.2f Z=%.2f °/s", g_gyro_bias_x, g_gyro_bias_y, g_gyro_bias_z); syslog("GYRO", m); }
     }
 
     return out_stddev <= GYRO_CAL_MAX_STDDEV;
@@ -212,7 +212,7 @@ static void gyro_task(void*) {
 
         vTaskDelay(pdMS_TO_TICKS(GYRO_TASK_MS));
     }
-    Serial.println("[GYRO] Task beendet (Shutdown)");
+    syslog("GYRO", "Task beendet (Shutdown)");
     vTaskDelete(NULL);
 }
 
@@ -223,7 +223,7 @@ void gyro_init() {
     Wire.end();
     delay(5);
     Wire.begin(RTC_SDA_PIN, RTC_SCL_PIN);
-    Wire.setTimeOut(5);   // 5ms max pro Transaktion — hängende Calls scheitern schnell
+    Wire.setTimeOut(50);  // 50ms (Default) — genug für RTC + MPU auf gleichem Bus
     delay(10);
 
     // WHO_AM_I prüfen — Retry weil MPU nach Deep Sleep im Cycle-Mode kurz schläft
@@ -234,7 +234,7 @@ void gyro_init() {
         else delay(30);
     }
     if (!found) {
-        Serial.println("[GYRO] MPU-6050 nicht gefunden — überspringe Init");
+        syslog("GYRO", "MPU-6050 nicht gefunden — überspringe Init");
         g_ok = false;
         g_state = GYRO_ERROR;
         return;
@@ -258,8 +258,7 @@ void gyro_init() {
             int16_t az = (int16_t)((abuf[4] << 8) | abuf[5]);
             float fx = ax / 16384.0f, fy = ay / 16384.0f, fz = az / 16384.0f;
             g_wake_accel = sqrtf(fx*fx + fy*fy + fz*fz);
-            Serial.printf("[GYRO] Boot-Accel: %.4fG (ax=%.3f ay=%.3f az=%.3f)\n",
-                          g_wake_accel, fx, fy, fz);
+            // Boot-Accel wird in sleep_log_wake() per syslog ausgegeben
         }
     }
 
@@ -283,8 +282,6 @@ void gyro_init() {
 
     // ── Baseline: nach Deep Sleep aus SPIFFS laden, sonst kalibrieren ──
     bool from_spiffs = sleep_was_deep();
-    Serial.printf("[GYRO] sleep_was_deep=%d → %s\n", (int)from_spiffs,
-                  from_spiffs ? "SPIFFS" : "Kalibrierung");
     if (from_spiffs) {
         File f = SPIFFS.open(GYRO_BASELINE_FILE, "r");
         if (f) {
@@ -292,14 +289,11 @@ void gyro_init() {
             f.close();
             if (saved >= 0.5f && saved <= 1.5f) {
                 g_baseline = saved;
-                Serial.printf("[GYRO] Deep-Sleep-Wake — baseline=%.4f aus SPIFFS\n", saved);
             } else {
                 g_baseline = 1.0f;
-                Serial.println("[GYRO] Deep-Sleep-Wake — SPIFFS ungültig, Fallback 1.0");
             }
         } else {
             g_baseline = 1.0f;
-            Serial.println("[GYRO] Deep-Sleep-Wake — kein SPIFFS, Fallback 1.0");
         }
         // Gyro-Bias auch laden
         File fb = SPIFFS.open(GYRO_BIAS_FILE, "r");
@@ -310,15 +304,12 @@ void gyro_init() {
             fb.close();
         }
     } else {
-        Serial.printf("[GYRO] Kalibrierung läuft (%d Samples × %dms)…\n",
-                      GYRO_CAL_SAMPLES, GYRO_CAL_SAMPLE_MS);
         float mean = 1.0f, stddev = 0.0f;
         bool still = calibrate_i2c(mean, stddev);
         if (still) {
             g_baseline = mean;
             File f = SPIFFS.open(GYRO_BASELINE_FILE, "w");
             if (f) { f.printf("%.6f\n", mean); f.close(); }
-            Serial.printf("[GYRO] Kalibrierung OK: baseline=%.4f stddev=%.4f\n", mean, stddev);
         } else {
             File f = SPIFFS.open(GYRO_BASELINE_FILE, "r");
             if (f) {
@@ -326,7 +317,6 @@ void gyro_init() {
                 f.close();
                 if (saved >= 0.5f && saved <= 1.5f) {
                     g_baseline = saved;
-                    Serial.printf("[GYRO] Board unruhig — baseline=%.4f aus SPIFFS\n", saved);
                 } else {
                     g_baseline = 1.0f;
                 }
@@ -356,12 +346,12 @@ void gyro_init() {
         float saved = s.toFloat();
         if (saved >= 0.005f && saved <= 1.0f) {
             g_threshold = saved;
-            Serial.printf("[GYRO] Schwelle aus SPIFFS: %.4fG\n", g_threshold);
         }
     }
 
-    Serial.printf("[GYRO] MPU-6050 OK (WHO_AM_I=0x%02X) baseline=%.4f threshold=%.4fG MOT_THR=%d (%dmg)\n",
-                  who, g_baseline, g_threshold, g_mot_thr, g_mot_thr * 32);
+    { char m[80]; snprintf(m, sizeof(m), "MPU-6050 OK · baseline=%.4f thr=%.4fG MOT=%d (%dmg)",
+                           g_baseline, g_threshold, g_mot_thr, g_mot_thr * 32);
+      syslog("GYRO", m); }
 
     xTaskCreatePinnedToCore(gyro_task, "GYRO", 4096, NULL, 1, NULL, 0);
 }
@@ -410,7 +400,6 @@ void gyro_configure_sleep_int() {
 
     // 9. Nochmal INT_STATUS lesen → sauberer Zustand, INT-Pin LOW
     mpu_read(0x3A, &tmp, 1);
-    Serial.printf("[GYRO] INT_STATUS nach Clear: 0x%02X\n", tmp);
 
     // 10. PWR_MGMT_2 (0x6C): LP_WAKE_CTRL=11 → 40Hz Abtastrate im Cycle-Mode
     //     STBY_XG/YG/ZG=1 → Gyro-Achsen in Standby (Accel bleibt aktiv)
@@ -422,8 +411,7 @@ void gyro_configure_sleep_int() {
     // 12. Kurz warten, nochmal INT_STATUS prüfen
     delay(20);
     mpu_read(0x3A, &tmp, 1);
-    Serial.printf("[GYRO] Sleep-INT: MOT_THR=%d (%dmg) DHPF=5Hz LATCH+MOT_INT aktiv, INT_STATUS=0x%02X\n",
-                  g_mot_thr, g_mot_thr * 32, tmp);
+    { char m[64]; snprintf(m, sizeof(m), "Sleep-Mode: MOT_THR=%d (%dmg) Cycle aktiv", g_mot_thr, g_mot_thr * 32); syslog("GYRO", m); }
 }
 
 // ── Neukalibrierung (Task läuft) ─────────────────────────────
@@ -465,11 +453,10 @@ bool gyro_recalibrate(float* out_baseline, float* out_stddev) {
         File fb = SPIFFS.open(GYRO_BIAS_FILE, "w");
         if (fb) { fb.printf("%.4f\n%.4f\n%.4f\n", g_gyro_bias_x, g_gyro_bias_y, g_gyro_bias_z); fb.close(); }
 
-        Serial.printf("[GYRO] Neukalibrierung: baseline=%.4f stddev=%.4f bias=%.2f/%.2f/%.2f°/s\n",
-                      mean, sd, g_gyro_bias_x, g_gyro_bias_y, g_gyro_bias_z);
+        { char m[80]; snprintf(m, sizeof(m), "Rekal OK: baseline=%.4f stddev=%.4f bias=%.2f/%.2f/%.2f", mean, sd, g_gyro_bias_x, g_gyro_bias_y, g_gyro_bias_z); syslog("GYRO", m); }
         return true;
     }
-    Serial.printf("[GYRO] Neukalibrierung fehlgeschlagen (stddev=%.4f zu hoch)\n", sd);
+    { char m[48]; snprintf(m, sizeof(m), "Rekal fehlgeschlagen (stddev=%.4f)", sd); syslog("GYRO", m); }
     return false;
 }
 

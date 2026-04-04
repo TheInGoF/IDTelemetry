@@ -14,7 +14,6 @@
 #include "mod_logs.h"    // syslog()
 #include "config.h"      // GPS_INTERVAL_MS
 #include "mod_config.h"  // cfg_traccar_host(), cfg_traccar_id()
-#include "mod_compass.h" // compass_ok(), compass_heading_deg()
 #include <Arduino.h>
 
 // ---- Extern: TinyGsm-Instanz aus mod_modem ----------------
