@@ -178,12 +178,8 @@ void setup() {
     Serial.setTxTimeoutMs(0);
     Serial.begin(115200);
     delay(100);
-    Serial.printf("\n=== Telemetry Stick v%s ===\n", FW_VERSION);
-    Serial.println("Hardware: ESP32-S3 N16R8 + SN65HVD230 + DS1307 + MPU-6050");
-    Serial.printf("CAN Pins: TX=GPIO%d  RX=GPIO%d  %dkbps\n",
-                  CAN_TX_PIN, CAN_RX_PIN, CAN_SPEED_KBPS);
-    Serial.printf("I2C Pins: SDA=GPIO%d  SCL=GPIO%d\n",
-                  RTC_SDA_PIN, RTC_SCL_PIN);
+    Serial.printf("\n=== Telemetry Stick v%s · CAN TX%d/RX%d %dkbps · I2C SDA%d/SCL%d ===\n",
+                  FW_VERSION, CAN_TX_PIN, CAN_RX_PIN, CAN_SPEED_KBPS, RTC_SDA_PIN, RTC_SCL_PIN);
 
     logMutex = xSemaphoreCreateMutex();
 
@@ -193,6 +189,7 @@ void setup() {
     // 1. WiFi + Web
     web_init();
     logs_init();
+    { char m[64]; snprintf(m, sizeof(m), "AP: %s · http://192.168.4.1", cfg_ap_ssid()); syslog("WEB", m); }
     sleep_log_wakeup_syslog();  // Wake-Log jetzt senden (logs_init muss vorher laufen)
     ble_web_routes_init();
 
@@ -262,7 +259,7 @@ void setup() {
 
     xTaskCreatePinnedToCore(monitor_task, "MON", 4096, NULL, 1, NULL, 0);
 
-    Serial.println("\n✓ Bereit! Zuendung AN → http://192.168.4.1");
+    syslog("SYS", "Bereit");
 
     // Heap + SPIFFS Status ins syslog
     { char msg[80];

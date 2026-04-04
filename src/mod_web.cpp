@@ -46,11 +46,7 @@ void web_init() {
         Serial.println("[WEB] SPIFFS Fehler!");
         return;
     }
-    Serial.println("[WEB] SPIFFS OK");
-
     WiFi.softAP(cfg_ap_ssid(), cfg_ap_pass());
-    Serial.printf("[WiFi] SSID: %s  PW: %s\n", cfg_ap_ssid(), cfg_ap_pass());
-    Serial.println("[WiFi] URL:  http://192.168.4.1");
 
     server.on("/", HTTP_GET, [](AsyncWebServerRequest* r) {
         r->redirect("/daten");
@@ -257,7 +253,6 @@ void web_init() {
     ws.onEvent(on_ws_event);
     server.addHandler(&ws);
     server.begin();
-    Serial.println("[WEB] Server bereit: http://192.168.4.1");
 }
 
 static bool s_ap_active = true;
@@ -270,7 +265,7 @@ void web_ap_stop() {
     ws.closeAll();
     server.end();
     WiFi.softAPdisconnect(true);
-    Serial.println("[WEB] AP + WebServer abgeschaltet (Timeout)");
+    syslog("WEB", "AP + WebServer abgeschaltet (Timeout)");
     syslog("WEB", "AP abgeschaltet — Timeout");
 }
 
