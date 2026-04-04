@@ -1077,8 +1077,9 @@ void telem_persist_to_spiffs() {
 }
 
 void telem_restore_from_spiffs() {
+    if (!SPIFFS.exists(TELEM_PERSIST_FILE)) return;  // Kein Persist-File — normaler Start
     File f = SPIFFS.open(TELEM_PERSIST_FILE, "r");
-    if (!f) return;  // Keine gespeicherten Daten — normaler Start
+    if (!f) return;
 
     PersistHeader hdr;
     if (f.read((uint8_t*)&hdr, sizeof(hdr)) != sizeof(hdr) ||
@@ -1086,7 +1087,6 @@ void telem_restore_from_spiffs() {
         hdr.field_count != (uint32_t)TELEM_FIELD_COUNT) {
         f.close();
         SPIFFS.remove(TELEM_PERSIST_FILE);
-        syslog("TELEM", "SPIFFS restore: ungültige Datei gelöscht");
         return;
     }
 
