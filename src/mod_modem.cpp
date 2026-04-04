@@ -1071,7 +1071,11 @@ void modem_init() {
         s_modem.sendAT("+CPIN?");
         int r = s_modem.waitResponse(5000L, cpin_resp);
         cpin_resp.trim();
-        snprintf(syslog_msg, sizeof(syslog_msg), "CPIN? → rc=%d resp=\"%s\"", r, cpin_resp.c_str());
+        // Newlines aus AT-Response entfernen für einzeiliges Log
+        cpin_resp.replace("\r", "");
+        cpin_resp.replace("\n", " ");
+        cpin_resp.trim();
+        snprintf(syslog_msg, sizeof(syslog_msg), "CPIN? → rc=%d · %s", r, cpin_resp.c_str());
         syslog("MODEM", syslog_msg);
 
         if (cpin_resp.indexOf("READY") >= 0) {
