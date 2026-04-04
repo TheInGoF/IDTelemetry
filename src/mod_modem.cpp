@@ -1044,17 +1044,16 @@ void modem_init() {
     }
     syslog("MODEM", "AT OK");
 
-    // Nach Handshake: warten bis Modem wirklich bereit ist (ATI liefert Modell-Info)
-    // Nach PWRKEY antwortet AT oft schon nach 3s, aber SIM braucht laenger.
+    // Nach Handshake: ATI pollen bis Modem-Info verfuegbar (500ms Intervall, max 5s)
+    // Rückgängig: delay(2000), 5 Versuche
     {
         String info;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 10; i++) {
             info = s_modem.getModemInfo();
             if (info.length() > 0) break;
-            syslog("MODEM", "Warte auf Modem-Ready...");
-            delay(2000);
+            delay(500);
         }
-        syslog("MODEM", ("Modem: " + info).c_str());
+        syslog("MODEM", ("Modem: ATI  " + info).c_str());
     }
 
     // 4. SIM prüfen und ggf. entsperren
