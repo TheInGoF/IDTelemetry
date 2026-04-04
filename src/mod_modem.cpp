@@ -1026,17 +1026,18 @@ void modem_init() {
     s_serial.begin(MODEM_BAUD, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
     delay(100);
 
-    // 3. AT-Handshake — wie LilyGo MinimalModemNBIOTExample:
-    //    Alle 6 Fehlversuche PWRKEY-Puls senden bis Modem antwortet.
-    //    Noetig nach Deep Sleep (AT+CPOF schaltet Modem aus, braucht Puls zum Neustart).
+    // 3. AT-Handshake — nach Deep Sleep (AT+CPOF) braucht Modem PWRKEY-Puls.
+    //    Optimiert: 500ms AT-Timeout (UART lokal), 3 Versuche vor PWRKEY,
+    //    1.8s Post-Puls-Delay (SIM7080 Serial aktiv nach 1.8s lt. Datasheet).
+    //    Rückgängig: testAT(1000), retry>6, delay(3000)
     syslog("MODEM", "AT-Handshake...");
     {
         int retry = 0;
-        while (!s_modem.testAT(1000)) {
-            if (++retry > 6) {
+        while (!s_modem.testAT(500)) {
+            if (++retry > 3) {
                 syslog("MODEM", "Kein AT · PWRKEY-Puls...");
                 modem_pwrkey_pulse();
-                delay(3000);   // Modem Boot abwarten (~3-5s nach Puls)
+                delay(1800);   // Serial aktiv nach ~1.8s (SIM7080 Datasheet)
                 retry = 0;
             }
         }
@@ -1062,10 +1063,18 @@ void modem_init() {
     //    SIM-Subsystem braucht nach Modem-Boot einige Sekunden.
     //    Bei Warmstart (ESP-Reset ohne Modem-Reset) bleibt SIM oft im ERROR-State
     //    → nach 3 Fehlversuchen PWRKEY-Puls erzwingen.
-    syslog("MODEM", "Warte 5s auf SIM-Subsystem...");
-    delay(5000);
+    // SIM-Subsystem: statt fester 5s → CPIN? pollen (500ms Intervall, max 5s)
+    // Rückgängig: delay(5000) statt Polling-Schleife
+    syslog("MODEM", "Warte auf SIM-Subsystem...");
     // UART-Buffer leeren (Reste von vorherigen Kommandos)
     while (s_serial.available()) s_serial.read();
+    for (int w = 0; w < 10; w++) {
+        String probe = "";
+        s_modem.sendAT("+CPIN?");
+        int rp = s_modem.waitResponse(500L, probe);
+        if (rp > 0) break;  // Antwort da (egal ob READY/PIN/ERROR) → weiter
+        delay(500);
+    }
 
     SimStatus sim = SIM_ERROR;
     for (int i = 0; i < 12; i++) {
