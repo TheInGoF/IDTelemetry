@@ -74,7 +74,7 @@ void sleep_log_wakeup_syslog() {
         }
         syslog("BOOT", msg);
         if (reason == ESP_RST_PANIC || reason == ESP_RST_TASK_WDT || reason == ESP_RST_INT_WDT) {
-            Serial.printf("[BOOT] *** CRASH: %s ***\n", msg);
+            syslog("BOOT", msg);  // doppelt loggen für Sichtbarkeit bei Crash
         }
     }
 }
@@ -199,18 +199,14 @@ static bool task_alive(const char* name) {
 // ── Gemeinsamer Sleep-Ablauf ─────────────────────────────
 static void enter_deep_sleep(const char* reason) {
     syslog("SLEEP", reason);
-    Serial.printf("[SLEEP] %s\n", reason);
-    Serial.printf("[SLEEP] Wake-up via GPIO%d (MPU-6050 INT)\n", (int)GYRO_WAKE_PIN);
 
     // ── 1. Telemetrie sichern (noch im laufenden System) ──
     telem_persist_to_spiffs();
-    Serial.println("[SLEEP] Telem gesichert");
 
     // ── 2. Shutdown-Signal an alle Tasks ──
     //    Tasks prüfen g_shutdown in ihrer Loop und beenden sich sauber,
     //    damit I2C/CAN/WiFi-Transaktionen ordentlich abgeschlossen werden.
     g_shutdown = true;
-    Serial.println("[SLEEP] Shutdown-Signal gesetzt");
 
     // Warten bis alle Tasks sich beendet haben (max 2s)
     const char* task_names[] = {
@@ -232,15 +228,12 @@ static void enter_deep_sleep(const char* reason) {
     }
 
     if (all_stopped) {
-        Serial.println("[SLEEP] Alle Tasks sauber beendet");
+        syslog("SLEEP", "Deep Sleep: Shutdown abgeschlossen");
     } else {
-        Serial.println("[SLEEP] WARNUNG: Timeout — erzwinge Task-Stop");
+        syslog("SLEEP", "WARNUNG: Task-Timeout — erzwinge Stop");
         for (auto name : task_names) {
             TaskHandle_t h = xTaskGetHandle(name);
-            if (h && h != caller) {
-                Serial.printf("[SLEEP]   Kill: %s\n", name);
-                vTaskDelete(h);
-            }
+            if (h && h != caller) vTaskDelete(h);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -270,14 +263,8 @@ static void enter_deep_sleep(const char* reason) {
     // DC5 (ext. GPS) abschalten — UBX-Backup allein reicht nicht,
     // Modul zieht sonst weiter Strom im Deep Sleep
     pmu_set_ext_power(false);
-    Serial.println("[SLEEP] GPS ext aus (DC5 off)");
-
-    // Modem-Power via PMU abschalten (DC3) — kein AT, kein UART, kein Hänger
     pmu_set_modem_power(false);
-    Serial.println("[SLEEP] Modem aus");
-
     can_stop();
-    Serial.println("[SLEEP] CAN aus");
 
     // BLE sicher stoppen (kein deinit — NimBLE-interne Tasks crashen sonst)
     NimBLEDevice::stopAdvertising();
@@ -286,14 +273,12 @@ static void enter_deep_sleep(const char* reason) {
         pSrv->disconnect(0);
     }
     delay(100);
-    Serial.println("[SLEEP] BLE aus");
 
     // WiFi komplett aus — esp_wifi_stop() statt WiFi.mode(WIFI_OFF),
     // da mode(WIFI_OFF) nach Force-Kill des WIFI_SCAN-Tasks hängen kann.
     WiFi.scanDelete();
     WiFi.softAPdisconnect(false);
     esp_wifi_stop();
-    Serial.println("[SLEEP] WiFi aus");
 
     Serial.flush();
     delay(100);
@@ -307,11 +292,7 @@ static void enter_deep_sleep(const char* reason) {
     rtc_gpio_set_direction(GYRO_WAKE_PIN, RTC_GPIO_MODE_INPUT_ONLY);
     rtc_gpio_pulldown_en(GYRO_WAKE_PIN);
     rtc_gpio_pullup_dis(GYRO_WAKE_PIN);
-    int gyro_pin_state = rtc_gpio_get_level(GYRO_WAKE_PIN);
-    Serial.printf("[SLEEP] GPIO%d (Gyro): %s\n", (int)GYRO_WAKE_PIN,
-                  gyro_pin_state ? "HIGH (INT aktiv!)" : "LOW (bereit)");
     esp_sleep_enable_ext1_wakeup(1ULL << GYRO_WAKE_PIN, ESP_EXT1_WAKEUP_ANY_HIGH);
-    Serial.println("[SLEEP] EXT1 Gyro-Wake konfiguriert");
 
     // EXT0: GPIO6 LOW → AXP2101 VBUS-Insert Interrupt (active-low)
     pmu_enable_vbus_wake();
@@ -319,18 +300,15 @@ static void enter_deep_sleep(const char* reason) {
     rtc_gpio_set_direction(PMU_INT_PIN, RTC_GPIO_MODE_INPUT_ONLY);
     rtc_gpio_pullup_en(PMU_INT_PIN);     // Pull-Up: Pin ist HIGH wenn kein INT
     rtc_gpio_pulldown_dis(PMU_INT_PIN);
-    int pmu_pin_state = rtc_gpio_get_level(PMU_INT_PIN);
-    Serial.printf("[SLEEP] GPIO%d (PMU INT): %s\n", (int)PMU_INT_PIN,
-                  pmu_pin_state ? "HIGH (bereit)" : "LOW (IRQ aktiv!)");
     esp_sleep_enable_ext0_wakeup(PMU_INT_PIN, 0);  // 0 = wake on LOW
-    Serial.println("[SLEEP] EXT0 PMU-Wake konfiguriert — schlafen...");
+
     Serial.flush();
-    delay(100);  // MPU-6050 Zeit geben sich zu stabilisieren
+    delay(100);
 
     esp_deep_sleep_start();
 
     // ── Fallback: wenn esp_deep_sleep_start() nicht greift → Neustart ──
-    Serial.println("[SLEEP] FEHLER: Deep Sleep fehlgeschlagen — Neustart!");
+    syslog("SLEEP", "FEHLER: Deep Sleep fehlgeschlagen — Neustart!");
     Serial.flush();
     delay(100);
     ESP.restart();
