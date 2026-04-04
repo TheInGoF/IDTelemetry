@@ -116,7 +116,6 @@ bool can_init(uint32_t kbps) {
 #if CAN_RS_PIN != -1
     pinMode(CAN_RS_PIN, OUTPUT);
     digitalWrite(CAN_RS_PIN, LOW);
-    Serial.printf("[CAN] SN65HVD230 RS GPIO%d → LOW\n", CAN_RS_PIN);
 #endif
 
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
@@ -134,19 +133,16 @@ bool can_init(uint32_t kbps) {
     twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
     if (twai_driver_install(&g, &t, &f) != ESP_OK) {
-        Serial.println("[CAN] Treiber Install FEHLER");
         syslog("CAN", "FEHLER: Treiber Install — Hardware/Lötstelle prüfen");
         return false;
     }
     if (twai_start() != ESP_OK) {
         twai_driver_uninstall();
-        Serial.println("[CAN] Start FEHLER");
         syslog("CAN", "FEHLER: TWAI Start — Transceiver prüfen");
         return false;
     }
 
     can_running = true;
-    Serial.printf("[CAN] OK %ukbps TX=GPIO%d RX=GPIO%d\n", kbps, CAN_TX_PIN, CAN_RX_PIN);
     { char _m[48]; snprintf(_m, sizeof(_m), "SN65HVD230 OK · %ukbps · TX=%d RX=%d", kbps, CAN_TX_PIN, CAN_RX_PIN); syslog("CAN", _m); }
     return true;
 }
@@ -156,7 +152,7 @@ void can_stop() {
     twai_stop();
     twai_driver_uninstall();
     can_running = false;
-    Serial.println("[CAN] Gestoppt");
+    syslog("CAN", "Gestoppt");
 }
 
 // Prüft echten TWAI-Hardware-Zustand — false bei BUS_OFF
@@ -274,7 +270,7 @@ bool can_tx(uint32_t id, uint8_t* data, uint8_t len, const char* label) {
     if (!can_running) return false;
     // BLE Wächter prüfen
     if (!guard_can_tx_allowed()) {
-        Serial.printf("[CAN] TX gesperrt - Wächter MAC nicht in Reichweite\n");
+        syslog("CAN", "TX gesperrt — kein VBUS");
         return false;
     }
     twai_message_t msg = {};
@@ -478,11 +474,9 @@ void monitor_task(void*) {
                     vTaskDelay(pdMS_TO_TICKS(500));
                     if (twai_get_status_info(&st) == ESP_OK &&
                         st.state == TWAI_STATE_RUNNING) {
-                        Serial.println("[CAN] BUS_OFF Recovery OK");
                         syslog("CAN", "BUS_OFF Recovery OK");
                     } else {
                         can_running = false;
-                        Serial.println("[CAN] BUS_OFF Recovery fehlgeschlagen — Transceiver prüfen!");
                         syslog("CAN", "FEHLER: BUS_OFF Recovery fehlgeschlagen — Transceiver prüfen");
                     }
                 }
@@ -511,7 +505,7 @@ void monitor_task(void*) {
             vTaskDelay(pdMS_TO_TICKS(50));
         }
     }
-    Serial.println("[CAN] Monitor beendet (Shutdown)");
+    syslog("CAN", "Monitor beendet (Shutdown)");
     vTaskDelete(NULL);
 }
 

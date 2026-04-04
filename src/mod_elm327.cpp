@@ -784,7 +784,6 @@ class ServerCallbacks : public NimBLEServerCallbacks {
             char junk[64];
             while (xQueueReceive(s_cmd_queue, junk, 0) == pdTRUE) {}
         }
-        Serial.println("[ELM] App verbunden");
         syslog("BLE", "App verbunden (ABRP/Torque)");
         extern void ws_broadcast_json(const char*);
         ws_broadcast_json(JSON_BLE_CONN);
@@ -796,7 +795,6 @@ class ServerCallbacks : public NimBLEServerCallbacks {
             char junk[64];
             while (xQueueReceive(s_cmd_queue, junk, 0) == pdTRUE) {}
         }
-        Serial.println("[ELM] App getrennt");
         syslog("BLE", "App getrennt");
         extern void ws_broadcast_json(const char*);
         ws_broadcast_json(JSON_BLE_DISCONN);
@@ -868,7 +866,7 @@ void elm327_init() {
     pAdv->setMinPreferred(0x06);
     NimBLEDevice::startAdvertising();
 
-    Serial.printf("[ELM] Service FFE0 bereit: \"%s\"\n", ELM327_BLE_NAME);
+    { char m[48]; snprintf(m, sizeof(m), "Service FFE0 bereit: \"%s\"", ELM327_BLE_NAME); syslog("ELM", m); }
 
     // Command Queue + Worker-Task: verarbeitet BLE-Befehle außerhalb des NimBLE-Callbacks
     // Queue 8 statt 4: bei 500ms live-CAN pro Query reichen 4 Slots für ~2s Puffer nicht aus.
@@ -892,10 +890,10 @@ void elm327_init() {
                 process_command(qbuf);
             }
         }
-        Serial.println("[ELM] Worker beendet (Shutdown)");
+        syslog("ELM", "Worker beendet (Shutdown)");
         vTaskDelete(NULL);
     }, "elm_worker", 6144, nullptr, 2, nullptr, 1);
-    Serial.println("[ELM] Kompatibel mit: ABRP, Torque Pro, OBD Fusion, Car Scanner");
+    syslog("ELM", "Kompatibel: ABRP, Torque Pro, OBD Fusion, Car Scanner");
 }
 
 bool elm327_connected() { return ble_connected; }
