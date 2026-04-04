@@ -901,11 +901,13 @@ static void modem_task(void* /*param*/) {
                         vbus_lost_ms = 0;
                         g_trip_ending = false;
                     } else if (vbus_was_in) {
+                        // Erst nach 5s ohne VBUS reagieren — Glitch/Stromspitze ignorieren
                         if (vbus_lost_ms == 0) {
                             vbus_lost_ms = now;
+                        } else if (!g_trip_ending && (now - vbus_lost_ms) >= 5000UL) {
                             g_trip_ending = true;
-                            syslog("MODEM", "VBUS weg — Fahrtende, Flush läuft");
-                            telem_force_capture("Fahrtende", true);
+                            syslog("MODEM", "VBUS weg seit 5s — Flush");
+                            telem_force_capture("VBUS weg", true);
                             vTaskDelay(pdMS_TO_TICKS(300));
                             if (s_modem.isGprsConnected()) {
                                 telem_send_influx();
