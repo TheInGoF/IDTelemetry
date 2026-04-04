@@ -353,9 +353,9 @@ static void wifi_scan_task(void*) {
         bool force_scan = scan_trigger && !client_active;
         if (force_scan) { scan_trigger = false; }
 
-        if (!client_active && guard_mode != GUARD_MODE_VBUS) {
-            Serial.println("[WGUARD] Hintergrund Scan startet...");
-            rgb_flash_red(150); // LED kurz rot
+        // WiFi-Scan nur wenn explizit per Web-UI angefordert (scan_trigger)
+        // Sleep + CAN TX hängen an VBUS — kein periodischer Scan nötig
+        if (force_scan && !client_active) {
             WiFi.scanDelete();
             WiFi.scanNetworks(true, true);
 
@@ -404,27 +404,10 @@ static void wifi_scan_task(void*) {
                     wifi_in_range = true;
                 }
             }
-        } else if (guard_mode == GUARD_MODE_VBUS) {
-            // kein WiFi Scan nötig
-        } else {
-            Serial.println("[WGUARD] Client verbunden — kein Scan");
         }
 
-        // VBUS-Status alle 60s loggen (unabhängig vom Guard-Modus)
-        {
-            static uint32_t s_vbus_log_ms = 0;
-            uint32_t now_ms = millis();
-            if (s_vbus_log_ms == 0 || (now_ms - s_vbus_log_ms) >= 60000) {
-                bool vbus = pmu_is_vbus_in();
-                bool chg  = pmu_is_charging();
-                Serial.printf("[WGUARD] VBUS: %s | Laden: %s\n",
-                              vbus ? "JA" : "NEIN", chg ? "JA" : "NEIN");
-                s_vbus_log_ms = now_ms;
-            }
-        }
-
-        // LOCKED: 30s warten; LOST: 10s (schnellere Recovery)
-        int wait_slots = (wstate == WGUARD_LOCKED) ? 60 : 20;
+        // Kein periodischer Scan → längeres Idle (30s), syslog-Queue trotzdem flushen
+        int wait_slots = 60;
         for (int _w = 0; _w < wait_slots; _w++) {
             vTaskDelay(pdMS_TO_TICKS(500));
             if (syslog_flush_pending) {
@@ -434,7 +417,7 @@ static void wifi_scan_task(void*) {
             if (scan_trigger) break; // sofortiger Scan wenn angefordert
         }
     }
-    Serial.println("[WGUARD] Scan-Task beendet (Shutdown)");
+    syslog("GUARD", "Task beendet (Shutdown)");
     vTaskDelete(NULL);
 }
 
@@ -451,27 +434,14 @@ void wifi_guard_init() {
     neopixelWrite(48, 0, 0, 0);   // sicher aus
     // rgb_restore() erst nach spiffs_load() weiter unten
     spiffs_load();
-    // Initialzustand
-    if (guard_mode == GUARD_MODE_VBUS) {
-        wstate        = WGUARD_IDLE;
-        wifi_in_range = true;
-        Serial.println("[WGUARD] Guard: VBUS (externe Spannung)");
-        syslog("GUARD", "VBUS aktiv — CAN TX bei ext. Spannung");
-    } else if (strlen(guard_ssid) > 0) {
-        wstate        = WGUARD_LOST; // erstmal LOST bis erster Scan
-        wifi_in_range = false;
-        Serial.printf("[WGUARD] Guard: WiFi \"%s\" Schwelle: %d dBm\n",
-                      guard_ssid, rssi_threshold);
-        { char _m[80]; snprintf(_m, 80, "WiFi aktiv · SSID: \"%.30s\" · %d dBm", guard_ssid, rssi_threshold); syslog("GUARD", _m); }
-    } else {
-        wstate        = WGUARD_IDLE;
-        wifi_in_range = true; // kein Guard -> immer erlaubt
-    }
+    // Guard-Logik läuft jetzt über VBUS (mod_sleep + mod_can)
+    // WiFi-Scan deaktiviert — nur AP-Monitor für Client-Tracking + syslog-Queue
+    wstate        = WGUARD_IDLE;
+    wifi_in_range = true;
+    syslog("GUARD", "VBUS-Modus — kein WiFi-Scan");
 
-    // Scan-Task
-    xTaskCreatePinnedToCore(wifi_scan_task, "WIFI_SCAN", 4096, NULL, 1, NULL, 0);
-    rgb_restore(); // initialen LED-Zustand setzen
-    // AP-Client-Monitor: schneller Poll unabhaengig vom Scan-Zyklus
+    rgb_restore();
+    // AP-Client-Monitor: LED + Client-Tracking
     xTaskCreatePinnedToCore(ap_monitor_task, "AP_MON", 3072, NULL, 1, NULL, 0);
 
     if (false) { // Toter Zweig — nur damit der Compiler nicht meckert
