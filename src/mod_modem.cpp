@@ -796,8 +796,8 @@ static void modem_task(void* /*param*/) {
 
                         if (first_fix) {
                             snprintf(syslog_msg, sizeof(syslog_msg),
-                                     "Erster Fix · %.6f %.6f · Sat: %d/%d · HDOP: %.1f · Alt: %.0fm",
-                                     lat, lon, usat, vsat, accuracy, alt);
+                                     "Erster Fix · %.6f %.6f · %d sichtbar / %d im Fix · HDOP: %.1f · Alt: %.0fm",
+                                     lat, lon, vsat, usat, accuracy, alt);
                             syslog("GPS", syslog_msg);
                             first_fix = false;
                             had_fix   = true;
@@ -806,7 +806,7 @@ static void modem_task(void* /*param*/) {
                         } else if (!had_fix) {
                             // Fix nach LTE-Fenster wieder da → 60s Timer neu starten
                             snprintf(syslog_msg, sizeof(syslog_msg),
-                                     "Fix wieder · %.6f %.6f · Sat: %d",
+                                     "Fix wieder · %.6f %.6f · %d im Fix",
                                      lat, lon, usat);
                             syslog("GPS", syslog_msg);
                             had_fix         = true;
@@ -863,12 +863,12 @@ static void modem_task(void* /*param*/) {
                         if (snap.valid && now - gps_log_ms >= 30000UL) {
                             if (GPS_EXT_ENABLED) {
                                 snprintf(syslog_msg, sizeof(syslog_msg),
-                                         "Pos: %.6f %.6f · Sat: %d/%d (ext)",
-                                         snap.lat, snap.lon, gps_ext_sat_count(), gps_ext_sat_visible());
+                                         "Pos: %.6f %.6f · %d sichtbar / %d im Fix (ext)",
+                                         snap.lat, snap.lon, gps_ext_sat_visible(), gps_ext_sat_count());
                             } else {
                                 snprintf(syslog_msg, sizeof(syslog_msg),
-                                         "Pos: %.6f %.6f · Sat: %d/%d · HDOP: %.1f",
-                                         snap.lat, snap.lon, usat, vsat, accuracy);
+                                         "Pos: %.6f %.6f · %d sichtbar / %d im Fix · HDOP: %.1f",
+                                         snap.lat, snap.lon, vsat, usat, accuracy);
                             }
                             syslog("GPS", syslog_msg);
                             gps_log_ms = now;
