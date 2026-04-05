@@ -331,9 +331,9 @@ static void gps_ext_task(void*) {
             last_status_ms = now;
             if (s_sat_count != last_sat) {
                 last_sat = s_sat_count;
-                char msg[48];
-                snprintf(msg, sizeof(msg), "Sats: %d/%d · Fix: %s",
-                         s_sat_count, s_sats_visible, gps_valid() ? "JA" : "suche...");
+                char msg[64];
+                snprintf(msg, sizeof(msg), "Sats: %d sichtbar / %d im Fix · %s",
+                         s_sats_visible, s_sat_count, gps_valid() ? "Fix" : "suche...");
                 syslog("GPS_EXT", msg);
             }
         }
@@ -342,8 +342,8 @@ static void gps_ext_task(void*) {
         if (!fix_logged && gps_valid()) {
             fix_logged = true;
             char msg[64];
-            snprintf(msg, sizeof(msg), "Fix! Sats: %d/%d · %.5f / %.5f",
-                     s_sat_count, s_sats_visible, gps_lat(), gps_lon());
+            snprintf(msg, sizeof(msg), "Fix! Sats: %d sichtbar / %d im Fix · %.5f / %.5f",
+                     s_sats_visible, s_sat_count, gps_lat(), gps_lon());
             syslog("GPS_EXT", msg);
         }
 
