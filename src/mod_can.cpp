@@ -270,7 +270,7 @@ bool can_tx(uint32_t id, uint8_t* data, uint8_t len, const char* label) {
     if (!can_running) return false;
     // BLE Wächter prüfen
     if (!guard_can_tx_allowed()) {
-        syslog("CAN", "TX gesperrt — kein VBUS");
+        syslog("CAN", "TX gesperrt — kein VBUS oder keine Bewegung");
         return false;
     }
     twai_message_t msg = {};

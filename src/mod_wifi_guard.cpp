@@ -2,7 +2,9 @@
 #include "mod_web.h"
 #include "mod_sleep.h"
 #include "mod_pmu.h"
+#include "mod_gyro.h"
 #include "mod_config.h"
+#include "config.h"
 #include "mod_logs.h"
 #include "mod_rtc.h"
 #include "secrets.h"
@@ -491,9 +493,14 @@ bool guard_can_tx_allowed() {
     // AP-Client verbunden → immer erlaubt (z.B. Diagnose-App über eigenen Hotspot)
     if (WiFi.softAPgetStationNum() > 0) return true;
 
-    // CAN TX nur bei externer Spannung — Auto schläft ohne VBUS,
-    // CAN-Writes könnten Steuergeräte aufwecken und Alarm auslösen
-    return pmu_is_vbus_in();
+    // CAN TX nur wenn VBUS (Auto an) UND Gyro-Bewegung innerhalb der letzten 30s.
+    // Ohne Bewegung könnte das Auto stehen + Zündung an (z.B. Laden) —
+    // CAN-Writes könnten Steuergeräte stören.
+    if (!pmu_is_vbus_in()) return false;
+
+    uint32_t last = gyro_last_shake_ms();
+    if (last == 0) return false;  // noch nie Bewegung erkannt
+    return (millis() - last) < GYRO_HOLD_MS;
 }
 
 void wifi_guard_manual_tx_unlock() {
