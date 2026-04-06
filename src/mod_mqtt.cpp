@@ -51,7 +51,8 @@ void mqtt_configure() {
     m.sendAT("+SMDISC");
     m.waitResponse(3000L);
 
-    snprintf(cmd, sizeof(cmd), "+SMCONF=\"URL\",\"%s\",%d",
+    // URL inkl. Port (SIM7080G: AT+SMCONF="URL","host","port")
+    snprintf(cmd, sizeof(cmd), "+SMCONF=\"URL\",\"%s\",\"%d\"",
              cfg_mqtt_host(), cfg_mqtt_port());
     mqtt_at_ok(cmd);
 
@@ -99,6 +100,22 @@ bool mqtt_connect() {
 
     TinyGsm& m = modem_get();
 
+    // Config vor Connect auf Serial ausgeben (Diagnose)
+    Serial.println("[MQTT] ---- Config Dump ----");
+    m.sendAT("+SMCONF?");
+    String dump = "";
+    m.waitResponse(3000L, dump);
+    dump.trim();
+    Serial.println(dump);
+    Serial.println("[MQTT] ---- Ende ----");
+
+    // Aktuellen State prüfen
+    m.sendAT("+SMSTATE?");
+    String state_resp = "";
+    m.waitResponse(2000L, state_resp);
+    state_resp.trim();
+    Serial.printf("[MQTT] SMSTATE: %s\n", state_resp.c_str());
+
     syslog("MQTT", "Verbinde...");
     m.sendAT("+SMCONN");
     String resp = "";
@@ -106,8 +123,14 @@ bool mqtt_connect() {
     if (rc != 1) {
         resp.trim();
         char msg[128];
-        snprintf(msg, sizeof(msg), "SMCONN fehlgeschlagen: %s", resp.c_str());
+        snprintf(msg, sizeof(msg), "SMCONN fehlgeschlagen (rc=%d): %s", rc, resp.c_str());
         syslog("MQTT", msg);
+        // CME Error abfragen
+        m.sendAT("+SMSTATE?");
+        String st = "";
+        m.waitResponse(2000L, st);
+        st.trim();
+        Serial.printf("[MQTT] SMSTATE nach Fehler: %s\n", st.c_str());
         s_connected = false;
         return false;
     }

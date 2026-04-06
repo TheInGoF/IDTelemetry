@@ -639,23 +639,11 @@ static void modem_task(void* /*param*/) {
 
                 } else {
 
-                    syslog("MODEM", "Keine SIM · GPS-only Modus");
-                    bool gps_started = false;
-                    for (int g = 0; g < 3 && !gps_started; g++) {
-                        gps_started = gps_enable_with_config();
-                        if (!gps_started) vTaskDelay(pdMS_TO_TICKS(2000));
-                    }
-                    if (gps_started) {
-                        s_gps_enabled = true;
-                        syslog("GPS", "Aktiviert · suche Fix");
-                        first_fix = true; had_fix = false; no_fix_log_ms = now;
-                        state = STATE_RUNNING;
-                        last_stat_ms = now;
-                        stat_interval = 5000;
-                    } else {
-                        syslog("MODEM", "GPS-Aktivierung fehlgeschlagen");
-                        state = STATE_RUNNING;
-                    }
+                    syslog("MODEM", "Keine SIM · GPS-only Modus (ext. GPS)");
+                    s_gps_enabled = false;
+                    state = STATE_RUNNING;
+                    last_stat_ms = now;
+                    stat_interval = 5000;
                 }
 
                 continue; // Nächste Iteration, um Zustand neu zu prüfen
@@ -707,24 +695,11 @@ static void modem_task(void* /*param*/) {
                             mqtt_connect();
                         }
 
-                        if (GPS_EXT_ENABLED) {
-                            // Externes GPS aktiv → internes SIM7080G-GPS nicht starten
-                            syslog("GPS", "Intern deaktiviert — ext. GPS übernimmt");
-                            s_gps_enabled = false;
-                            state = STATE_RUNNING;
-                            last_stat_ms = now;
-                            stat_interval = 5000;
-                        } else if (gps_enable_with_config()) {
-                            s_gps_enabled = true;
-                            syslog("GPS", "Aktiviert · suche Fix");
-                            first_fix = true; had_fix = false; no_fix_log_ms = now;
-                            state = STATE_RUNNING;
-                            last_stat_ms = now;
-                            stat_interval = 5000;
-                        } else {
-                            syslog("MODEM", "GPS-Aktivierung fehlgeschlagen · warte 30s");
-                            vTaskDelay(pdMS_TO_TICKS(30000));
-                        }
+                        // Ext. GPS übernimmt — internes GPS nicht starten
+                        s_gps_enabled = false;
+                        state = STATE_RUNNING;
+                        last_stat_ms = now;
+                        stat_interval = 5000;
                     } else {
                         scan_fail_count++;
                         snprintf(syslog_msg, sizeof(syslog_msg),
@@ -830,19 +805,13 @@ static void modem_task(void* /*param*/) {
 
 
 
-                    // Periodischer GPS-Positions-Log (alle 30s bei aktivem Fix)
+                    // Periodischer GPS-Positions-Log (alle 30s bei aktivem Fix, ext. GPS)
                     {
                         GpsSnapshot snap = gps_snapshot();
                         if (snap.valid && now - gps_log_ms >= 30000UL) {
-                            if (GPS_EXT_ENABLED) {
-                                snprintf(syslog_msg, sizeof(syslog_msg),
-                                         "Pos: %.6f %.6f · %d sichtbar / %d im Fix (ext)",
-                                         snap.lat, snap.lon, gps_ext_sat_visible(), gps_ext_sat_count());
-                            } else {
-                                snprintf(syslog_msg, sizeof(syslog_msg),
-                                         "Pos: %.6f %.6f · %d sichtbar / %d im Fix · HDOP: %.1f",
-                                         snap.lat, snap.lon, vsat, usat, accuracy);
-                            }
+                            snprintf(syslog_msg, sizeof(syslog_msg),
+                                     "Pos: %.6f %.6f · %d sichtbar / %d im Fix",
+                                     snap.lat, snap.lon, gps_ext_sat_visible(), gps_ext_sat_count());
                             syslog("GPS", syslog_msg);
                             gps_log_ms = now;
                         }
