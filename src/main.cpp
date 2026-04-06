@@ -307,6 +307,12 @@ void loop() {
                     modem_send_at(serial_buf + 3);
                 } else if (strcmp(serial_buf, "can sniff") == 0) {
                     can_sniff(5000);  // 5 Sekunden
+                } else if (strcmp(serial_buf, "gyro cal") == 0) {
+                    Serial.println("[CMD] Gyro-Kalibrierung — Board muss still liegen!");
+                    float baseline = 0, stddev = 0;
+                    bool ok = gyro_recalibrate(&baseline, &stddev);
+                    Serial.printf("[CMD] Gyro cal: %s · baseline=%.4f stddev=%.4f\n",
+                                  ok ? "OK" : "FEHLER (zu viel Bewegung)", baseline, stddev);
                 } else if (strcmp(serial_buf, "reset") == 0) {
                     Serial.println("[CMD] → Neustart");
                     Serial.flush();
@@ -325,6 +331,7 @@ void loop() {
                 } else if (strcmp(serial_buf, "help") == 0) {
                     Serial.println("Befehle: sleep, nosleep, gps, lte, lte scan, can sniff, reset");
                     Serial.println("  LTE:   lte bands, lte bands fix, lte bands all");
+                    Serial.println("  Gyro:  gyro cal  (Kalibrierung — Board muss still liegen)");
                     Serial.println("  Debug: at +KOMMANDO  (roher AT-Befehl an Modem)");
                     Serial.println("  Logs:  syslog, elmlog, blelog, scanlog, clearlog");
                 } else {

@@ -280,9 +280,8 @@ void gyro_init() {
     // INT_ENABLE (0x38): Motion-Detection-Interrupt aktivieren (Bit 6)
     mpu_write(0x38, 0x40);
 
-    // ── Baseline: nach Deep Sleep aus SPIFFS laden, sonst kalibrieren ──
-    bool from_spiffs = sleep_was_deep();
-    if (from_spiffs) {
+    // ── Baseline + Bias immer aus SPIFFS laden (manuelle Kalibrierung via "gyro cal") ──
+    {
         File f = SPIFFS.open(GYRO_BASELINE_FILE, "r");
         if (f) {
             float saved = f.readStringUntil('\n').toFloat();
@@ -294,42 +293,14 @@ void gyro_init() {
             }
         } else {
             g_baseline = 1.0f;
+            syslog("GYRO", "Keine Kalibrierung gespeichert — 'gyro cal' ausfuehren!");
         }
-        // Gyro-Bias auch laden
         File fb = SPIFFS.open(GYRO_BIAS_FILE, "r");
         if (fb) {
             g_gyro_bias_x = fb.readStringUntil('\n').toFloat();
             g_gyro_bias_y = fb.readStringUntil('\n').toFloat();
             g_gyro_bias_z = fb.readStringUntil('\n').toFloat();
             fb.close();
-        }
-    } else {
-        float mean = 1.0f, stddev = 0.0f;
-        bool still = calibrate_i2c(mean, stddev);
-        if (still) {
-            g_baseline = mean;
-            File f = SPIFFS.open(GYRO_BASELINE_FILE, "w");
-            if (f) { f.printf("%.6f\n", mean); f.close(); }
-        } else {
-            File f = SPIFFS.open(GYRO_BASELINE_FILE, "r");
-            if (f) {
-                float saved = f.readStringUntil('\n').toFloat();
-                f.close();
-                if (saved >= 0.5f && saved <= 1.5f) {
-                    g_baseline = saved;
-                } else {
-                    g_baseline = 1.0f;
-                }
-            } else {
-                g_baseline = 1.0f;
-            }
-            File fb = SPIFFS.open(GYRO_BIAS_FILE, "r");
-            if (fb) {
-                g_gyro_bias_x = fb.readStringUntil('\n').toFloat();
-                g_gyro_bias_y = fb.readStringUntil('\n').toFloat();
-                g_gyro_bias_z = fb.readStringUntil('\n').toFloat();
-                fb.close();
-            }
         }
     }
 
