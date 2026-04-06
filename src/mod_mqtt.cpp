@@ -96,45 +96,14 @@ bool mqtt_connect() {
 
     TinyGsm& m = modem_get();
 
-    // Erweiterte Fehlermeldungen aktivieren
-
-    // Erweiterte Fehlermeldungen aktivieren
-    m.sendAT("+CMEE=2");
-    m.waitResponse(1000L);
-
-    // PDP-Context prüfen — MQTT braucht aktiven Datenkontext (Context 0)
-    m.sendAT("+CNACT?");
-    String cnact = "";
-    m.waitResponse(3000L, cnact);
-    cnact.trim();
-    Serial.printf("[MQTT] CNACT: %s\n", cnact.c_str());
-
-    // Nur Context 0 prüfen: "+CNACT: 0,1,..." = aktiv, "+CNACT: 0,0,..." = inaktiv
-    bool ctx0_active = (cnact.indexOf("+CNACT: 0,1,") >= 0);
-    if (!ctx0_active) {
-        syslog("MQTT", "PDP-Context 0 nicht aktiv — aktiviere...");
-        char apn_cmd[80];
-        snprintf(apn_cmd, sizeof(apn_cmd), "+CNCFG=0,1,\"%s\"", cfg_apn());
-        m.sendAT(apn_cmd);
-        m.waitResponse(3000L);
-        m.sendAT("+CNACT=0,1");
-        String act_resp = "";
-        m.waitResponse(10000L, act_resp);
-        act_resp.trim();
-        Serial.printf("[MQTT] CNACT activate: %s\n", act_resp.c_str());
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    } else {
-        Serial.println("[MQTT] PDP-Context 0 aktiv — OK");
-    }
-
     syslog("MQTT", "Verbinde...");
     m.sendAT("+SMCONN");
     String resp = "";
     int rc = m.waitResponse(15000L, resp);
     if (rc != 1) {
         resp.trim();
-        char msg[128];
-        snprintf(msg, sizeof(msg), "SMCONN fehlgeschlagen (rc=%d): %s", rc, resp.c_str());
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Verbindung fehlgeschlagen: %s", resp.c_str());
         syslog("MQTT", msg);
         s_connected = false;
         return false;
