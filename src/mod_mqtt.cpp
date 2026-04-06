@@ -75,12 +75,11 @@ void mqtt_configure() {
     mqtt_at_ok("+SMCONF=\"CLEANSS\",1");   // Clean Session
     mqtt_at_ok("+SMCONF=\"QOS\",1");        // Default QoS 1
 
-    // TLS nur bei Port 8883
+    // TLS nur bei Port 8883 — bei plain MQTT kein SMSSL senden
+    // (manche SIM7080G-FW unterstützt AT+SMSSL nicht)
     if (cfg_mqtt_port() == 8883) {
         mqtt_at_ok("+CSSLCFG=\"sslversion\",0,3");  // TLS 1.2
         mqtt_at_ok("+SMSSL=1,\"\"");                  // SSL on, kein Client-Cert
-    } else {
-        mqtt_at_ok("+SMSSL=0,\"\"");                  // SSL off
     }
 
     // Subscribe-Topic vorbereiten
