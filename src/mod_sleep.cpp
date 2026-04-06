@@ -117,12 +117,16 @@ void sleep_update() {
     bool vbus_sleep = vbus_gone_ms >= SLEEP_NO_GUARD_MS;
 
     // Gyro-Fallback: kein VBUS aber Bewegung → wach bleiben (z.B. Transport)
-    // Erst prüfen wenn VBUS mindestens 10s weg ist — kurze Glitches ignorieren.
+    // Erst prüfen wenn VBUS mindestens 15s weg ist — kurze Glitches ignorieren.
     bool gyro_sleep = false;
-    if (!vbus_sleep && vbus_gone_ms >= 10000UL && gyro_ok()) {
+    if (!vbus_sleep && vbus_gone_ms >= 15000UL && gyro_ok()) {
         uint32_t last_shake = gyro_last_shake_ms();
         uint32_t idle_since = (last_shake > 0) ? last_shake : g_boot_ms;
-        gyro_sleep = (now - idle_since) >= SLEEP_INACTIVITY_MS;
+        // Race Condition: Gyro-Task kann last_shake nach now aktualisieren
+        // → uint32_t Underflow → sofort gyro_sleep. Abfangen:
+        if (idle_since <= now) {
+            gyro_sleep = (now - idle_since) >= SLEEP_INACTIVITY_MS;
+        }
     }
 
     if (!vbus_sleep && !gyro_sleep) return;
