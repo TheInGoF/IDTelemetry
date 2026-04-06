@@ -41,6 +41,7 @@
 #include "mod_gps_ext.h"
 #include "mod_pmu.h"
 #include "mod_modem.h"
+#include "mod_mqtt.h"
 #include "mod_sleep.h"
 #include "mod_telemetry.h"
 #include "mod_config.h"
@@ -305,6 +306,8 @@ void loop() {
                     modem_resume_task();
                 } else if (strncmp(serial_buf, "at ", 3) == 0) {
                     modem_send_at(serial_buf + 3);
+                } else if (strcmp(serial_buf, "mqtt") == 0) {
+                    mqtt_print_info();
                 } else if (strcmp(serial_buf, "can sniff") == 0) {
                     can_sniff(5000);  // 5 Sekunden
                 } else if (strcmp(serial_buf, "gyro cal") == 0) {
@@ -329,7 +332,7 @@ void loop() {
                     if (SPIFFS.exists(SPIFFS_SCAN_LOG)) SPIFFS.remove(SPIFFS_SCAN_LOG);
                     Serial.println("[CMD] Alle Logs geloescht");
                 } else if (strcmp(serial_buf, "help") == 0) {
-                    Serial.println("Befehle: sleep, nosleep, gps, lte, lte scan, can sniff, reset");
+                    Serial.println("Befehle: sleep, nosleep, gps, lte, lte scan, mqtt, can sniff, reset");
                     Serial.println("  LTE:   lte bands, lte bands fix, lte bands all");
                     Serial.println("  Gyro:  gyro cal  (Kalibrierung — Board muss still liegen)");
                     Serial.println("  Debug: at +KOMMANDO  (roher AT-Befehl an Modem)");

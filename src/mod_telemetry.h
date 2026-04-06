@@ -91,6 +91,10 @@ bool telem_influx_ok();
 void telem_force_capture(const char* reason, bool force_ig_off = false);
 void telem_send_influx();
 
+// MQTT: älteste ungesendete Zeile aus Ringpuffer holen (und als gesendet markieren).
+// Gibt false zurück wenn keine Zeilen ausstehen.
+bool telem_pop_row(TelemetryRow& out);
+
 // Phase 3: SPIFFS-Persistenz (vor Deep Sleep / nach Wake-Up)
 void telem_persist_to_spiffs();
 void telem_restore_from_spiffs();

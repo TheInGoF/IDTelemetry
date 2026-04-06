@@ -21,6 +21,11 @@ static char s_ix_org    [64]  = SECRET_INFLUX_ORG;
 static char s_ix_bucket [64]  = SECRET_INFLUX_BUCKET;
 static char s_ix_token  [256] = SECRET_INFLUX_TOKEN;
 static char s_ix_device [32]  = SECRET_INFLUX_DEVICE;
+static char s_mq_host  [96]  = SECRET_MQTT_HOST;
+static uint16_t s_mq_port    = SECRET_MQTT_PORT;
+static char s_mq_user  [64]  = SECRET_MQTT_USER;
+static char s_mq_pass  [64]  = SECRET_MQTT_PASS;
+static char s_mq_topic [64]  = SECRET_MQTT_TOPIC;
 static bool s_ble_standby     = false;  // Default: aus
 static bool s_mod_gps         = true;   // Default: GPS vorhanden
 static bool s_log_can         = LOG_CAN_ENABLED_DEFAULT;
@@ -51,6 +56,11 @@ void cfg_init() {
     pref_load(p, "ix_bucket", s_ix_bucket, sizeof(s_ix_bucket), SECRET_INFLUX_BUCKET);
     pref_load(p, "ix_token",  s_ix_token,  sizeof(s_ix_token),  SECRET_INFLUX_TOKEN);
     pref_load(p, "ix_device", s_ix_device, sizeof(s_ix_device), SECRET_INFLUX_DEVICE);
+    pref_load(p, "mq_host",  s_mq_host,  sizeof(s_mq_host),  SECRET_MQTT_HOST);
+    s_mq_port = p.getUShort("mq_port", SECRET_MQTT_PORT);
+    pref_load(p, "mq_user",  s_mq_user,  sizeof(s_mq_user),  SECRET_MQTT_USER);
+    pref_load(p, "mq_pass",  s_mq_pass,  sizeof(s_mq_pass),  SECRET_MQTT_PASS);
+    pref_load(p, "mq_topic", s_mq_topic, sizeof(s_mq_topic), SECRET_MQTT_TOPIC);
     s_ble_standby = p.getBool("ble_stdby", false);
     s_mod_gps     = p.getBool("mod_gps",     true);
     s_log_can     = p.getBool("log_can", LOG_CAN_ENABLED_DEFAULT);
@@ -61,6 +71,7 @@ void cfg_init() {
     Serial.println("[CFG] init OK");
     Serial.printf("[CFG] Traccar: https://%s  ID=%s\n", s_tc_host, s_tc_id);
     Serial.printf("[CFG] InfluxDB: https://%s  org=%s  bucket=%s\n", s_ix_host, s_ix_org, s_ix_bucket);
+    Serial.printf("[CFG] MQTT: %s:%d  topic=%s\n", s_mq_host, s_mq_port, s_mq_topic);
 }
 
 const char* cfg_ap_ssid()       { return s_ap_ssid; }
@@ -76,6 +87,11 @@ const char* cfg_influx_org()    { return s_ix_org; }
 const char* cfg_influx_bucket() { return s_ix_bucket; }
 const char* cfg_influx_token()  { return s_ix_token; }
 const char* cfg_influx_device() { return s_ix_device; }
+const char* cfg_mqtt_host()    { return s_mq_host; }
+uint16_t    cfg_mqtt_port()    { return s_mq_port; }
+const char* cfg_mqtt_user()    { return s_mq_user; }
+const char* cfg_mqtt_pass()    { return s_mq_pass; }
+const char* cfg_mqtt_topic()   { return s_mq_topic; }
 bool        cfg_ble_standby()  { return s_ble_standby; }
 bool        cfg_mod_gps()      { return s_mod_gps; }
 bool        cfg_log_can()      { return s_log_can; }
@@ -112,6 +128,14 @@ bool cfg_save_json(const uint8_t* body, size_t len) {
     save("ix_bucket", s_ix_bucket, sizeof(s_ix_bucket), doc["ix_bucket"]);
     save("ix_token",  s_ix_token,  sizeof(s_ix_token),  doc["ix_token"]);
     save("ix_device", s_ix_device, sizeof(s_ix_device), doc["ix_device"]);
+    save("mq_host",   s_mq_host,  sizeof(s_mq_host),  doc["mq_host"]);
+    save("mq_user",   s_mq_user,  sizeof(s_mq_user),  doc["mq_user"]);
+    save("mq_pass",   s_mq_pass,  sizeof(s_mq_pass),  doc["mq_pass"]);
+    save("mq_topic",  s_mq_topic, sizeof(s_mq_topic), doc["mq_topic"]);
+    if (!doc["mq_port"].isNull()) {
+        s_mq_port = doc["mq_port"].as<uint16_t>();
+        p.putUShort("mq_port", s_mq_port);
+    }
     save("lang",      s_lang,      sizeof(s_lang),      doc["lang"]);
     if (!doc["ble_standby"].isNull()) {
         s_ble_standby = doc["ble_standby"].as<bool>();
@@ -143,7 +167,7 @@ bool cfg_save_json(const uint8_t* body, size_t len) {
 }
 
 const char* cfg_to_json() {
-    static char buf[900];
+    static char buf[1200];
     JsonDocument doc;
     doc["ap_ssid"]   = s_ap_ssid;
     doc["ap_pass"]   = s_ap_pass;
@@ -158,6 +182,11 @@ const char* cfg_to_json() {
     doc["ix_bucket"] = s_ix_bucket;
     doc["ix_token"]  = s_ix_token;
     doc["ix_device"]    = s_ix_device;
+    doc["mq_host"]      = s_mq_host;
+    doc["mq_port"]      = s_mq_port;
+    doc["mq_user"]      = s_mq_user;
+    doc["mq_pass"]      = s_mq_pass;
+    doc["mq_topic"]     = s_mq_topic;
     doc["ble_standby"]  = s_ble_standby;
     doc["mod_gps"]      = s_mod_gps;
     doc["log_can"]      = s_log_can;

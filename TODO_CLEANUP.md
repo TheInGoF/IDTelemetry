@@ -48,17 +48,23 @@ Alle Aufrufe sind entfernt. Nur noch die Dateien selbst übrig.
 
 ---
 
-## Traccar: komplett entfernbar
+## ~~Traccar: komplett entfernbar~~ ✓ erledigt
 
-Traccar wird nicht mehr genutzt (InfluxDB ist der einzige Telemetrie-Empfänger).
+Traccar + InfluxDB HTTP entfernt, ersetzt durch MQTT (2026-04-06).
 
-### Dateien:
-- `mod_traccar.cpp` + `mod_traccar.h` — komplett entfernbar
-- `TRACCAR_SEND_INTERVAL_MS`, `TRACCAR_MIN_MOVE_DEG` → [config.h](src/config.h)
-- `SECRET_TRACCAR_HOST`, `SECRET_TRACCAR_PORT` → [secrets.h.example](src/secrets.h.example)
-- `cfg_traccar_host()` / `cfg_traccar_port()` → [mod_config.h](src/mod_config.h) + [mod_config.cpp](src/mod_config.cpp)
-- Traccar-Aufrufe in [mod_modem.cpp](src/mod_modem.cpp) (Send-Logik im LTE-Fenster)
-- `g_traccar_ok` in [shared.h](src/shared.h)
+---
+
+## ig-Logik (Ignition): toter Code
+
+`ig` wurde aus dem MQTT-Payload entfernt. VBUS-Nachlaufzeit im VW ist
+nicht vorhersehbar → keine zuverlässige Fahrterkennung möglich.
+Die ig-Logik in mod_telemetry.cpp läuft noch, wird aber nicht mehr gesendet.
+
+### Entfernbar:
+- `s_ig_value`, `s_ig_loss_ms`, `IG_HYSTERESIS_MS` → [mod_telemetry.cpp:68-70](src/mod_telemetry.cpp#L68-L70)
+- VBUS→ig Zuweisung im Capture-Block → [mod_telemetry.cpp:220-226](src/mod_telemetry.cpp#L220-L226)
+- `force_ig_off` in `telem_force_capture()` → [mod_telemetry.cpp:302-303](src/mod_telemetry.cpp#L302-L303)
+- `row.ig` Feld in `TelemetryRow` → [mod_telemetry.h:66](src/mod_telemetry.h#L66)
 
 ---
 

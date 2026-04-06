@@ -95,8 +95,9 @@ void sleep_log_wake() {
 
 // ── Update: im loop() aufrufen ────────────────────────────
 void sleep_update() {
-    if (g_nosleep) return;
+    if (g_nosleep || g_shutdown) return;
 
+    static bool s_trigger_logged = false;
     uint32_t now = millis();
 
     // ─── VBUS = Auto an → wach bleiben ─────────────────────
@@ -107,6 +108,7 @@ void sleep_update() {
         if (g_sleep_requested) {
             g_sleep_requested = false;
             g_trip_ending = false;
+            s_trigger_logged = false;  // TRIGGER-Log bei erneutem Sleep wieder erlauben
             syslog("SLEEP", "Sleep abgebrochen — VBUS wieder da");
         }
         return;
@@ -131,8 +133,9 @@ void sleep_update() {
 
     if (!vbus_sleep && !gyro_sleep) return;
 
-    // ─── Debug: warum wird Sleep ausgelöst? ──────────────
-    {
+    // ─── Debug: warum wird Sleep ausgelöst? (nur einmal loggen) ──
+    if (!s_trigger_logged) {
+        s_trigger_logged = true;
         uint32_t last_shake = gyro_last_shake_ms();
         char dbg[128];
         snprintf(dbg, sizeof(dbg),

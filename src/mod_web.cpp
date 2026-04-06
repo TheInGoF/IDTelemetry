@@ -24,7 +24,6 @@ static void send_html(AsyncWebServerRequest* r, const char* path) {
 static void on_ws_event(AsyncWebSocket*, AsyncWebSocketClient* c,
                         AwsEventType t, void*, uint8_t*, size_t) {
     if (t == WS_EVT_CONNECT) {
-        ws.cleanupClients(1);  // alte Verbindung sofort schließen
         { char m[40]; snprintf(m, sizeof(m), "WebSocket #%u verbunden", c->id()); syslog("CLIENT", m); }
         wifi_guard_client_connected();
         JsonDocument doc;

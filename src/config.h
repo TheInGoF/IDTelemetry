@@ -31,17 +31,20 @@
 #define TELEM_GPS_MAX_INTERVAL_MS 60000UL // Zeit-Trigger: max. 1 Minute ohne Punkt
 #define TELEM_GPS_MIN_SPEED_KMH    3.0f   // Zeit-Trigger nur ab dieser Geschwindigkeit
 #define TELEM_YAW_TURN_DPS          6     // Kurven-Trigger (Gyro/Yaw): Drehrate in °/s
-#define TELEM_CURVE_COOLDOWN_MS  3000UL   // Kurven-Cooldown: kein neuer Kurven-Trigger für 3s
+#define TELEM_CURVE_COOLDOWN_MS  2000UL   // Kurven-Cooldown: kein neuer Kurven-Trigger für 3s
 
 // ============================================================
 //  Telemetrie / Senden
 // ============================================================
-#define SEND_INTERVAL_S          90                          // GPS→LTE Wechselzyklus
-#define TRACCAR_SEND_INTERVAL_MS (SEND_INTERVAL_S * 1000UL) // abgeleitet — nicht ändern
-#define EXT_GPS_INFLUX_INTERVAL_MS   60000UL   // InfluxDB-Puffer alle 60s (ext. GPS)
 #define TELEM_ROW_BUF_SIZE       500    // max. Zeilen im RAM-Ringpuffer
-#define INFLUX_ROWS_PER_SEND      50    // max. Zeilen pro LTE-Fenster
-#define TRACCAR_MIN_MOVE_DEG    0.0001  // ~10 m — verhindert Traccar-Ping bei GPS-Drift
+
+// ============================================================
+//  MQTT (persistente Verbindung via SIM7080G nativen Client)
+// ============================================================
+#define MQTT_KEEPALIVE_S        60      // MQTT Keep-Alive Intervall
+#define MQTT_QOS                1       // QoS 1 = at least once (Broker sendet PUBACK)
+#define MQTT_RECONNECT_MS       10000UL // Reconnect-Intervall bei Verbindungsverlust
+#define MQTT_PUBLISH_TIMEOUT_MS 10000UL // Timeout für Publish
 
 // ============================================================
 //  Deep Sleep / Gyro

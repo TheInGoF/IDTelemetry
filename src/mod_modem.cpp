@@ -5,8 +5,8 @@
 #include "mod_modem.h"
 #include "secrets.h"
 #include "mod_sleep.h"
-#include "mod_traccar.h"
 #include "mod_telemetry.h"
+#include "mod_mqtt.h"
 #include "shared.h"
 #include "config.h"
 #include "mod_config.h"
@@ -60,6 +60,7 @@ static bool   s_prev_fix_ok  = false;
 // ---- Interne Linkage für mod_traccar ----------------------
 
 TinyGsm& modem_get() { return s_modem; }
+HardwareSerial& modem_serial() { return s_serial; }
 
 // ---- Modem Power-On ---------------------------------------
 
@@ -591,19 +592,12 @@ static void modem_task(void* /*param*/) {
     uint32_t   last_stat_ms    = 0;
     uint32_t   stat_interval   = 5000;  // erste Abfrage nach 5s, danach GPS_INTERVAL_MS
 
-    uint32_t   last_traccar_ms = 0;
-    bool       traccar_first   = true;  // erster Traccar-Versand nach TRACCAR_SEND_INTERVAL_MS
-
-    // Externes GPS: eigene Sende-Timer (kein GPS/LTE-Wechsel)
-    uint32_t   last_ext_influx_ms  = 0;
-
     // Fahrtende-Erkennung: VBUS weg → 1min warten → Capture + Flush + Schlafen
     bool       vbus_was_in      = pmu_is_vbus_in();
     uint32_t   vbus_lost_ms     = 0;
 
     int        scan_fail_count = 0;        // Fehlversuche STATE_WAIT_FOR_NETWORK
     bool       radio_initialized = false;  // CFUN-Sequenz bereits ausgeführt
-    int        sig_fail_count = 0;         // Aufeinanderfolgende Signal-99-Abfragen
 
     bool       first_fix       = true;     // Erster GPS-Fix noch nicht gemeldet
     bool       had_fix         = false;    // Zuletzt gültiger Fix
@@ -704,6 +698,15 @@ static void modem_task(void* /*param*/) {
                         snprintf(syslog_msg, sizeof(syslog_msg), "Netz verbunden · %s · %d/5 Balken · CSQ %d", s_operator, bars, s_sig_quality);
                         syslog("MODEM", syslog_msg);
 
+                        // GPRS + MQTT sofort aufbauen
+                        if (modem_ensure_connected()) {
+                            static bool s_ntp_done = false;
+                            if (!s_ntp_done) s_ntp_done = modem_ntp_sync();
+
+                            mqtt_configure();
+                            mqtt_connect();
+                        }
+
                         if (GPS_EXT_ENABLED) {
                             // Externes GPS aktiv → internes SIM7080G-GPS nicht starten
                             syslog("GPS", "Intern deaktiviert — ext. GPS übernimmt");
@@ -711,8 +714,6 @@ static void modem_task(void* /*param*/) {
                             state = STATE_RUNNING;
                             last_stat_ms = now;
                             stat_interval = 5000;
-                            last_traccar_ms = now;
-                            traccar_first = true;
                         } else if (gps_enable_with_config()) {
                             s_gps_enabled = true;
                             syslog("GPS", "Aktiviert · suche Fix");
@@ -720,8 +721,6 @@ static void modem_task(void* /*param*/) {
                             state = STATE_RUNNING;
                             last_stat_ms = now;
                             stat_interval = 5000;
-                            last_traccar_ms = now;
-                            traccar_first = true;
                         } else {
                             syslog("MODEM", "GPS-Aktivierung fehlgeschlagen · warte 30s");
                             vTaskDelay(pdMS_TO_TICKS(30000));
@@ -801,16 +800,12 @@ static void modem_task(void* /*param*/) {
                             syslog("GPS", syslog_msg);
                             first_fix = false;
                             had_fix   = true;
-                            // 60s LTE-Timer startet ab erstem Fix — nicht ab Boot/Registrierung
-                            last_traccar_ms = now;
                         } else if (!had_fix) {
-                            // Fix nach LTE-Fenster wieder da → 60s Timer neu starten
                             snprintf(syslog_msg, sizeof(syslog_msg),
                                      "Fix wieder · %.6f %.6f · %d im Fix",
                                      lat, lon, usat);
                             syslog("GPS", syslog_msg);
-                            had_fix         = true;
-                            last_traccar_ms = now;  // 60s ab jetzt
+                            had_fix = true;
                         }
                         // Im Normalbetrieb kein Log-Spam — g_gps wird still aktualisiert
 
@@ -834,28 +829,6 @@ static void modem_task(void* /*param*/) {
                     }
 
 
-
-                    #ifndef LTE_DISABLED
-                    // Modem-Status aktualisieren (nur wenn SIM vorhanden)
-                    // NICHT waehrend GPS aktiv — SIM7080G kann GPS und LTE
-                    // nicht gleichzeitig, CSQ=99 waehrend GPS ist normal.
-                    if (s_sim_ok && !s_gps_enabled) {
-                        s_sig_quality = (int8_t)s_modem.getSignalQuality();
-
-                        if (s_sig_quality < 0 || s_sig_quality == 99) {
-                             sig_fail_count++;
-                             if (sig_fail_count >= 6) {
-                                 syslog("MODEM", "Signal verloren (6x) · Netzsuche");
-                                 state = STATE_WAIT_FOR_NETWORK;
-                                 gps_invalidate();
-                                 sig_fail_count = 0;
-                                 continue;
-                             }
-                        } else {
-                             sig_fail_count = 0;
-                        }
-                    }
-                    #endif // LTE_DISABLED
 
                     // Periodischer GPS-Positions-Log (alle 30s bei aktivem Fix)
                     {
@@ -909,80 +882,60 @@ static void modem_task(void* /*param*/) {
                             syslog("MODEM", "VBUS weg seit 5s — Flush");
                             telem_force_capture("VBUS weg", true);
                             vTaskDelay(pdMS_TO_TICKS(300));
-                            if (s_modem.isGprsConnected()) {
-                                telem_send_influx();
-                                for (int i = 0; i < 10 && telem_get_row_pending() > 0; i++)
-                                    vTaskDelay(pdMS_TO_TICKS(500));
-                            }
+                            // Ausstehende Zeilen werden unten im MQTT-Block gepublisht
                         }
                         // VBUS weg aber Guard noch da → VW-Kurzzeitabschaltung, weiter warten
                     }
                 }
 
                 #ifndef LTE_DISABLED
-                // ── Externes GPS: kein GPS/LTE-Wechsel ──────────────────────────
-                // SIM7080G bleibt in LTE-Modus, ext. GPS liefert Fixes über UART2.
-                // Bestehende GPS/LTE-Wechsel-Logik (unten) bleibt komplett unverändert.
-                if (gps_ext_ok()) {
-                    if (s_sim_ok &&
-                        (now - last_ext_influx_ms) >= EXT_GPS_INFLUX_INTERVAL_MS) {
-                        last_ext_influx_ms = now;
-                        // Nur verbinden wenn tatsächlich Zeilen zum Senden da sind
-                        if (telem_get_row_pending() > 0 && modem_ensure_connected()) {
-                            // NTP einmalig nach erstem GPRS-Connect
-                            static bool s_ntp_synced = false;
-                            if (!s_ntp_synced) s_ntp_synced = modem_ntp_sync();
+                // ── MQTT: Sofort-Publish ausstehender Zeilen ────────────────────
+                // Kein GPS/LTE-Wechsel — ext. GPS liefert Fixes, SIM7080G
+                // bleibt durchgehend in LTE. MQTT-Verbindung ist persistent.
+                {
+                    static uint32_t s_mqtt_reconnect_ms = 0;
 
-                            telem_send_influx();
-                            s_sig_quality = (int8_t)s_modem.getSignalQuality();
-                        }
-                    }
-                }
-
-                // ── Internes GPS: GPS/LTE-Wechsel (unverändert) ─────────────────
-                if (!gps_ext_ok() && s_sim_ok && had_fix && (now - last_traccar_ms) >= TRACCAR_SEND_INTERVAL_MS) {
-
-                    last_traccar_ms = now;  // sofort setzen — verhindert Loop bei langer Ausfuehrung
-
-                    // GPS-Position JETZT sichern — nach disableGPS() ist g_gps ungültig
-                    GpsSnapshot lte_fix = gps_snapshot();
-
-                    syslog("MODEM", "LTE-Fenster · GPS stop");
-                    s_modem.disableGPS();
-                    s_gps_enabled = false;
-                    gps_invalidate();
-                    vTaskDelay(pdMS_TO_TICKS(3000));  // RF-Umschaltung GPS→LTE braucht ~2-3s
-
-                    if (modem_ensure_connected()) {
-                        traccar_on_gps_tick(lte_fix);
-                        telem_send_influx();
-                        // GPRS bewusst NICHT trennen — Verbindung bleibt warm
-                        // damit naechstes LTE-Fenster sofort senden kann
-                    } else {
-                        // GPRS fehlgeschlagen → Registrierungsstatus pruefen
-                        RegStatus reg = s_modem.getRegistrationStatus();
-                        if (reg == REG_OK_HOME || reg == REG_OK_ROAMING) {
-                            // Noch registriert — GPS reaktivieren, naechstes Fenster erneut versuchen
-                            syslog("MODEM", "GPRS fehlgeschlagen · noch registriert · GPS weiter");
-                        } else {
-                            // Netz verloren → Neuregistrierung
-                            syslog("MODEM", "Netz verloren · Neuregistrierung");
-                            state = STATE_WAIT_FOR_NETWORK;
+                    // MQTT-Verbindung prüfen / wiederherstellen
+                    if (s_sim_ok && !mqtt_is_connected()) {
+                        if (now - s_mqtt_reconnect_ms >= MQTT_RECONNECT_MS) {
+                            s_mqtt_reconnect_ms = now;
+                            syslog("MQTT", "Reconnect...");
+                            if (modem_ensure_connected()) {
+                                mqtt_connect();
+                            } else {
+                                RegStatus reg = s_modem.getRegistrationStatus();
+                                if (reg != REG_OK_HOME && reg != REG_OK_ROAMING) {
+                                    syslog("MODEM", "Netz verloren · Neuregistrierung");
+                                    state = STATE_WAIT_FOR_NETWORK;
+                                }
+                            }
                         }
                     }
 
-                    // GPS nur reaktivieren wenn wir in STATE_RUNNING bleiben
-                    if (state == STATE_RUNNING) {
-                        if (gps_enable_with_config()) {
-                            s_gps_enabled = true;
-                            had_fix   = false;  // warte auf neuen Fix nach LTE
-                            first_fix = false;  // aber kein "Erster Fix" Log mehr
-                            syslog("GPS", "Reaktiviert nach LTE · warte auf Fix");
-                        } else {
-                            syslog("GPS", "FEHLER · Reaktivierung nach LTE");
+                    // Ausstehende Zeilen sofort publishen
+                    if (mqtt_is_connected() && telem_get_row_pending() > 0) {
+                        TelemetryRow row;
+                        int sent = 0;
+                        while (telem_get_row_pending() > 0 && sent < 10) {
+                            if (!telem_pop_row(row)) break;
+                            if (!mqtt_publish_row(row)) {
+                                syslog("MQTT", "Publish fehlgeschlagen · Row verworfen");
+                                break;
+                            }
+                            sent++;
+                            vTaskDelay(pdMS_TO_TICKS(50));
                         }
                     }
 
+                    // URCs verarbeiten (Server-ACK)
+                    mqtt_poll();
+
+                    // Signal periodisch abfragen
+                    static uint32_t s_sig_ms = 0;
+                    if (s_sim_ok && (now - s_sig_ms) >= 30000UL) {
+                        s_sig_ms = now;
+                        s_sig_quality = (int8_t)s_modem.getSignalQuality();
+                    }
                 }
                 #endif // LTE_DISABLED
 
@@ -1308,11 +1261,22 @@ bool        modem_sim_ok()          { return s_sim_ok; }
 void modem_pre_sleep_flush() {
     telem_force_capture("Schlafen · ig=0", true);  // ig=0 erzwingen
     vTaskDelay(pdMS_TO_TICKS(300));
-    if (modem_ensure_connected()) {
-        telem_send_influx();
-        for (int i = 0; i < 10 && telem_get_row_pending() > 0; i++)
-            vTaskDelay(pdMS_TO_TICKS(500));
+
+    if (mqtt_is_connected()) {
+        TelemetryRow row;
+        int sent = 0;
+        while (telem_get_row_pending() > 0 && sent < 20) {
+            if (!telem_pop_row(row)) break;
+            if (!mqtt_publish_row(row)) break;
+            sent++;
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+        mqtt_disconnect();
     }
+}
+
+bool modem_mqtt_connected() {
+    return mqtt_is_connected();
 }
 
 void modem_poweroff() {

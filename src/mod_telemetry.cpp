@@ -1,8 +1,3 @@
-// TINY_GSM_MODEM_SIM7080 wird ausschließlich über platformio.ini build_flags gesetzt.
-#include <TinyGsmClient.h>
-#include <ArduinoHttpClient.h>
-#include <miniz.h>
-
 #include "mod_telemetry.h"
 #include "mod_sleep.h"
 #include "shared.h"
@@ -23,12 +18,6 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <string.h>
-
-// TinyGsm-Instanz aus mod_modem (nicht im öffentlichen Header)
-extern TinyGsm& modem_get();
-
-// ---- Persistente TLS-Verbindung (kein Re-Handshake) --------
-static TinyGsmClientSecure* s_influx_client = nullptr;
 
 // ── ECU-Adressen (VW MEB) ────────────────────────────────────
 // 29-Bit extended IDs (VW MEB: Priority 0x17 + Adresse)
@@ -723,290 +712,42 @@ const char* telem_preview_rows(int max_rows) {
 }
 
 // ============================================================
-//  Phase 3 — InfluxDB v2 Sender
+//  InfluxDB v2 Sender — entfernt (ersetzt durch MQTT)
+//  Siehe mod_mqtt.cpp für das neue Sendeformat.
 // ============================================================
 
-// ── Kurze Feldnamen (Datenvolumen-optimiert) ──────────────────
-// Reihenfolge muss zu TelemField-Enum passen!
-// nullptr = nicht senden
-// fmt: 'f'=float(%.4g)  'b'=bool(0i/1i)  'i'=int(%di)
-//      'g'=gps(%.6f)    '1'=1-Dezimale(%.1f)
-struct InfluxField {
-    const char* key;
-    char        fmt;
-};
-
-static const InfluxField s_fields[TELEM_FIELD_COUNT] = {
-    // Schnell (5s)
-    { "s",  'f' },   // TELEM_SOC          — float %
-    { "u",  'i' },   // TELEM_VOLTAGE      — int V
-    { "i",  'i' },   // TELEM_CURRENT      — int A
-    { "p",  '1' },   // TELEM_POWER        — 1 Dez kW
-    { "v",  'f' },   // TELEM_VEHICLE_SPEED — float km/h
-    { "c",  'b' },   // TELEM_IS_CHARGING  — bool
-    { "dc", 'b' },   // TELEM_IS_DCFC      — bool
-    // Mittel (10–15s)
-    { "bt", 'i' },   // TELEM_BATT_TEMP    — int °C
-    { "et", 'i' },   // TELEM_EXT_TEMP     — int °C
-    { "r",  'f' },   // TELEM_RANGE        — float km
-    { "la", 'g' },   // TELEM_GPS_LAT      — 6 Dez °
-    { "lo", 'g' },   // TELEM_GPS_LON      — 6 Dez °
-    { "hd", 'i' },   // TELEM_GPS_HEADING  — int °
-    { nullptr, 0 },  // TELEM_GPS_VALID    — skip
-    { nullptr, 0 },  // TELEM_GYRO_G       — skip (nicht senden)
-    { nullptr, 0 },  // TELEM_LTE_SIGNAL   — manuell als ls
-    { nullptr, 0 },  // TELEM_LTE_OPERATOR — String, skip
-    // Langsam (30–60s)
-    { "ca", 'f' },   // TELEM_CAPACITY     — float kWh
-    { "kw", '1' },   // TELEM_KWH_CHARGED  — float kWh (1 Dez)
-    { "pk", 'b' },   // TELEM_IS_PARKED    — bool
-    { "od", '1' },   // TELEM_ODOMETER     — float km (1 Dez, InfluxDB erwartet float)
-    { "bd", 'i' },   // TELEM_BATT_DEVICE  — int %
-};
-
 void telem_send_influx() {
-    if (!s_mutex) return;
-
-    // ── Schritt 1: Ausstehende Zeilen unter Mutex snapshot-en ────
-    static TelemetryRow* rows_snap = nullptr;
-    if (!rows_snap) {
-        rows_snap = (TelemetryRow*)ps_calloc(INFLUX_ROWS_PER_SEND, sizeof(TelemetryRow));
-        if (!rows_snap) rows_snap = (TelemetryRow*)calloc(INFLUX_ROWS_PER_SEND, sizeof(TelemetryRow));
-        if (!rows_snap) return;
-    }
-    uint16_t rows_to_send = 0;
-    uint16_t send_start   = 0;
-
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) != pdTRUE) return;
-    rows_to_send = (s_row_pending < (uint16_t)INFLUX_ROWS_PER_SEND)
-                   ? s_row_pending
-                   : (uint16_t)INFLUX_ROWS_PER_SEND;
-    send_start = s_row_send_tail;
-    for (uint16_t i = 0; i < rows_to_send; i++) {
-        rows_snap[i] = s_row_buf[(send_start + i) % TELEM_ROW_BUF_SIZE];
-    }
-    xSemaphoreGive(s_mutex);
-
-    if (rows_to_send == 0) {
-        Serial.println("[INFLUX] Keine Zeilen ausstehend");
-        return;
-    }
-
-    // ── Schritt 2: Multi-Line-Protocol-Body aufbauen ─────────────
-    // ~220 Bytes/Zeile Reserve + Puffer-Ende
-    static const int BODY_SIZE = INFLUX_ROWS_PER_SEND * 240 + 16;
-    static char* body = nullptr;
-    if (!body) {
-        body = (char*)ps_calloc(1, BODY_SIZE);
-        if (!body) body = (char*)calloc(1, BODY_SIZE);
-        if (!body) return;
-    }
-    int pos      = 0;
-    int lines_ok = 0;
-
-    for (uint16_t r = 0; r < rows_to_send; r++) {
-        const TelemetryRow& row = rows_snap[r];
-        int line_start = pos;
-        int field_cnt  = 0;
-
-        if (pos + 64 >= (int)BODY_SIZE) break;  // kein Platz mehr
-
-        // Operator-Tag nur wenn nicht leer
-        char op_tag[48] = "";
-        {
-            char op_copy[32];
-            if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-                memcpy(op_copy, s_operator_str, sizeof(op_copy));
-                xSemaphoreGive(s_mutex);
-            } else {
-                op_copy[0] = '\0';
-            }
-            if (op_copy[0]) {
-                // InfluxDB-Tag: Leerzeichen/Komma escapen
-                int oi = 0;
-                for (int ci = 0; op_copy[ci] && oi < (int)sizeof(op_tag) - 1; ci++) {
-                    if (op_copy[ci] == ' ' || op_copy[ci] == ',') { if (oi < (int)sizeof(op_tag) - 2) { op_tag[oi++] = '\\'; } }
-                    op_tag[oi++] = op_copy[ci];
-                }
-                op_tag[oi] = '\0';
-            }
-        }
-        if (op_tag[0])
-            pos += snprintf(body + pos, BODY_SIZE - pos,
-                            "v,d=%s,op=%s ", cfg_influx_device(), op_tag);
-        else
-            pos += snprintf(body + pos, BODY_SIZE - pos,
-                            "v,d=%s ", cfg_influx_device());
-
-        for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
-            if (!s_fields[f].key) continue;
-            if (!row.valid[f])    continue;
-            if (pos + 32 >= (int)BODY_SIZE) break;
-
-            if (field_cnt > 0) body[pos++] = ',';
-
-            switch (s_fields[f].fmt) {
-                case 'b': pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%di",
-                              s_fields[f].key, (int)(row.values[f] > 0.5f ? 1 : 0)); break;
-                case 'i': pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%di",
-                              s_fields[f].key, (int)row.values[f]); break;
-                case 'g': pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%.6f",
-                              s_fields[f].key, (double)row.values[f]); break;
-                case '1': pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%.1f",
-                              s_fields[f].key, row.values[f]); break;
-                default:  pos += snprintf(body + pos, BODY_SIZE - pos, "%s=%.4g",
-                              s_fields[f].key, row.values[f]); break;
-            }
-            field_cnt++;
-        }
-
-        // LTE-Signal manuell (war nullptr in s_fields[])
-        if (row.valid[TELEM_LTE_SIGNAL] && pos + 16 < (int)BODY_SIZE) {
-            if (field_cnt > 0) body[pos++] = ',';
-            pos += snprintf(body + pos, BODY_SIZE - pos, "ls=%di",
-                            (int)row.values[TELEM_LTE_SIGNAL]);
-            field_cnt++;
-        }
-
-        // Delta-Status: _eq (gleich) und _na (fehlt) als Bitmask
-        if (row.eq_mask && pos + 20 < (int)BODY_SIZE) {
-            if (field_cnt > 0) body[pos++] = ',';
-            pos += snprintf(body + pos, BODY_SIZE - pos, "_eq=%lui",
-                            (unsigned long)row.eq_mask);
-            field_cnt++;
-        }
-        if (row.na_mask && pos + 20 < (int)BODY_SIZE) {
-            if (field_cnt > 0) body[pos++] = ',';
-            pos += snprintf(body + pos, BODY_SIZE - pos, "_na=%lui",
-                            (unsigned long)row.na_mask);
-            field_cnt++;
-        }
-
-        if (field_cnt == 0) {
-            pos = line_start;  // leere Zeile rückgängig machen
-            continue;
-        }
-
-        pos += snprintf(body + pos, BODY_SIZE - pos, " %lu\n",
-                        (unsigned long)row.unix_s);
-        lines_ok++;
-    }
-
-    if (lines_ok == 0) {
-        Serial.println("[INFLUX] Alle Zeilen leer — uebersprungen");
-        return;
-    }
-
-    // ── Schritt 3: gzip-Kompression ──────────────────────────────
-    // gzip = 10-Byte Header + raw deflate + CRC32 + Originalsize (8 Byte Footer)
-    static const int ZBUF_SIZE = BODY_SIZE + 64;
-    static uint8_t* zbuf = nullptr;
-    if (!zbuf) {
-        zbuf = (uint8_t*)ps_calloc(1, ZBUF_SIZE);
-        if (!zbuf) zbuf = (uint8_t*)calloc(1, ZBUF_SIZE);
-    }
-
-    int         send_len   = pos;
-    const void* send_buf   = body;
-    bool        compressed = false;
-
-    if (zbuf) {
-        // gzip-Header schreiben
-        static const uint8_t GZ_HDR[10] = {
-            0x1f, 0x8b,  // Magic
-            0x08,        // Methode: deflate
-            0x00,        // Flags: keine
-            0,0,0,0,     // Modification time: unbekannt
-            0x00,        // Extra flags
-            0xff         // OS: unbekannt
-        };
-        memcpy(zbuf, GZ_HDR, 10);
-
-        // raw deflate in zbuf+10 (window_bits negativ → kein zlib-Header)
-        mz_stream zs = {};
-        if (mz_deflateInit2(&zs, MZ_DEFAULT_COMPRESSION, MZ_DEFLATED,
-                            -MZ_DEFAULT_WINDOW_BITS, 8, MZ_DEFAULT_STRATEGY) == MZ_OK) {
-            zs.next_in   = (const unsigned char*)body;
-            zs.avail_in  = (mz_uint32)pos;
-            zs.next_out  = zbuf + 10;
-            zs.avail_out = (mz_uint32)(ZBUF_SIZE - 18);  // 10 Header + 8 Footer reserviert
-            int zret = mz_deflate(&zs, MZ_FINISH);
-            mz_deflateEnd(&zs);
-
-            if (zret == MZ_STREAM_END) {
-                int deflate_len = (int)zs.total_out;
-                // gzip-Footer: CRC32 + Originalsize (little-endian)
-                uint32_t crc  = (uint32_t)mz_crc32(MZ_CRC32_INIT,
-                                    (const uint8_t*)body, (size_t)pos);
-                uint32_t orig = (uint32_t)pos;
-                uint8_t* ft   = zbuf + 10 + deflate_len;
-                ft[0] = crc & 0xff;  ft[1] = (crc>>8)&0xff;
-                ft[2] = (crc>>16)&0xff; ft[3] = (crc>>24)&0xff;
-                ft[4] = orig&0xff;   ft[5] = (orig>>8)&0xff;
-                ft[6] = (orig>>16)&0xff; ft[7] = (orig>>24)&0xff;
-                send_len   = 10 + deflate_len + 8;
-                send_buf   = zbuf;
-                compressed = true;
-            }
-        }
-    }
-
-    // ── Schritt 4: HTTP POST ─────────────────────────────────────
-    if (!s_influx_client) s_influx_client = new TinyGsmClientSecure(modem_get());
-    HttpClient http(*s_influx_client, cfg_influx_host(), 443);
-    http.setHttpResponseTimeout(15000);
-
-    char path[192];
-    snprintf(path, sizeof(path), "/api/v2/write?org=%s&bucket=%s&precision=s",
-             cfg_influx_org(), cfg_influx_bucket());
-
-
-    http.beginRequest();
-    http.post(path);
-    { char auth[300]; snprintf(auth, sizeof(auth), "Token %s", cfg_influx_token()); http.sendHeader("Authorization", auth); }
-    http.sendHeader("Content-Type", "text/plain; charset=utf-8");
-    if (compressed) http.sendHeader("Content-Encoding", "gzip");
-    http.sendHeader("Content-Length", send_len);
-    http.beginBody();
-    http.write((const uint8_t*)send_buf, send_len);
-    http.endRequest();
-
-    int status = http.responseStatusCode();
-
-    // ── Schritt 4: Buffer-Pointer bei Erfolg vorrücken ───────────
-    if (status == 204) {
-        s_influx_ok = true;
-        // Verbindung bewusst NICHT schließen — TLS-Session bleibt für nächstes Fenster
-        if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
-            s_row_send_tail = (uint16_t)((s_row_send_tail + rows_to_send) % TELEM_ROW_BUF_SIZE);
-            s_row_pending  -= rows_to_send;
-            xSemaphoreGive(s_mutex);
-        }
-        char msg[64];
-        snprintf(msg, sizeof(msg), "OK · %d Zeilen · %d→%dB%s · %u ausstehend",
-                 lines_ok, pos, send_len, compressed ? " gz" : "", s_row_pending);
-        syslog("INFLUX", msg);
-    } else {
-        // Fehler: send_tail bleibt → nächster Zyklus versucht es erneut
-        s_influx_ok = false;
-        // Response-Body lesen (InfluxDB liefert JSON-Fehlermeldung)
-        String rbody = http.responseBody();
-        s_influx_client->stop();  // Bei Fehler Verbindung zurücksetzen
-        rbody.trim();
-        char msg[80];
-        snprintf(msg, sizeof(msg), "Fehler HTTP %d · %u ausstehend", status, s_row_pending);
-        syslog("INFLUX", msg);
-        if (rbody.length() > 0) {
-            Serial.printf("[INFLUX] Body: %.200s\n", rbody.c_str());
-        }
-    }
+    // InfluxDB entfernt — Daten gehen jetzt via MQTT (mod_mqtt.cpp)
 }
 
 // ============================================================
-//  Phase 3 — SPIFFS-Persistenz
+//  SPIFFS-Persistenz
 // ============================================================
 
 #define TELEM_PERSIST_FILE  "/telem.bin"
+
+// ============================================================
+//  MQTT: älteste ungesendete Zeile holen
+// ============================================================
+
+// ── MQTT: älteste ungesendete Zeile holen ───────────────────
+bool telem_pop_row(TelemetryRow& out) {
+    if (!s_mutex) return false;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return false;
+
+    if (s_row_pending == 0) {
+        xSemaphoreGive(s_mutex);
+        return false;
+    }
+
+    out = s_row_buf[s_row_send_tail];
+    s_row_send_tail = (uint16_t)((s_row_send_tail + 1) % TELEM_ROW_BUF_SIZE);
+    s_row_pending--;
+
+    xSemaphoreGive(s_mutex);
+    return true;
+}
+
 #define TELEM_ROWS_FILE     "/telem_rows.bin"
 #define TELEM_PERSIST_MAGIC 0x544C4D02UL  // 'TLM' + Version 2 (eq_mask/na_mask)
 #define TELEM_ROWS_MAGIC    0x544C5201UL  // 'TLR' + Version 1

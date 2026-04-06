@@ -36,6 +36,13 @@ const char* cfg_influx_bucket();
 const char* cfg_influx_token();
 const char* cfg_influx_device();
 
+// MQTT Broker
+const char* cfg_mqtt_host();
+uint16_t    cfg_mqtt_port();
+const char* cfg_mqtt_user();
+const char* cfg_mqtt_pass();
+const char* cfg_mqtt_topic();    // Topic-Prefix (z.B. "tele/id7")
+
 // BLE Standby-Defaults (ABRP bekommt Werte auch ohne CAN)
 bool        cfg_ble_standby();
 

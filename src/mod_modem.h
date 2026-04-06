@@ -47,3 +47,6 @@ void modem_lte_bands_fix(bool all); // "lte bands fix/all" → Baender setzen + 
 void modem_send_at(const char* cmd); // "at ..." → rohes AT-Kommando senden + Antwort anzeigen
 void modem_pause_task();             // "at stop"  → Modem-Task pausieren (fuer manuelles AT-Testing)
 void modem_resume_task();            // "at start" → Modem-Task fortsetzen
+
+// MQTT-Status
+bool modem_mqtt_connected();         // MQTT-Verbindung aktiv?
