@@ -805,7 +805,6 @@ class ServerCallbacks : public NimBLEServerCallbacks {
 class CharCallbacks : public NimBLECharacteristicCallbacks {
     void onSubscribe(NimBLECharacteristic* c, ble_gap_conn_desc* desc, uint16_t subValue) override {
         if (subValue > 0) {
-            Serial.println("[ELM] App hat Notify subscribed - sende Begruessung");
             send_greeting = true; // im Loop senden, nicht im Callback
         }
     }
