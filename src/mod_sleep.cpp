@@ -127,6 +127,16 @@ void sleep_update() {
 
     if (!vbus_sleep && !gyro_sleep) return;
 
+    // ─── Debug: warum wird Sleep ausgelöst? ──────────────
+    {
+        uint32_t last_shake = gyro_last_shake_ms();
+        char dbg[128];
+        snprintf(dbg, sizeof(dbg),
+                 "TRIGGER: vbus=%d vbus_sleep=%d gyro_sleep=%d vbus_gone=%lums last_shake=%lu boot=%lu now=%lu",
+                 vbus, vbus_sleep, gyro_sleep, vbus_gone_ms, last_shake, g_boot_ms, now);
+        syslog("SLEEP", dbg);
+    }
+
     // ─── Sleep-Schwelle erreicht ─────────────────────────
     // Ghost-Client-Erkennung: softAPgetStationNum() kann Stationen halten die
     // sich ohne Deauth getrennt haben (Handy-Screen gesperrt, WiFi kurz weg).
