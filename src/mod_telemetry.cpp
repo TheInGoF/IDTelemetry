@@ -833,10 +833,10 @@ void telem_send_influx() {
         }
         if (op_tag[0])
             pos += snprintf(body + pos, BODY_SIZE - pos,
-                            "v,d=%s,ig=%u,op=%s ", cfg_influx_device(), (unsigned)row.ig, op_tag);
+                            "v,d=%s,op=%s ", cfg_influx_device(), op_tag);
         else
             pos += snprintf(body + pos, BODY_SIZE - pos,
-                            "v,d=%s,ig=%u ", cfg_influx_device(), (unsigned)row.ig);
+                            "v,d=%s ", cfg_influx_device());
 
         for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
             if (!s_fields[f].key) continue;
