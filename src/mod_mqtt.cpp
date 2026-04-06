@@ -76,12 +76,8 @@ void mqtt_configure() {
     mqtt_at_ok("+SMCONF=\"CLEANSS\",1");   // Clean Session
     mqtt_at_ok("+SMCONF=\"QOS\",1");        // Default QoS 1
 
-    // TLS nur bei Port 8883 — bei plain MQTT kein SMSSL senden
-    // (manche SIM7080G-FW unterstützt AT+SMSSL nicht)
-    if (cfg_mqtt_port() == 8883) {
-        mqtt_at_ok("+CSSLCFG=\"sslversion\",0,3");  // TLS 1.2
-        mqtt_at_ok("+SMSSL=1,\"\"");                  // SSL on, kein Client-Cert
-    }
+    // Plain MQTT — kein TLS (SIM7080G FW R1951.07 hat kein MQTT-TLS).
+    // Auth über Username/Password. Broker muss plain Listener haben.
 
     // Subscribe-Topic vorbereiten
     snprintf(s_sub_topic, sizeof(s_sub_topic), "%s/ack", cfg_mqtt_topic());
@@ -100,21 +96,36 @@ bool mqtt_connect() {
 
     TinyGsm& m = modem_get();
 
-    // Config vor Connect auf Serial ausgeben (Diagnose)
-    Serial.println("[MQTT] ---- Config Dump ----");
-    m.sendAT("+SMCONF?");
-    String dump = "";
-    m.waitResponse(3000L, dump);
-    dump.trim();
-    Serial.println(dump);
-    Serial.println("[MQTT] ---- Ende ----");
+    // Erweiterte Fehlermeldungen aktivieren
 
-    // Aktuellen State prüfen
-    m.sendAT("+SMSTATE?");
-    String state_resp = "";
-    m.waitResponse(2000L, state_resp);
-    state_resp.trim();
-    Serial.printf("[MQTT] SMSTATE: %s\n", state_resp.c_str());
+    // Erweiterte Fehlermeldungen aktivieren
+    m.sendAT("+CMEE=2");
+    m.waitResponse(1000L);
+
+    // PDP-Context prüfen — MQTT braucht aktiven Datenkontext (Context 0)
+    m.sendAT("+CNACT?");
+    String cnact = "";
+    m.waitResponse(3000L, cnact);
+    cnact.trim();
+    Serial.printf("[MQTT] CNACT: %s\n", cnact.c_str());
+
+    // Nur Context 0 prüfen: "+CNACT: 0,1,..." = aktiv, "+CNACT: 0,0,..." = inaktiv
+    bool ctx0_active = (cnact.indexOf("+CNACT: 0,1,") >= 0);
+    if (!ctx0_active) {
+        syslog("MQTT", "PDP-Context 0 nicht aktiv — aktiviere...");
+        char apn_cmd[80];
+        snprintf(apn_cmd, sizeof(apn_cmd), "+CNCFG=0,1,\"%s\"", cfg_apn());
+        m.sendAT(apn_cmd);
+        m.waitResponse(3000L);
+        m.sendAT("+CNACT=0,1");
+        String act_resp = "";
+        m.waitResponse(10000L, act_resp);
+        act_resp.trim();
+        Serial.printf("[MQTT] CNACT activate: %s\n", act_resp.c_str());
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    } else {
+        Serial.println("[MQTT] PDP-Context 0 aktiv — OK");
+    }
 
     syslog("MQTT", "Verbinde...");
     m.sendAT("+SMCONN");
@@ -125,12 +136,6 @@ bool mqtt_connect() {
         char msg[128];
         snprintf(msg, sizeof(msg), "SMCONN fehlgeschlagen (rc=%d): %s", rc, resp.c_str());
         syslog("MQTT", msg);
-        // CME Error abfragen
-        m.sendAT("+SMSTATE?");
-        String st = "";
-        m.waitResponse(2000L, st);
-        st.trim();
-        Serial.printf("[MQTT] SMSTATE nach Fehler: %s\n", st.c_str());
         s_connected = false;
         return false;
     }
