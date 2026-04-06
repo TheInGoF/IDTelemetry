@@ -9,6 +9,7 @@
 #include "mod_modem.h"
 #include "mod_headers.h"
 #include "mod_telemetry.h"
+#include "mod_mqtt.h"
 #include "mod_config.h"
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
@@ -322,7 +323,8 @@ void ble_web_routes_init() {
     server.on("/api/telemetry", HTTP_GET, [](AsyncWebServerRequest* r) {
         JsonDocument doc;
         doc["ts_ms"]        = (uint32_t)millis();
-        doc["influx_ok"]     = telem_influx_ok();
+        doc["mqtt_ok"]       = mqtt_ok();
+        doc["mqtt_count"]    = mqtt_pub_count();
         doc["lte_connected"] = modem_is_connected();
         doc["buf_pending"]   = telem_get_buf_pending();
         doc["row_pending"]   = telem_get_row_pending();
@@ -507,8 +509,8 @@ void ble_web_routes_init() {
         r->send(200, "application/json", "{\"ok\":true}");
     });
 
-    // ── InfluxDB Preview (Debug) ────────────────────────────────
-    server.on("/api/influx-preview", HTTP_GET, [](AsyncWebServerRequest* r) {
+    // ── Telemetrie-Puffer Preview (Debug) ───────────────────────
+    server.on("/api/row-preview", HTTP_GET, [](AsyncWebServerRequest* r) {
         auto* resp = r->beginResponse(200, "text/plain", telem_preview_rows(10));
         headers_apply(resp);
         r->send(resp);

@@ -198,8 +198,8 @@ function getRows() {
     { label: t('data.lte_op'),    key: 'lte_operator',   fmt: function(v,f){return f.str || '\u2014';}, unit: '' },
     { sep: t('data.sep_device') },
     { label: t('data.batt_device'), key: 'batt_device',  fmt: function(v){return Math.round(v);}, unit: '%' },
-    { sep: t('data.sep_influx') },
-    { label: t('data.influx_conn'), key: '_influx',      fmt: function(v){return v ? t('data.influx_connected') : t('data.influx_disconnected');}, unit: '' },
+    { sep: t('data.sep_mqtt') },
+    { label: t('data.mqtt_conn'), key: '_mqtt',      fmt: function(v){return v ? t('data.mqtt_connected') : t('data.mqtt_disconnected');}, unit: '' },
     { label: t('data.buf_pending'), key: '_buf_pending',  fmt: function(v){return Math.round(v);}, unit: '' },
   ];
 }
@@ -220,8 +220,8 @@ function buildTable(data) {
     var ageMs  = NEVER;
     var isValid = false;
 
-    if (row.key === '_influx') {
-      valStr  = data.influx_ok ? t('data.influx_connected') : t('data.influx_disconnected');
+    if (row.key === '_mqtt') {
+      valStr  = data.mqtt_ok ? t('data.mqtt_connected') : t('data.mqtt_disconnected');
       ageMs   = 0;
       isValid = true;
     } else if (row.key === '_buf_pending') {

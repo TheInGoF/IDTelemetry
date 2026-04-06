@@ -335,14 +335,14 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
   <div class="log-box" id="elm-log" style="white-space:pre">Lade...</div>
   </div>
 
-  <!-- InfluxDB Puffer -->
-  <div class="section-title" style="margin-top:16px" data-i18n="dbg.influx_title">InfluxDB Puffer
-    <span id="influx-count" style="margin-left:auto;font-size:11px;color:var(--muted)">--</span>
+  <!-- MQTT Puffer -->
+  <div class="section-title" style="margin-top:16px" data-i18n="dbg.mqtt_title">MQTT Puffer
+    <span id="mqtt-count" style="margin-left:auto;font-size:11px;color:var(--muted)">--</span>
   </div>
   <div style="font-size:10px;color:var(--muted);margin-bottom:6px">
-    <span data-i18n="dbg.influx_desc">Gepufferte Zeilen (GPS-getriggert) &#183; werden beim n&#228;chsten LTE-Fenster gesendet</span>
+    <span data-i18n="dbg.mqtt_desc">Gepufferte Zeilen (GPS-getriggert) &#183; werden sofort per MQTT gepublisht</span>
   </div>
-  <div class="log-box" id="influx-preview" style="max-height:180px;white-space:pre">Lade...</div>
+  <div class="log-box" id="mqtt-preview" style="max-height:180px;white-space:pre">Lade...</div>
 
   <!-- System Log -->
   <div class="section-title" style="margin-top:16px" data-i18n="dbg.syslog_title">System Log
@@ -712,7 +712,7 @@ async function loadSysLog() {
                 : l.includes('gesendet')                                            ? 'var(--yellow)'
                 : l.includes('GPS gestoppt')                                        ? 'var(--orange)'
                 : l.includes('!!!! GPS-Capture')                                      ? '#ff79c6'
-                : l.includes('INFLUX')                                              ? '#ff79c6'
+                : l.includes('MQTT')                                                ? '#ff79c6'
                 : l.includes('AKKU')                                                ? '#ff79c6'
                 : l.includes('WAKE')                                                ? 'var(--accent)'
                 : (l.includes('SLEEP') || l.includes('pausiert'))                  ? 'var(--yellow)'
@@ -993,21 +993,21 @@ async function compassCalReset() {
   await fetch('/api/compass/cal-reset', {method:'POST'});
 }
 
-// ── InfluxDB Preview ──────────────────────────────────
-async function loadInfluxPreview() {
-  const el  = document.getElementById('influx-preview');
-  const cnt = document.getElementById('influx-count');
+// ── MQTT Puffer Preview ───────────────────────────────
+async function loadMqttPreview() {
+  const el  = document.getElementById('mqtt-preview');
+  const cnt = document.getElementById('mqtt-count');
   try {
     const ctrl = new AbortController();
     const tid  = setTimeout(() => ctrl.abort(), 8000);
     const [prev, telem] = await Promise.all([
-      fetch('/api/influx-preview', {signal: ctrl.signal}).then(r=>r.text()),
+      fetch('/api/row-preview', {signal: ctrl.signal}).then(r=>r.text()),
       fetch('/api/telemetry', {signal: ctrl.signal}).then(r=>r.json())
     ]);
     clearTimeout(tid);
-    cnt.textContent = t('dbg.influx_pending', [telem.row_pending||0]);
+    cnt.textContent = t('dbg.mqtt_pending', [telem.row_pending||0]);
     if (!prev.trim() || prev.startsWith('Keine')) {
-      el.textContent = t('dbg.influx_no_gps');
+      el.textContent = t('dbg.mqtt_no_gps');
     } else {
       const escI = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       el.innerHTML = prev.trim().split('\n').map(l =>
@@ -1040,12 +1040,12 @@ loadRtcTime();
 refreshStatus();
 setTimeout(function(){ loadWifiResult(); loadLogConfig(); }, 1500);
 setTimeout(function(){ loadSysLog(); }, 3000);
-setTimeout(function(){ loadInfluxPreview(); }, 4500);
+setTimeout(function(){ loadMqttPreview(); }, 4500);
 var _tiRtc=setInterval(loadRtcTime,30000);
 var _tiSt=setInterval(refreshStatus,8000);
 var _tiWr=setInterval(loadWifiResult,20000);
 var _tiSl=setInterval(loadSysLog,20000);
-var _tiIx=setInterval(loadInfluxPreview,10000);
+var _tiIx=setInterval(loadMqttPreview,10000);
 
 window.destroyPage=function(){[_stTimer,_tiRtc,_tiSt,_tiWr,_tiWl,_tiEl,_tiSl,_tiIx].forEach(t=>{if(t)clearInterval(t);});if(typeof gWs!=='undefined'&&gWs){gWs.onclose=null;gWs.close();gWs=null;}};
 

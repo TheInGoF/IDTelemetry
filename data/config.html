@@ -87,7 +87,7 @@ input:focus{outline:none;border-color:var(--accent)}
   </div>
   <div class="hrow2">
     <div class="led-g"><div class="led blue" id="led-can"></div><span class="led-lbl">CAN</span></div>
-    <div class="led-g"><div class="led" id="led-influx"></div><span class="led-lbl">INFLUX</span></div>
+    <div class="led-g"><div class="led" id="led-mqtt"></div><span class="led-lbl">MQTT</span></div>
     <div class="led-g"><div class="led" id="led-lte"></div><span class="led-lbl">LTE</span></div>
     <div class="led-g" style="min-width:38px"><span id="batt-pct" style="font-size:10px;font-weight:700;color:var(--muted)">--</span><span class="led-lbl">BAT</span></div>
   </div>
@@ -148,46 +148,34 @@ input:focus{outline:none;border-color:var(--accent)}
     <div class="hint warn" data-i18n="cfg.apn_hint">&#9888; SIM PIN und APN-&#196;nderungen werden erst nach Neustart vom Modem &#252;bernommen.</div>
   </div>
 
-  <!-- Traccar -->
-  <div class="section-title" data-i18n="cfg.tc_title">Traccar (OsmAnd)</div>
+  <!-- MQTT -->
+  <div class="section-title" data-i18n="cfg.mq_title">MQTT Broker</div>
   <div class="card">
-    <div class="field">
-      <div class="lbl" data-i18n="cfg.tc_host_label">Host (kein https://, kein Port)</div>
-      <input type="text" id="tc_host" placeholder="traccar.example.com">
-    </div>
-    <div class="field">
-      <div class="lbl" data-i18n="cfg.tc_id_label">Ger&#228;t-ID</div>
-      <input type="text" id="tc_id" placeholder="meinfahrzeug-id">
-    </div>
-    <div class="hint" data-i18n="cfg.tc_hint">HTTPS Port 443 wird automatisch verwendet.</div>
-  </div>
-
-  <!-- InfluxDB -->
-  <div class="section-title" data-i18n="cfg.ix_title">InfluxDB v2</div>
-  <div class="card">
-    <div class="field">
-      <div class="lbl" data-i18n="cfg.tc_host_label">Host (kein https://, kein Port)</div>
-      <input type="text" id="ix_host" placeholder="influx.example.com">
+    <div class="row2">
+      <div class="field" style="flex:3">
+        <div class="lbl" data-i18n="cfg.mq_host_label">Host</div>
+        <input type="text" id="mq_host" placeholder="broker.example.com">
+      </div>
+      <div class="field" style="flex:1">
+        <div class="lbl" data-i18n="cfg.mq_port_label">Port</div>
+        <input type="number" id="mq_port" placeholder="1883">
+      </div>
     </div>
     <div class="row2">
       <div class="field">
-        <div class="lbl" data-i18n="cfg.ix_org">Organisation</div>
-        <input type="text" id="ix_org" placeholder="home">
+        <div class="lbl" data-i18n="cfg.mq_user_label">Username</div>
+        <input type="text" id="mq_user" placeholder="(leer = keine Auth)">
       </div>
       <div class="field">
-        <div class="lbl" data-i18n="cfg.ix_bucket">Bucket</div>
-        <input type="text" id="ix_bucket" placeholder="can-scan">
+        <div class="lbl" data-i18n="cfg.mq_pass_label">Passwort</div>
+        <input type="password" id="mq_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
       </div>
     </div>
     <div class="field">
-      <div class="lbl" data-i18n="cfg.ix_token">API Token</div>
-      <input type="password" id="ix_token" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
+      <div class="lbl" data-i18n="cfg.mq_topic_label">Topic-Prefix</div>
+      <input type="text" id="mq_topic" placeholder="tele/vw_nox">
     </div>
-    <div class="field">
-      <div class="lbl" data-i18n="cfg.ix_device">Ger&#228;te-Tag (device=)</div>
-      <input type="text" id="ix_device" placeholder="vw_nox">
-    </div>
-    <div class="hint" data-i18n="cfg.ix_hint">HTTPS Port 443. Token wird sicher im NVS gespeichert, nicht im Dateisystem.</div>
+    <div class="hint" data-i18n="cfg.mq_hint">Publishes auf {prefix}/data. Port 8883 aktiviert TLS automatisch.</div>
   </div>
 
   <!-- Guard -->
@@ -306,7 +294,7 @@ async function fetchStatus(){
   }catch(e){}
   try{
     var ti=await(await fetch('/api/telemetry')).json();
-    setLed('influx',ti.influx_ok?'green':'');
+    setLed('mqtt',ti.mqtt_ok?'green':'');
   }catch(e){}
 }
 fetchStatus();
@@ -333,13 +321,11 @@ async function loadConfig(){
     document.getElementById('apn').value       = d.apn      || '';
     document.getElementById('apn_user').value  = d.apn_user || '';
     document.getElementById('apn_pass').value  = d.apn_pass || '';
-    document.getElementById('tc_host').value   = d.tc_host  || '';
-    document.getElementById('tc_id').value     = d.tc_id    || '';
-    document.getElementById('ix_host').value   = d.ix_host  || '';
-    document.getElementById('ix_org').value    = d.ix_org   || '';
-    document.getElementById('ix_bucket').value = d.ix_bucket|| '';
-    document.getElementById('ix_token').value  = d.ix_token || '';
-    document.getElementById('ix_device').value = d.ix_device|| '';
+    document.getElementById('mq_host').value   = d.mq_host  || '';
+    document.getElementById('mq_port').value   = d.mq_port  || 1883;
+    document.getElementById('mq_user').value   = d.mq_user  || '';
+    document.getElementById('mq_pass').value   = d.mq_pass  || '';
+    document.getElementById('mq_topic').value  = d.mq_topic || '';
     document.getElementById('ble_standby').checked = d.ble_standby !== false;
     document.getElementById('mod_gps').checked     = d.mod_gps !== false;
     document.getElementById('mod_compass').checked = d.mod_compass === true;
@@ -366,13 +352,11 @@ async function saveConfig(){
     apn:       document.getElementById('apn').value.trim(),
     apn_user:  document.getElementById('apn_user').value.trim(),
     apn_pass:  document.getElementById('apn_pass').value,
-    tc_host:   document.getElementById('tc_host').value.trim(),
-    tc_id:     document.getElementById('tc_id').value.trim(),
-    ix_host:   document.getElementById('ix_host').value.trim(),
-    ix_org:    document.getElementById('ix_org').value.trim(),
-    ix_bucket: document.getElementById('ix_bucket').value.trim(),
-    ix_token:  document.getElementById('ix_token').value.trim(),
-    ix_device:    document.getElementById('ix_device').value.trim(),
+    mq_host:   document.getElementById('mq_host').value.trim(),
+    mq_port:   parseInt(document.getElementById('mq_port').value) || 1883,
+    mq_user:   document.getElementById('mq_user').value.trim(),
+    mq_pass:   document.getElementById('mq_pass').value,
+    mq_topic:  document.getElementById('mq_topic').value.trim(),
     ble_standby:  document.getElementById('ble_standby').checked,
     mod_gps:      document.getElementById('mod_gps').checked,
     mod_compass:  document.getElementById('mod_compass').checked,
