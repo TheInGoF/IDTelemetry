@@ -107,11 +107,13 @@ void sleep_update() {
     }
 
     // VBUS weg → 5 min Schonfrist (Kurzunterbrechung, Tankpause)
-    bool vbus_sleep = (now - g_last_guard_seen_ms) >= SLEEP_NO_GUARD_MS;
+    uint32_t vbus_gone_ms = now - g_last_guard_seen_ms;
+    bool vbus_sleep = vbus_gone_ms >= SLEEP_NO_GUARD_MS;
 
     // Gyro-Fallback: kein VBUS aber Bewegung → wach bleiben (z.B. Transport)
+    // Erst prüfen wenn VBUS mindestens 30s weg ist — kurze Glitches ignorieren.
     bool gyro_sleep = false;
-    if (!vbus_sleep && gyro_ok()) {
+    if (!vbus_sleep && vbus_gone_ms >= 30000UL && gyro_ok()) {
         uint32_t last_shake = gyro_last_shake_ms();
         uint32_t idle_since = (last_shake > 0) ? last_shake : g_boot_ms;
         gyro_sleep = (now - idle_since) >= SLEEP_INACTIVITY_MS;
