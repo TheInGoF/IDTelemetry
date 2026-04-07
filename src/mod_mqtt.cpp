@@ -12,11 +12,56 @@
 #include "mod_rtc.h"
 #include "shared.h"
 #include "config.h"
+#include "secrets.h"
 #include <Arduino.h>
+#include <esp_system.h>
+#include <aes/esp_aes.h>
 
 // ---- Extern: TinyGsm + Serial aus mod_modem ----
 extern TinyGsm&        modem_get();
 extern HardwareSerial&  modem_serial();
+
+// ---- AES-256 Pre-Shared Key (Hex-String → 32 Bytes) ----
+static uint8_t s_aes_key[32];
+static bool    s_aes_ready = false;
+
+static uint8_t hex_nibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return 0;
+}
+
+static void init_aes_key() {
+    const char* hex = SECRET_AES_KEY;
+    for (int i = 0; i < 32; i++) {
+        s_aes_key[i] = (hex_nibble(hex[i*2]) << 4) | hex_nibble(hex[i*2+1]);
+    }
+    s_aes_ready = true;
+}
+
+// Binäres Protokoll: Feld-Bit-Definitionen
+enum BinField : uint32_t {
+    BF_LAT       = (1 << 0),
+    BF_LON       = (1 << 1),
+    BF_HEADING   = (1 << 2),
+    BF_SOC       = (1 << 3),
+    BF_VOLTAGE   = (1 << 4),
+    BF_CURRENT   = (1 << 5),
+    BF_POWER     = (1 << 6),
+    BF_SPEED     = (1 << 7),
+    BF_CHARGING  = (1 << 8),   // Bool — kein Payload
+    BF_DCFC      = (1 << 9),   // Bool — kein Payload
+    BF_BATT_TEMP = (1 << 10),
+    BF_EXT_TEMP  = (1 << 11),
+    BF_RANGE     = (1 << 12),
+    BF_CAPACITY  = (1 << 13),
+    BF_KWH       = (1 << 14),
+    BF_PARKED    = (1 << 15),  // Bool — kein Payload
+    BF_ODOMETER  = (1 << 16),
+    BF_LTE_SIG   = (1 << 17),
+    BF_BATT_DEV  = (1 << 18),
+};
 
 // ---- Zustand ----
 static bool     s_configured   = false;
@@ -44,6 +89,8 @@ static bool mqtt_at_ok(const char* cmd, long timeout_ms = 5000L) {
 
 // ---- Konfiguration ----
 void mqtt_configure() {
+    if (!s_aes_ready) init_aes_key();
+
     TinyGsm& m = modem_get();
     char cmd[160];
 
@@ -56,19 +103,16 @@ void mqtt_configure() {
              cfg_mqtt_host(), cfg_mqtt_port());
     mqtt_at_ok(cmd);
 
-    // Client-ID = MQTT-Username (eindeutig pro Gerät)
-    snprintf(cmd, sizeof(cmd), "+SMCONF=\"CLIENTID\",\"%s\"",
-             cfg_mqtt_user());
-    mqtt_at_ok(cmd);
-
-    if (cfg_mqtt_user()[0]) {
-        snprintf(cmd, sizeof(cmd), "+SMCONF=\"USERNAME\",\"%s\"",
-                 cfg_mqtt_user());
-        mqtt_at_ok(cmd);
-        snprintf(cmd, sizeof(cmd), "+SMCONF=\"PASSWORD\",\"%s\"",
-                 cfg_mqtt_pass());
+    // Client-ID aus Topic-Prefix (z.B. "tele/vw_nox" → "vw_nox")
+    {
+        const char* topic = cfg_mqtt_topic();
+        const char* slash = strrchr(topic, '/');
+        const char* cid = slash ? slash + 1 : topic;
+        snprintf(cmd, sizeof(cmd), "+SMCONF=\"CLIENTID\",\"%s\"", cid);
         mqtt_at_ok(cmd);
     }
+
+    // Kein Username/Password — Auth über AES-Key im Payload
 
     snprintf(cmd, sizeof(cmd), "+SMCONF=\"KEEPTIME\",%d", MQTT_KEEPALIVE_S);
     mqtt_at_ok(cmd);
@@ -141,60 +185,175 @@ bool mqtt_is_connected() {
     return s_connected;
 }
 
-// ---- JSON-Payload für eine Telemetrie-Zeile bauen ----
-// Kompaktes Format, gleiche Keys wie InfluxDB Line Protocol.
-static int build_json(const TelemetryRow& row, char* buf, int buf_size) {
-    int pos = 0;
-    pos += snprintf(buf + pos, buf_size - pos, "{\"ts\":%lu", (unsigned long)row.unix_s);
+// ---- Little-Endian Schreibhilfen ----
+static inline void put_u8 (uint8_t* p, uint8_t  v) { p[0]=v; }
+static inline void put_i8 (uint8_t* p, int8_t   v) { p[0]=(uint8_t)v; }
+static inline void put_u16(uint8_t* p, uint16_t v) { p[0]=v&0xFF; p[1]=(v>>8)&0xFF; }
+static inline void put_i16(uint8_t* p, int16_t  v) { put_u16(p,(uint16_t)v); }
+static inline void put_u32(uint8_t* p, uint32_t v) { p[0]=v&0xFF; p[1]=(v>>8)&0xFF; p[2]=(v>>16)&0xFF; p[3]=(v>>24)&0xFF; }
+static inline void put_i32(uint8_t* p, int32_t  v) { put_u32(p,(uint32_t)v); }
 
-    // GPS (immer senden wenn valid)
-    if (row.valid[TELEM_GPS_LAT])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"la\":%.6f", (double)row.values[TELEM_GPS_LAT]);
-    if (row.valid[TELEM_GPS_LON])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"lo\":%.6f", (double)row.values[TELEM_GPS_LON]);
-    if (row.valid[TELEM_GPS_HEADING])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"hd\":%d", (int)row.values[TELEM_GPS_HEADING]);
+// ---- Binäre Payload bauen (Klartext, vor Verschlüsselung) ----
+// Gibt Länge der Plaintext-Daten zurück (field_mask + ts + Felder).
+static int build_binary(const TelemetryRow& row, uint8_t* buf, int buf_size) {
+    if (buf_size < 8) return 0;
 
-    // Fahrzeugdaten (nur wenn gültig und geändert)
-    if (row.valid[TELEM_SOC])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"s\":%.1f", row.values[TELEM_SOC]);
-    if (row.valid[TELEM_VOLTAGE])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"u\":%d", (int)row.values[TELEM_VOLTAGE]);
-    if (row.valid[TELEM_CURRENT])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"i\":%d", (int)row.values[TELEM_CURRENT]);
-    if (row.valid[TELEM_POWER])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"p\":%.1f", row.values[TELEM_POWER]);
-    if (row.valid[TELEM_VEHICLE_SPEED])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"v\":%.1f", row.values[TELEM_VEHICLE_SPEED]);
-    if (row.valid[TELEM_IS_CHARGING])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"c\":%d", (int)(row.values[TELEM_IS_CHARGING] > 0.5f));
-    if (row.valid[TELEM_IS_DCFC])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"dc\":%d", (int)(row.values[TELEM_IS_DCFC] > 0.5f));
-    if (row.valid[TELEM_BATT_TEMP])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"bt\":%d", (int)row.values[TELEM_BATT_TEMP]);
-    if (row.valid[TELEM_EXT_TEMP])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"et\":%d", (int)row.values[TELEM_EXT_TEMP]);
-    if (row.valid[TELEM_RANGE])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"r\":%.1f", row.values[TELEM_RANGE]);
-    if (row.valid[TELEM_CAPACITY])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"ca\":%.1f", row.values[TELEM_CAPACITY]);
-    if (row.valid[TELEM_KWH_CHARGED])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"kw\":%.1f", row.values[TELEM_KWH_CHARGED]);
-    if (row.valid[TELEM_IS_PARKED])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"pk\":%d", (int)(row.values[TELEM_IS_PARKED] > 0.5f));
-    if (row.valid[TELEM_ODOMETER])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"od\":%.1f", row.values[TELEM_ODOMETER]);
-    if (row.valid[TELEM_LTE_SIGNAL])
-        pos += snprintf(buf + pos, buf_size - pos, ",\"ls\":%d", (int)row.values[TELEM_LTE_SIGNAL]);
+    uint32_t mask = 0;
+    int pos = 8;   // Platz für mask (4B) + ts (4B)
 
-    // Akku-Stand (ESP32/PMU)
+    // GPS
+    if (row.valid[TELEM_GPS_LAT] && pos + 4 <= buf_size) {
+        mask |= BF_LAT;
+        put_i32(buf + pos, (int32_t)(row.values[TELEM_GPS_LAT] * 1e6f));
+        pos += 4;
+    }
+    if (row.valid[TELEM_GPS_LON] && pos + 4 <= buf_size) {
+        mask |= BF_LON;
+        put_i32(buf + pos, (int32_t)(row.values[TELEM_GPS_LON] * 1e6f));
+        pos += 4;
+    }
+    if (row.valid[TELEM_GPS_HEADING] && pos + 2 <= buf_size) {
+        mask |= BF_HEADING;
+        put_u16(buf + pos, (uint16_t)(int)row.values[TELEM_GPS_HEADING]);
+        pos += 2;
+    }
+
+    // Fahrzeugdaten
+    if (row.valid[TELEM_SOC] && pos + 2 <= buf_size) {
+        mask |= BF_SOC;
+        put_u16(buf + pos, (uint16_t)(row.values[TELEM_SOC] * 10.0f));
+        pos += 2;
+    }
+    if (row.valid[TELEM_VOLTAGE] && pos + 2 <= buf_size) {
+        mask |= BF_VOLTAGE;
+        put_u16(buf + pos, (uint16_t)row.values[TELEM_VOLTAGE]);
+        pos += 2;
+    }
+    if (row.valid[TELEM_CURRENT] && pos + 2 <= buf_size) {
+        mask |= BF_CURRENT;
+        put_i16(buf + pos, (int16_t)row.values[TELEM_CURRENT]);
+        pos += 2;
+    }
+    if (row.valid[TELEM_POWER] && pos + 2 <= buf_size) {
+        mask |= BF_POWER;
+        put_i16(buf + pos, (int16_t)(row.values[TELEM_POWER] * 10.0f));
+        pos += 2;
+    }
+    if (row.valid[TELEM_VEHICLE_SPEED] && pos + 2 <= buf_size) {
+        mask |= BF_SPEED;
+        put_u16(buf + pos, (uint16_t)(row.values[TELEM_VEHICLE_SPEED] * 10.0f));
+        pos += 2;
+    }
+
+    // Booleans (kein Payload — nur Bit in mask)
+    if (row.valid[TELEM_IS_CHARGING] && row.values[TELEM_IS_CHARGING] > 0.5f)
+        mask |= BF_CHARGING;
+    if (row.valid[TELEM_IS_DCFC] && row.values[TELEM_IS_DCFC] > 0.5f)
+        mask |= BF_DCFC;
+    if (row.valid[TELEM_IS_PARKED] && row.values[TELEM_IS_PARKED] > 0.5f)
+        mask |= BF_PARKED;
+
+    // Temperaturen
+    if (row.valid[TELEM_BATT_TEMP] && pos + 1 <= buf_size) {
+        mask |= BF_BATT_TEMP;
+        put_i8(buf + pos, (int8_t)row.values[TELEM_BATT_TEMP]);
+        pos += 1;
+    }
+    if (row.valid[TELEM_EXT_TEMP] && pos + 1 <= buf_size) {
+        mask |= BF_EXT_TEMP;
+        put_i8(buf + pos, (int8_t)row.values[TELEM_EXT_TEMP]);
+        pos += 1;
+    }
+
+    // Reichweite / Kapazität / Geladen
+    if (row.valid[TELEM_RANGE] && pos + 2 <= buf_size) {
+        mask |= BF_RANGE;
+        put_u16(buf + pos, (uint16_t)(row.values[TELEM_RANGE] * 10.0f));
+        pos += 2;
+    }
+    if (row.valid[TELEM_CAPACITY] && pos + 2 <= buf_size) {
+        mask |= BF_CAPACITY;
+        put_u16(buf + pos, (uint16_t)(row.values[TELEM_CAPACITY] * 10.0f));
+        pos += 2;
+    }
+    if (row.valid[TELEM_KWH_CHARGED] && pos + 2 <= buf_size) {
+        mask |= BF_KWH;
+        put_u16(buf + pos, (uint16_t)(row.values[TELEM_KWH_CHARGED] * 10.0f));
+        pos += 2;
+    }
+
+    // Odometer
+    if (row.valid[TELEM_ODOMETER] && pos + 4 <= buf_size) {
+        mask |= BF_ODOMETER;
+        put_u32(buf + pos, (uint32_t)(row.values[TELEM_ODOMETER] * 10.0f));
+        pos += 4;
+    }
+
+    // LTE Signal
+    if (row.valid[TELEM_LTE_SIGNAL] && pos + 1 <= buf_size) {
+        mask |= BF_LTE_SIG;
+        put_u8(buf + pos, (uint8_t)row.values[TELEM_LTE_SIGNAL]);
+        pos += 1;
+    }
+
+    // ESP-Akku
     int batt = pmu_batt_pct();
-    if (batt >= 0)
-        pos += snprintf(buf + pos, buf_size - pos, ",\"bd\":%d", batt);
+    if (batt >= 0 && pos + 1 <= buf_size) {
+        mask |= BF_BATT_DEV;
+        put_u8(buf + pos, (uint8_t)batt);
+        pos += 1;
+    }
 
-    pos += snprintf(buf + pos, buf_size - pos, "}");
+    // Header schreiben (jetzt wo mask komplett ist)
+    put_u32(buf + 0, mask);
+    put_u32(buf + 4, row.unix_s);
 
     return pos;
+}
+
+// ---- AES-256-CBC verschlüsseln ----
+// Erzeugt: [0x01][IV 16B][AES-CBC Ciphertext mit PKCS7 Padding]
+// Gibt Gesamtlänge zurück, oder 0 bei Fehler.
+static int encrypt_payload(const uint8_t* plain, int plain_len,
+                           uint8_t* out, int out_size) {
+    // PKCS7 Padding berechnen
+    int pad = 16 - (plain_len % 16);
+    int padded_len = plain_len + pad;
+
+    // Brauchen: 1 (Version) + 16 (IV) + padded_len
+    int total = 1 + 16 + padded_len;
+    if (total > out_size) return 0;
+
+    // Version
+    out[0] = 0x01;
+
+    // IV aus Hardware-RNG
+    uint8_t iv[16];
+    for (int i = 0; i < 4; i++) {
+        uint32_t r = esp_random();
+        memcpy(iv + i * 4, &r, 4);
+    }
+    memcpy(out + 1, iv, 16);
+
+    // Plaintext + PKCS7 Padding in temporären Buffer
+    uint8_t padded[128];   // Max: 45 Felder + 8 Header + 16 Pad = ~70 Bytes
+    if (padded_len > (int)sizeof(padded)) return 0;
+    memcpy(padded, plain, plain_len);
+    memset(padded + plain_len, pad, pad);
+
+    // AES-256-CBC verschlüsseln (ESP32-S3 Hardware-Beschleuniger)
+    esp_aes_context ctx;
+    esp_aes_init(&ctx);
+    esp_aes_setkey(&ctx, s_aes_key, 256);
+    // esp_aes_crypt_cbc modifiziert IV in-place → Kopie übergeben
+    uint8_t iv_copy[16];
+    memcpy(iv_copy, iv, 16);
+    int ret = esp_aes_crypt_cbc(&ctx, ESP_AES_ENCRYPT, padded_len,
+                                 iv_copy, padded, out + 17);
+    esp_aes_free(&ctx);
+
+    if (ret != 0) return 0;
+    return total;
 }
 
 // ---- Publish einer Zeile ----
@@ -204,10 +363,14 @@ bool mqtt_publish_row(const TelemetryRow& row) {
     TinyGsm& m = modem_get();
     HardwareSerial& ser = modem_serial();
 
-    // JSON aufbauen
-    static char payload[512];
-    int plen = build_json(row, payload, sizeof(payload));
-    if (plen <= 0 || plen >= (int)sizeof(payload)) return false;
+    // Binär packen → AES verschlüsseln
+    static uint8_t plain[128];
+    int plain_len = build_binary(row, plain, sizeof(plain));
+    if (plain_len <= 0) return false;
+
+    static uint8_t payload[192];   // 1 + 16 + max 128 padded
+    int plen = encrypt_payload(plain, plain_len, payload, sizeof(payload));
+    if (plen <= 0) return false;
 
     // Topic
     char topic[80];
@@ -229,7 +392,7 @@ bool mqtt_publish_row(const TelemetryRow& row) {
     }
 
     // Payload senden
-    ser.write((const uint8_t*)payload, plen);
+    ser.write(payload, plen);
 
     // Warte auf OK (Broker PUBACK bei QoS 1)
     resp = "";
