@@ -867,7 +867,6 @@ static void modem_task(void* /*param*/) {
                     // MQTT-Verbindung prüfen / wiederherstellen
                     if (s_sim_ok && !mqtt_is_connected()) {
                         if (now - s_mqtt_reconnect_ms >= MQTT_RECONNECT_MS) {
-                            s_mqtt_reconnect_ms = now;
                             syslog("MQTT", "Reconnect...");
                             if (modem_ensure_connected()) {
                                 mqtt_connect();
@@ -878,6 +877,8 @@ static void modem_task(void* /*param*/) {
                                     state = STATE_WAIT_FOR_NETWORK;
                                 }
                             }
+                            // Timer NACH Connect-Versuch neu setzen (inkl. Timeout-Dauer)
+                            s_mqtt_reconnect_ms = millis();
                         }
                     }
 
