@@ -887,11 +887,12 @@ static void modem_task(void* /*param*/) {
                         TelemetryRow row;
                         int sent = 0;
                         while (telem_get_row_pending() > 0 && sent < 10) {
-                            if (!telem_pop_row(row)) break;
+                            if (!telem_peek_row(row)) break;
                             if (!mqtt_publish_row(row)) {
-                                syslog("MQTT", "Publish fehlgeschlagen · Row verworfen");
+                                // Row bleibt im Puffer — nächster Versuch nach Reconnect
                                 break;
                             }
+                            telem_ack_row();  // erst nach erfolgreichem Publish entfernen
                             sent++;
                             vTaskDelay(pdMS_TO_TICKS(50));
                         }

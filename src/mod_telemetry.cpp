@@ -731,8 +731,8 @@ void telem_send_influx() {
 //  MQTT: älteste ungesendete Zeile holen
 // ============================================================
 
-// ── MQTT: älteste ungesendete Zeile holen ───────────────────
-bool telem_pop_row(TelemetryRow& out) {
+// ── MQTT: älteste ungesendete Zeile lesen (ohne entfernen) ──
+bool telem_peek_row(TelemetryRow& out) {
     if (!s_mutex) return false;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return false;
 
@@ -742,10 +742,27 @@ bool telem_pop_row(TelemetryRow& out) {
     }
 
     out = s_row_buf[s_row_send_tail];
-    s_row_send_tail = (uint16_t)((s_row_send_tail + 1) % TELEM_ROW_BUF_SIZE);
-    s_row_pending--;
+    xSemaphoreGive(s_mutex);
+    return true;
+}
+
+// ── MQTT: älteste Zeile als gesendet bestätigen ─────────────
+void telem_ack_row() {
+    if (!s_mutex) return;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
+
+    if (s_row_pending > 0) {
+        s_row_send_tail = (uint16_t)((s_row_send_tail + 1) % TELEM_ROW_BUF_SIZE);
+        s_row_pending--;
+    }
 
     xSemaphoreGive(s_mutex);
+}
+
+// ── Legacy: pop = peek + ack in einem (für pre-sleep flush) ─
+bool telem_pop_row(TelemetryRow& out) {
+    if (!telem_peek_row(out)) return false;
+    telem_ack_row();
     return true;
 }
 

@@ -95,6 +95,12 @@ void telem_send_influx();
 // Gibt false zurück wenn keine Zeilen ausstehen.
 bool telem_pop_row(TelemetryRow& out);
 
+// MQTT: älteste ungesendete Zeile lesen OHNE zu entfernen.
+bool telem_peek_row(TelemetryRow& out);
+
+// MQTT: älteste Zeile als gesendet bestätigen (nach erfolgreichem Publish).
+void telem_ack_row();
+
 // Phase 3: SPIFFS-Persistenz (vor Deep Sleep / nach Wake-Up)
 void telem_persist_to_spiffs();
 void telem_restore_from_spiffs();
