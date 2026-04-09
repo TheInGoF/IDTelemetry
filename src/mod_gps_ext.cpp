@@ -108,6 +108,29 @@ static void enable_all_gnss() {
     syslog("GPS_EXT", "GNSS: GPS+GLONASS+Galileo+BeiDou");
 }
 
+// ── TIMEPULSE deaktivieren (PPS-LED aus) ─────────────────
+// CFG-TP-TP1_ENA = 0x10050007, in RAM+BBR schreiben
+static void disable_timepulse() {
+    uint8_t p[9] = {};
+    p[0] = 0x00;              // version
+    p[1] = 0x03;              // layers: RAM + BBR
+    p[2] = 0x00; p[3] = 0x00; // reserved
+    // CFG-TP-TP1_ENA = 0x10050007 (L)
+    p[4] = 0x07; p[5] = 0x00; p[6] = 0x05; p[7] = 0x10;
+    p[8] = 0x00;              // value = false (aus)
+    ubx_send(0x06, 0x8A, p, 9);
+}
+
+// ── TIMEPULSE wieder aktivieren (PPS-LED an) ─────────────
+static void enable_timepulse() {
+    uint8_t p[9] = {};
+    p[0] = 0x00;
+    p[1] = 0x03;              // RAM + BBR
+    p[2] = 0x00; p[3] = 0x00;
+    p[4] = 0x07; p[5] = 0x00; p[6] = 0x05; p[7] = 0x10;
+    p[8] = 0x01;              // value = true (an)
+    ubx_send(0x06, 0x8A, p, 9);
+}
 
 // ── NMEA-Koordinate DDMM.MMMM → Dezimalgrad ──────────────
 static double nmea_deg(const char* s, char dir) {
@@ -296,6 +319,7 @@ void gps_ext_init() {
     delay(100);  // UART stabil warten
 
     enable_active_antenna(); // Aktive Antenne mit Strom versorgen
+    enable_timepulse();      // PPS-LED wieder an (war im Sleep deaktiviert)
     enable_all_gnss();  // GPS + GLONASS + Galileo + BeiDou
     enable_aop();       // AssistNow Autonomous: eigene Orbit-Vorhersagen im Modul
 
@@ -308,13 +332,20 @@ void gps_ext_init() {
 // ── GPS in Backup-Mode schicken (µA) — wacht per UART-Byte auf ──
 void gps_ext_sleep() {
     if (!GPS_EXT_ENABLED) return;
-    // UBX-RXM-PMREQ: duration=0 (unbegrenzt), flags=0x02 (backup)
+    // TIMEPULSE aus → LED-Strom sparen (falls hardwired, hilft es nicht)
+    disable_timepulse();
+    delay(50);
+
+    // UBX-RXM-PMREQ: duration=0 (unbegrenzt)
+    // flags = BACKUP|FORCE (0x06) — FORCE nötig für echten µA-Sleep auf M10
+    // wakeupSources = UART RX (bit 3 = 0x08)
     uint8_t p[16] = {};
     p[0] = 0x00;  // version
     p[4] = 0x00; p[5] = 0x00; p[6] = 0x00; p[7] = 0x00;  // duration = 0 (infinite)
-    p[8] = 0x02; p[9] = 0x00; p[10] = 0x00; p[11] = 0x00; // flags = BACKUP
+    p[8] = 0x06; p[9] = 0x00; p[10] = 0x00; p[11] = 0x00; // flags = BACKUP|FORCE
+    p[12] = 0x08; p[13] = 0x00; p[14] = 0x00; p[15] = 0x00; // wakeupSources = UART RX
     ubx_send(0x02, 0x41, p, 16);
-    syslog("GPS_EXT", "Backup-Mode (Sleep)");
+    syslog("GPS_EXT", "Backup-Mode (Sleep, force+UART-wake)");
 }
 
 bool gps_ext_ok()        { return s_ok; }

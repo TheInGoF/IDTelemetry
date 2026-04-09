@@ -283,11 +283,9 @@ static void enter_deep_sleep(const char* reason) {
         pmu_set_charging(false);
     }
 
-    // Ext. GPS in Backup-Mode (µA) — behält Orbit-Daten, wacht per UART auf
+    // Ext. GPS in Backup-Mode (µA) — behält Orbit-Daten + RTC, wacht per UART auf
+    // DC5 bleibt AN damit Backup-Mode funktioniert (V_BCKP über Farad-Cap)
     gps_ext_sleep();
-    // DC5 (ext. GPS) abschalten — UBX-Backup allein reicht nicht,
-    // Modul zieht sonst weiter Strom im Deep Sleep
-    pmu_set_ext_power(false);
     pmu_set_modem_power(false);
     can_stop();
 

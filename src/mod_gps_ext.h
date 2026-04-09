@@ -10,7 +10,7 @@
 // ============================================================
 
 void gps_ext_init();
-void gps_ext_sleep();     // Backup-Mode (µA) — wacht per UART-Byte beim nächsten Init auf
+void gps_ext_sleep();     // Backup-Mode mit FORCE (µA) — PPS-LED aus, wacht per UART-Byte auf
 bool gps_ext_ok();        // true = Modul gefunden + mind. 1 gültiger Fix
 int  gps_ext_sat_count();     // Satelliten in use, -1 = noch kein Fix
 int  gps_ext_sat_visible();   // Satelliten in view (alle Konstellationen)
