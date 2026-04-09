@@ -60,69 +60,6 @@ static void inject_time() {
 }
 
 
-// ── AssistNow Offline: MGA-ANO Pakete aus SPIFFS injizieren ──
-// Liest /assistnow.bin, filtert Pakete für heute ±1 Tag, sendet über UART.
-// MGA-ANO Paket: B5 62 13 20 [len_lo len_hi] [svId gnssId year month day ...]
-void gps_ext_inject_assistnow(int year, int month, int day) {
-    if (!GPS_EXT_ENABLED) return;
-    if (!SPIFFS.exists("/assistnow.bin")) {
-        syslog("ASSISTNOW", "Keine Datei — skip");
-        return;
-    }
-    File f = SPIFFS.open("/assistnow.bin", "r");
-    if (!f) { syslog("ASSISTNOW", "Datei nicht lesbar"); return; }
-
-    int injected = 0;
-    uint8_t buf[100];
-    while (f.available() >= 6) {
-        // Sync suchen
-        if (f.read() != 0xB5) continue;
-        if (f.peek() != 0x62) continue;
-        f.read();  // consume 0x62
-        uint8_t cls = f.read();
-        uint8_t id  = f.read();
-        uint8_t len_lo = f.read();
-        uint8_t len_hi = f.read();
-        uint16_t len = len_lo | ((uint16_t)len_hi << 8);
-        if (len > 92) { continue; }  // MGA-ANO payload = 76 bytes
-        if ((int)f.available() < (int)(len + 2)) break;
-        f.read(buf, len);
-        uint8_t ck_a = f.read();
-        uint8_t ck_b = f.read();
-
-        // Nur MGA-ANO (0x13 0x20) filtern
-        if (cls != 0x13 || id != 0x20) continue;
-        if (len < 7) continue;
-
-        // Datum prüfen: byte 4=year(seit 2000), byte 5=month, byte 6=day
-        int p_year  = 2000 + buf[4];
-        int p_month = buf[5];
-        int p_day   = buf[6];
-
-        // Heute ±1 Tag akzeptieren
-        bool ok = (p_year == year && p_month == month &&
-                   (p_day == day || p_day == day - 1 || p_day == day + 1));
-        if (!ok) continue;
-
-        // Checksumme verifizieren
-        uint8_t ca = 0, cb = 0;
-        auto chk = [&](uint8_t b){ ca += b; cb += ca; };
-        chk(cls); chk(id); chk(len_lo); chk(len_hi);
-        for (uint16_t i = 0; i < len; i++) chk(buf[i]);
-        if (ca != ck_a || cb != ck_b) continue;
-
-        // Paket senden
-        ubx_send(cls, id, buf, len);
-        injected++;
-    }
-    f.close();
-
-    char msg[48];
-    snprintf(msg, sizeof(msg), "AssistNow: %d Pakete injiziert (%04d-%02d-%02d)",
-             injected, year, month, day);
-    syslog("ASSISTNOW", msg);
-}
-
 // ── Aktive Antenne einschalten (UBX-CFG-VALSET, M10) ─────
 // M10 verwendet neues Konfig-Interface; CFG-ANT (0x06/0x13) ist M8-Legacy.
 // CFG-HW-ANT_CFG_VOLTCTRL = 0x10A3002E → 1 = Antennenspannung an

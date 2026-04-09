@@ -64,11 +64,6 @@ static SemaphoreHandle_t s_mutex = NULL;
 static char  s_operator_str[32] = "";
 static bool  s_influx_ok        = false;
 
-// ── ig-Hysterese: 1→0 erst nach 60s ohne ext. GPS ───────────
-static uint8_t   s_ig_value       = 0;       // aktuell gesendeter ig-Wert
-static uint32_t  s_ig_loss_ms     = 0;       // Zeitpunkt des letzten ext-GPS-Verlusts
-static const uint32_t IG_HYSTERESIS_MS = 60000UL;
-
 // ── Zeilen-Ringpuffer (GPS-getriggert, PSRAM) ───────────────
 static TelemetryRow* s_row_buf = nullptr;   // allokiert in telem_init()
 static uint16_t     s_row_head      = 0;   // nächste Schreibposition
@@ -217,15 +212,6 @@ static void row_try_capture() {
     row.unix_s  = (uint32_t)unix_s;
     row.eq_mask = 0;
     row.na_mask = 0;
-    if (pmu_is_vbus_in()) {
-        s_ig_value   = 1;
-        s_ig_loss_ms = 0;
-    } else if (s_ig_value == 1) {
-        if (s_ig_loss_ms == 0) s_ig_loss_ms = millis();
-        if (millis() - s_ig_loss_ms >= IG_HYSTERESIS_MS) s_ig_value = 0;
-    }
-    row.ig = s_ig_value;
-
     for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
         float val = s_cache[f].value;
         bool  ok  = s_cache[f].valid && (s_cache[f].timestamp_ms > 0);
@@ -297,12 +283,8 @@ static void row_try_capture() {
 }
 
 // ── Erzwungener Capture (Fahrtende / extern) ─────────────────
-void telem_force_capture(const char* reason, bool force_ig_off) {
+void telem_force_capture(const char* reason) {
     if (!gps_valid()) return;
-    if (force_ig_off) {
-        s_ig_value   = 0;
-        s_ig_loss_ms = 0;
-    }
     // Zeit- und Distanz-Schwellen überspringen — direkt in row_try_capture einsteigen
     // indem wir s_cap_ms auf 0 setzen (gilt als "erster Fix")
     s_cap_ms = 0;
@@ -759,12 +741,6 @@ void telem_ack_row() {
     xSemaphoreGive(s_mutex);
 }
 
-// ── Legacy: pop = peek + ack in einem (für pre-sleep flush) ─
-bool telem_pop_row(TelemetryRow& out) {
-    if (!telem_peek_row(out)) return false;
-    telem_ack_row();
-    return true;
-}
 
 #define TELEM_ROWS_FILE     "/telem_rows.bin"
 #define TELEM_PERSIST_MAGIC 0x544C4D02UL  // 'TLM' + Version 2 (eq_mask/na_mask)

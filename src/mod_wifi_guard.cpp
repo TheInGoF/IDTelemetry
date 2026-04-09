@@ -83,8 +83,7 @@ typedef enum {
 static WGuardState  wstate          = WGUARD_IDLE;
 static char         guard_ssid[64]  = "";
 static int          rssi_threshold  = WIFI_RSSI_THRESHOLD_DEF;
-static uint8_t      guard_mode      = GUARD_MODE_WIFI; // default: WiFi Guard
-static bool         wifi_in_range   = false;
+static bool         wifi_in_range   = false;  // Legacy — nur noch für Web-UI JSON
 static int          wifi_rssi_last  = -999;
 static uint32_t     lock_timer_ms   = 0;
 static bool         g_manual_tx_unlock = false;  // manuell via Button entsperrt
@@ -139,7 +138,7 @@ static void spiffs_load() {
         prefs.putString("ssid", guard_ssid);  // sofort in NVS sichern
     }
     rssi_threshold = prefs.getInt("rssi",   WIFI_RSSI_THRESHOLD_DEF);
-    guard_mode     = prefs.getUChar("mode", GUARD_MODE_WIFI);
+    // guard_mode entfernt — VBUS-only
     prefs.end();
 
     // Laufzeit aus SPIFFS laden
@@ -161,7 +160,7 @@ static void spiffs_save() {
     prefs.begin("wguard", false);
     prefs.putString("ssid",  guard_ssid);
     prefs.putInt("rssi",     rssi_threshold);
-    prefs.putUChar("mode",   guard_mode);
+    // guard_mode nicht mehr persistiert
     prefs.end();
 }
 
@@ -466,18 +465,14 @@ void wifi_guard_clear_ssid() {
     syslog("GUARD", "SSID gelöscht");
 }
 
-void wifi_guard_set_mode(uint8_t mode) {
-    guard_mode = mode;
-    spiffs_save();
-    // WiFi-only oder AND: WiFi-Status zurücksetzen
-    if (mode == GUARD_MODE_BLE) wifi_in_range = true;
-    else wifi_in_range = false;
-    wstate = WGUARD_LOST;
+void wifi_guard_set_mode(uint8_t /*mode*/) {
+    // Guard-Modi entfernt — CAN TX hängt nur noch an VBUS + Gyro.
+    // Funktion bleibt als No-Op für Web-UI Kompatibilität.
 }
 
 const char* wifi_guard_get_ssid()      { return guard_ssid; }
 int         wifi_guard_get_threshold() { return rssi_threshold; }
-uint8_t     wifi_guard_get_mode()      { return guard_mode; }
+uint8_t     wifi_guard_get_mode()      { return GUARD_MODE_VBUS; }
 bool        wifi_guard_active()        { return strlen(guard_ssid) > 0; }
 bool        wifi_guard_in_range()      { return wifi_in_range; }
 int         wifi_guard_rssi()          { return wifi_rssi_last; }
@@ -547,15 +542,8 @@ String wifi_guard_status_json() {
     doc["rssi"]       = wifi_rssi_last;
     doc["threshold"]  = rssi_threshold;
     doc["state"]      = wstate_name(wstate);
-    doc["mode"]       = guard_mode;
-    const char* ms = "AUS";
-    switch (guard_mode) {
-        case GUARD_MODE_WIFI: ms = "WiFi Guard";    break;
-        case GUARD_MODE_AND:  ms = "WiFi+BLE AND";  break;
-        case GUARD_MODE_OR:   ms = "WiFi|BLE OR";   break;
-        case GUARD_MODE_VBUS: ms = "VBUS Guard";    break;
-    }
-    doc["mode_str"]   = ms;
+    doc["mode"]       = GUARD_MODE_VBUS;
+    doc["mode_str"]   = "VBUS Guard";
     doc["ble_ok"]        = true;
     doc["wifi_ok"]       = wifi_in_range;
     doc["vbus_ok"]       = pmu_is_vbus_in();

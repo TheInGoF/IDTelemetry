@@ -152,8 +152,8 @@ static bool at_ok(const char* cmd, long timeout_ms = 5000L) {
 }
 
 // ---- Europaeische LTE-M Operator-Tabelle ----
-// Modem iteriert diese Liste und versucht COPS=1,2,"PLMN",7 (LTE-M).
-// Operator ohne LTE-M scheitern sofort (ERROR) und werden soft-geblockt.
+// Nur noch fuer Namens-Lookup nach Auto-Modus-Verbindung.
+// Netzwahl: Green-List (SPIFFS) → Auto-Modus (COPS=0).
 struct PlmnEntry { const char* plmn; const char* name; };
 static const PlmnEntry PLMN_TABLE[] = {
     // Things Mobile LTE-M Roaming-Partner, sortiert nach Naehe zu Deutschland
@@ -849,7 +849,7 @@ static void modem_task(void* /*param*/) {
                         } else if (!g_trip_ending && (now - vbus_lost_ms) >= 5000UL) {
                             g_trip_ending = true;
                             syslog("MODEM", "VBUS weg seit 5s — Flush");
-                            telem_force_capture("VBUS weg", true);
+                            telem_force_capture("VBUS weg");
                             vTaskDelay(pdMS_TO_TICKS(300));
                             // Ausstehende Zeilen werden unten im MQTT-Block gepublisht
                         }
@@ -1230,15 +1230,16 @@ const char* modem_operator()        { return s_operator; }
 bool        modem_sim_ok()          { return s_sim_ok; }
 
 void modem_pre_sleep_flush() {
-    telem_force_capture("Schlafen · ig=0", true);  // ig=0 erzwingen
+    telem_force_capture("Schlafen");
     vTaskDelay(pdMS_TO_TICKS(300));
 
     if (mqtt_is_connected()) {
         TelemetryRow row;
         int sent = 0;
         while (telem_get_row_pending() > 0 && sent < 20) {
-            if (!telem_pop_row(row)) break;
+            if (!telem_peek_row(row)) break;
             if (!mqtt_publish_row(row)) break;
+            telem_ack_row();  // erst nach erfolgreichem Publish entfernen
             sent++;
             vTaskDelay(pdMS_TO_TICKS(50));
         }

@@ -7,12 +7,7 @@
 //  Scannt alle 15s nach einer konfigurierten SSID (Fahrzeug-Hotspot)
 //  RSSI-Schwelle konfigurierbar (default -75 dBm ≈ ~5m)
 //
-//  Guard Modes (in config.h):
-//   GUARD_MODE_BLE  (0) → nur BLE entscheidet
-//   GUARD_MODE_WIFI (1) → nur WiFi entscheidet
-//   GUARD_MODE_AND  (2) → BLE UND WiFi müssen sichtbar sein
-//   GUARD_MODE_OR   (3) → BLE ODER WiFi reicht
-//
+//  CAN TX nur bei VBUS + Gyro-Bewegung.
 //  SPIFFS Persistenz:
 //   /wifi_ssid.txt  → gespeicherte SSID
 //   /wifi_cfg.txt   → RSSI-Schwelle + Guard Mode
@@ -25,11 +20,7 @@
 
 #define SPIFFS_WIFI_TIME   "/wifi_time.txt"
 
-// Guard Modi
-#define GUARD_MODE_BLE    0
-#define GUARD_MODE_WIFI   1
-#define GUARD_MODE_AND    2
-#define GUARD_MODE_OR     3
+// Guard Modus — nur noch VBUS (BLE/WIFI/AND/OR entfernt)
 #define GUARD_MODE_VBUS   4
 
 void        wifi_guard_init();

@@ -135,20 +135,47 @@ void mqtt_configure() {
 }
 
 // ---- Verbinden ----
+// SMCONN mit eigenem harten Timeout — TinyGSM waitResponse kann hängen
+// wenn das Modem kontinuierlich URCs sendet (innere Leseschleife blockiert
+// die Timeout-Prüfung in der äußeren do-while-Schleife).
+static bool mqtt_smconn(uint32_t hard_timeout_ms = 20000UL) {
+    HardwareSerial& ser = modem_serial();
+
+    // Serial-Puffer leeren (alte URCs entsorgen)
+    while (ser.available()) ser.read();
+
+    ser.print("AT+SMCONN\r\n");
+
+    uint32_t start = millis();
+    String   buf;
+    buf.reserve(128);
+
+    while (millis() - start < hard_timeout_ms) {
+        while (ser.available()) {
+            char c = (char)ser.read();
+            if (c == '\n') {
+                buf.trim();
+                if (buf == "OK")    return true;
+                if (buf == "ERROR") return false;
+                buf = "";
+            } else {
+                buf += c;
+                // Sicherheit: Puffer begrenzen (URCs können lang sein)
+                if (buf.length() > 200) buf = buf.substring(buf.length() - 80);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    return false;  // Hard-Timeout
+}
+
 bool mqtt_connect() {
     if (!s_configured) mqtt_configure();
 
-    TinyGsm& m = modem_get();
-
     syslog("MQTT", "Verbinde...");
-    m.sendAT("+SMCONN");
-    String resp = "";
-    int rc = m.waitResponse(15000L, resp);
-    if (rc != 1) {
-        resp.trim();
-        char msg[96];
-        snprintf(msg, sizeof(msg), "Verbindung fehlgeschlagen: %s", resp.c_str());
-        syslog("MQTT", msg);
+    bool ok = mqtt_smconn(20000UL);
+    if (!ok) {
+        syslog("MQTT", "Verbindung fehlgeschlagen");
         s_connected = false;
         return false;
     }

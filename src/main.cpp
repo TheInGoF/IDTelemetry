@@ -308,6 +308,10 @@ void loop() {
                     modem_send_at(serial_buf + 3);
                 } else if (strcmp(serial_buf, "mqtt") == 0) {
                     mqtt_print_info();
+                } else if (strcmp(serial_buf, "mqtt test") == 0) {
+                    Serial.println("[CMD] MQTT Test-Publish...");
+                    telem_force_capture("Test via Serial");
+                    Serial.printf("[CMD] %u Zeilen ausstehend\n", telem_get_row_pending());
                 } else if (strcmp(serial_buf, "can sniff") == 0) {
                     can_sniff(5000);  // 5 Sekunden
                 } else if (strcmp(serial_buf, "gyro cal") == 0) {

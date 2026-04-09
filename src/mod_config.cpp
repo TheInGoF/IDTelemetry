@@ -158,9 +158,6 @@ bool cfg_save_json(const uint8_t* body, size_t len) {
         p.putBool("log_wifi", s_log_wifi);
     }
     p.end();
-    if (!doc["guard_mode"].isNull()) {
-        wifi_guard_set_mode(doc["guard_mode"].as<uint8_t>());
-    }
 
     Serial.println("[CFG] gespeichert");
     return true;
@@ -193,7 +190,6 @@ const char* cfg_to_json() {
     doc["log_ble"]      = s_log_ble;
     doc["log_wifi"]     = s_log_wifi;
     doc["lang"]         = s_lang;
-    doc["guard_mode"]   = wifi_guard_get_mode();
     serializeJson(doc, buf, sizeof(buf));
     return buf;
 }
