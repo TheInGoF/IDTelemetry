@@ -205,6 +205,7 @@ void setup() {
     syslog("BOOT", "pmu_init...");
     pmu_init();
     syslog("BOOT", "pmu_init OK");
+    gps_ext_wake();  // M10 sofort aus Backup wecken — sucht Sats während Rest bootet
 
     { int b = pmu_batt_pct();
       char msg[40];

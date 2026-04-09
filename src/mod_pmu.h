@@ -21,3 +21,4 @@ void pmu_set_modem_power(bool on);   // DC3 (Modem VDD) ein/ausschalten
 void pmu_set_ext_power(bool on);     // DC5 (ext. GPS) ein/ausschalten
 void pmu_enable_vbus_wake();         // VBUS-Insert IRQ aktivieren (vor Deep Sleep)
 void pmu_clear_wake_irq();           // Pending IRQ löschen (nach EXT0-Wake)
+bool pmu_is_dc5_on();                // Debug: DC5-Register prüfen

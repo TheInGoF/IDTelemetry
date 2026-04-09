@@ -108,29 +108,19 @@ static void enable_all_gnss() {
     syslog("GPS_EXT", "GNSS: GPS+GLONASS+Galileo+BeiDou");
 }
 
-// ── TIMEPULSE deaktivieren (PPS-LED aus) ─────────────────
-// CFG-TP-TP1_ENA = 0x10050007, in RAM+BBR schreiben
-static void disable_timepulse() {
-    uint8_t p[9] = {};
-    p[0] = 0x00;              // version
-    p[1] = 0x03;              // layers: RAM + BBR
-    p[2] = 0x00; p[3] = 0x00; // reserved
-    // CFG-TP-TP1_ENA = 0x10050007 (L)
-    p[4] = 0x07; p[5] = 0x00; p[6] = 0x05; p[7] = 0x10;
-    p[8] = 0x00;              // value = false (aus)
-    ubx_send(0x06, 0x8A, p, 9);
-}
-
-// ── TIMEPULSE wieder aktivieren (PPS-LED an) ─────────────
-static void enable_timepulse() {
+// ── TIMEPULSE ein/aus (PPS-LED) ──────────────────────────
+// Nur RAM — M10 läuft durch, kein BBR nötig
+static void set_timepulse(bool on) {
     uint8_t p[9] = {};
     p[0] = 0x00;
-    p[1] = 0x03;              // RAM + BBR
+    p[1] = 0x01;              // nur RAM
     p[2] = 0x00; p[3] = 0x00;
     p[4] = 0x07; p[5] = 0x00; p[6] = 0x05; p[7] = 0x10;
-    p[8] = 0x01;              // value = true (an)
+    p[8] = on ? 0x01 : 0x00;
     ubx_send(0x06, 0x8A, p, 9);
 }
+static void disable_timepulse() { set_timepulse(false); }
+static void enable_timepulse()  { set_timepulse(true);  }
 
 // ── NMEA-Koordinate DDMM.MMMM → Dezimalgrad ──────────────
 static double nmea_deg(const char* s, char dir) {
@@ -247,8 +237,7 @@ static void process_line(char* line) {
         s_nmea_valid = true;
         s_ok = true;  // gps_ext_ok() erst jetzt true
         syslog("GPS_EXT", "NMEA-Daten empfangen — Modul antwortet");
-        // Warm-Start: RTC-Zeit injizieren → hilft bei Ephemeris-Zuordnung
-        inject_time();
+        inject_time();  // Immer — beschleunigt Fix von ~60s auf ~22s
     }
     if      (strncmp(line, "$GNRMC", 6) == 0 || strncmp(line, "$GPRMC", 6) == 0) parse_gnrmc(line);
     else if (strncmp(line, "$GNGGA", 6) == 0 || strncmp(line, "$GPGGA", 6) == 0) parse_gngga(line);
@@ -286,14 +275,15 @@ static void gps_ext_task(void*) {
             syslog("GPS_EXT", "WARNUNG: Keine NMEA-Daten — Verdrahtung prüfen");
         }
 
-        // Status alle 30s
+        // Status alle 30s (immer loggen solange kein Fix, danach nur bei Änderung)
         if (s_nmea_valid && (now - last_status_ms) >= 30000UL) {
             last_status_ms = now;
-            if (s_sat_count != last_sat) {
+            bool has_fix = gps_valid();
+            if (s_sat_count != last_sat || !has_fix) {
                 last_sat = s_sat_count;
                 char msg[64];
                 snprintf(msg, sizeof(msg), "Sats: %d sichtbar / %d im Fix · %s",
-                         s_sats_visible, s_sat_count, gps_valid() ? "Fix" : "suche...");
+                         s_sats_visible, s_sat_count, has_fix ? "Fix" : "suche...");
                 syslog("GPS_EXT", msg);
             }
         }
@@ -313,39 +303,45 @@ static void gps_ext_task(void*) {
 }
 
 // ── Öffentliche API ───────────────────────────────────────
+// ── Frühes Wake: UART öffnen + Wake-Byte — sofort nach pmu_init() aufrufen ──
+void gps_ext_wake() {
+    if (!GPS_EXT_ENABLED) return;
+    // UART öffnen — M10 läuft bereits (kein Backup-Mode), hat Fix
+    s_gps_uart.begin(GPS_EXT_BAUD, SERIAL_8N1, GPS_EXT_RX_PIN, GPS_EXT_TX_PIN);
+}
+
 void gps_ext_init() {
     if (!GPS_EXT_ENABLED) return;
-    s_gps_uart.begin(GPS_EXT_BAUD, SERIAL_8N1, GPS_EXT_RX_PIN, GPS_EXT_TX_PIN);
-    delay(100);  // UART stabil warten
+    if (!s_gps_uart) {
+        gps_ext_wake();
+    }
+    delay(100);
 
-    enable_active_antenna(); // Aktive Antenne mit Strom versorgen
-    enable_timepulse();      // PPS-LED wieder an (war im Sleep deaktiviert)
-    enable_all_gnss();  // GPS + GLONASS + Galileo + BeiDou
-    enable_aop();       // AssistNow Autonomous: eigene Orbit-Vorhersagen im Modul
-
+    // Nur bei Cold Start konfigurieren — nach Idle-Sleep läuft M10 bereits
+    if (!sleep_was_deep()) {
+        enable_active_antenna();
+        enable_all_gnss();
+        enable_aop();
+    }
+    // PPS-LED wieder an (war im Sleep deaktiviert)
+    enable_timepulse();
 
     // s_ok wird erst nach erstem validen NMEA-Paket gesetzt (in process_line)
     { char m[80]; snprintf(m, sizeof(m), "BLITZ Mini M10 — UART GPIO%d/%d %dBd (warte auf Fix)", GPS_EXT_RX_PIN, GPS_EXT_TX_PIN, GPS_EXT_BAUD); syslog("GPS_EXT", m); }
     xTaskCreatePinnedToCore(gps_ext_task, "GPS_EXT", 3072, NULL, 2, NULL, 1);
 }
 
-// ── GPS in Backup-Mode schicken (µA) — wacht per UART-Byte auf ──
+// ── GPS in Idle schicken — M10 trackt weiter, UART wird geschlossen ──
+// Kein Backup-Befehl! M10 verliert bei Backup seine Nav-Daten auf diesem Modul.
+// Stattdessen: M10 läuft weiter (~5-8mA), behält Fix + Ephemeris + AOP.
+// Nach Wake: UART öffnen → sofortiger Fix.
 void gps_ext_sleep() {
     if (!GPS_EXT_ENABLED) return;
-    // TIMEPULSE aus → LED-Strom sparen (falls hardwired, hilft es nicht)
+    // PPS-LED aus (spart etwas Strom, kosmetisch)
     disable_timepulse();
-    delay(50);
-
-    // UBX-RXM-PMREQ: duration=0 (unbegrenzt)
-    // flags = BACKUP|FORCE (0x06) — FORCE nötig für echten µA-Sleep auf M10
-    // wakeupSources = UART RX (bit 3 = 0x08)
-    uint8_t p[16] = {};
-    p[0] = 0x00;  // version
-    p[4] = 0x00; p[5] = 0x00; p[6] = 0x00; p[7] = 0x00;  // duration = 0 (infinite)
-    p[8] = 0x06; p[9] = 0x00; p[10] = 0x00; p[11] = 0x00; // flags = BACKUP|FORCE
-    p[12] = 0x08; p[13] = 0x00; p[14] = 0x00; p[15] = 0x00; // wakeupSources = UART RX
-    ubx_send(0x02, 0x41, p, 16);
-    syslog("GPS_EXT", "Backup-Mode (Sleep, force+UART-wake)");
+    s_gps_uart.flush();
+    s_gps_uart.end();
+    syslog("GPS_EXT", "Idle-Sleep (M10 trackt weiter, UART closed)");
 }
 
 bool gps_ext_ok()        { return s_ok; }

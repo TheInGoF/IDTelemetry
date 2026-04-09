@@ -43,9 +43,15 @@ void pmu_init() {
     PMU.enableDC1();
     delay(100);  // Rail stabilisieren vor nächstem
     // DC5  = Ext. GPS 3300mV
-    PMU.setDC5Voltage(3300);
-    PMU.enableDC5();
-    syslog("PMU", "Power: DC3=3000mV BLDO2=3300mV DC5=3300mV");
+    // Nach Deep Sleep: DC5 NICHT neu setzen! setDC5Voltage() kann einen kurzen
+    // Glitch auf der Rail verursachen → M10 sieht Power-Cycle → BBR verloren.
+    bool dc5_was_on = PMU.isEnableDC5();
+    if (!dc5_was_on) {
+        PMU.setDC5Voltage(3300);
+        PMU.enableDC5();
+    }
+    { char m[80]; snprintf(m, sizeof(m), "Power: DC3=3000mV BLDO2=3300mV DC5=3300mV (DC5 %s)",
+                           dc5_was_on ? "durchgehend AN" : "neu eingeschaltet"); syslog("PMU", m); }
 
     // TS-Pin Messung deaktivieren (wie LilyGo-Beispiel — sonst blockiert Laden)
     PMU.disableTSPinMeasure();
@@ -131,6 +137,11 @@ void pmu_set_ext_power(bool on) {
         PMU.disableDC5();
     }
     { char m[32]; snprintf(m, sizeof(m), "DC5 ext.GPS %s", on ? "an" : "aus"); syslog("PMU", m); }
+}
+
+bool pmu_is_dc5_on() {
+    if (!s_pmu_ok) return false;
+    return PMU.isEnableDC5();
 }
 
 void pmu_set_gps_power(bool on) {

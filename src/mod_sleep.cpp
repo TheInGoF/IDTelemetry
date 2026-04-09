@@ -325,6 +325,9 @@ static void enter_deep_sleep(const char* reason) {
     rtc_gpio_pulldown_dis(PMU_INT_PIN);
     esp_sleep_enable_ext0_wakeup(PMU_INT_PIN, 0);  // 0 = wake on LOW
 
+    // Debug: DC5-Status vor Deep Sleep prüfen
+    { char m[64]; snprintf(m, sizeof(m), "DC5 vor Sleep: %s", pmu_is_dc5_on() ? "AN" : "AUS!"); syslog("SLEEP", m); }
+
     Serial.flush();
     delay(100);
 

@@ -9,7 +9,8 @@
 //  Nur aktiv wenn GPS_EXT_ENABLED == true (config.h).
 // ============================================================
 
-void gps_ext_init();
+void gps_ext_wake();      // UART öffnen + Wake-Byte — so früh wie möglich im Boot aufrufen!
+void gps_ext_init();      // Config + Task starten — kann später kommen
 void gps_ext_sleep();     // Backup-Mode mit FORCE (µA) — PPS-LED aus, wacht per UART-Byte auf
 bool gps_ext_ok();        // true = Modul gefunden + mind. 1 gültiger Fix
 int  gps_ext_sat_count();     // Satelliten in use, -1 = noch kein Fix
