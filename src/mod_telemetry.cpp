@@ -186,15 +186,16 @@ static void row_try_capture() {
     bool        do_capture = false;
     const char* reason     = "";
 
-    if (dist >= dist_thresh) {
-        do_capture = true; reason = "Distanz";
-    } else if (spd >= TELEM_GPS_MIN_SPEED_KMH) {
-        // Kurven-Trigger: Gyro-Yaw mit Cooldown
+    // Kurven-Trigger hat Vorrang — unterbricht Distanz-Akkumulation
+    if (spd >= TELEM_GPS_MIN_SPEED_KMH) {
         bool cooldown_ok = (now - s_curve_cooldown_ms) >= TELEM_CURVE_COOLDOWN_MS;
         if (s_yaw_peak >= (float)TELEM_YAW_TURN_DPS && cooldown_ok) {
             do_capture = true; reason = "Kurve";
             s_curve_cooldown_ms = now;
         }
+    }
+    if (!do_capture && dist >= dist_thresh) {
+        do_capture = true; reason = "Distanz";
     }
     if (!do_capture && elapsed >= TELEM_GPS_MAX_INTERVAL_MS && g_gps.speed_kmh >= TELEM_GPS_MIN_SPEED_KMH) {
         do_capture = true; reason = "Zeit";
