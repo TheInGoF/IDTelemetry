@@ -70,6 +70,108 @@ static uint16_t     s_row_head      = 0;   // nächste Schreibposition
 static uint16_t     s_row_send_tail = 0;   // älteste ungesendete Zeile
 static uint16_t     s_row_pending   = 0;   // ausstehende (ungesendete) Zeilen
 
+// ── SPIFFS-Queue: crash-sichere Row-Persistenz ──────────────
+// Jede Row wird sofort an /telem_q.bin appended.
+// /telem_q_ofs enthält die Anzahl bereits gesendeter Rows (4 Bytes).
+// pending = (Dateigröße / sizeof(Row)) - offset
+#define SPIFFS_Q_DATA  "/telem_q.bin"
+#define SPIFFS_Q_OFS   "/telem_q_ofs"
+#define SPIFFS_Q_MAX   2000   // max Rows in Queue (danach älteste überschreiben via Truncate)
+static uint16_t s_spiffs_ofs = 0;  // Anzahl gesendeter Rows (aus Datei geladen)
+static uint16_t s_spiffs_total = 0; // Gesamte Rows in Datei
+
+static void spiffs_q_init() {
+    // Offset laden
+    if (SPIFFS.exists(SPIFFS_Q_OFS)) {
+        File f = SPIFFS.open(SPIFFS_Q_OFS, "r");
+        if (f && f.size() >= 2) {
+            f.read((uint8_t*)&s_spiffs_ofs, 2);
+            f.close();
+        }
+    }
+    // Total berechnen
+    if (SPIFFS.exists(SPIFFS_Q_DATA)) {
+        File f = SPIFFS.open(SPIFFS_Q_DATA, "r");
+        if (f) {
+            s_spiffs_total = (uint16_t)(f.size() / sizeof(TelemetryRow));
+            f.close();
+        }
+    }
+    // Sanity: offset darf nicht größer als total sein
+    if (s_spiffs_ofs > s_spiffs_total) s_spiffs_ofs = s_spiffs_total;
+    uint16_t pending = s_spiffs_total - s_spiffs_ofs;
+    if (pending > 0) {
+        char m[64]; snprintf(m, sizeof(m), "SPIFFS-Queue: %u Rows pending, %u total", pending, s_spiffs_total);
+        syslog("TELEM", m);
+    }
+}
+
+static void spiffs_q_append(const TelemetryRow& row) {
+    // Wenn Queue zu groß: komprimieren (gesendete Rows löschen)
+    if (s_spiffs_total >= SPIFFS_Q_MAX && s_spiffs_ofs > 0) {
+        // Ungesendete Rows in temporäre Datei kopieren
+        uint16_t pending = s_spiffs_total - s_spiffs_ofs;
+        File src = SPIFFS.open(SPIFFS_Q_DATA, "r");
+        File dst = SPIFFS.open("/telem_q_tmp", "w");
+        if (src && dst) {
+            src.seek(s_spiffs_ofs * sizeof(TelemetryRow));
+            TelemetryRow tmp;
+            for (uint16_t i = 0; i < pending; i++) {
+                if (src.read((uint8_t*)&tmp, sizeof(tmp)) == sizeof(tmp))
+                    dst.write((uint8_t*)&tmp, sizeof(tmp));
+            }
+            src.close();
+            dst.close();
+            SPIFFS.remove(SPIFFS_Q_DATA);
+            SPIFFS.rename("/telem_q_tmp", SPIFFS_Q_DATA);
+            s_spiffs_total = pending;
+            s_spiffs_ofs = 0;
+            // Offset speichern
+            File fo = SPIFFS.open(SPIFFS_Q_OFS, "w");
+            if (fo) { fo.write((uint8_t*)&s_spiffs_ofs, 2); fo.close(); }
+        } else {
+            if (src) src.close();
+            if (dst) dst.close();
+        }
+    }
+
+    File f = SPIFFS.open(SPIFFS_Q_DATA, "a");
+    if (f) {
+        f.write((uint8_t*)&row, sizeof(TelemetryRow));
+        f.close();
+        s_spiffs_total++;
+    }
+}
+
+// Älteste ungesendete Row aus SPIFFS lesen (OHNE Offset vorrücken)
+static bool spiffs_q_peek(TelemetryRow& out) {
+    if (s_spiffs_ofs >= s_spiffs_total) return false;
+    File f = SPIFFS.open(SPIFFS_Q_DATA, "r");
+    if (!f) return false;
+    f.seek(s_spiffs_ofs * sizeof(TelemetryRow));
+    bool ok = (f.read((uint8_t*)&out, sizeof(TelemetryRow)) == sizeof(TelemetryRow));
+    f.close();
+    return ok;
+}
+
+// Nach erfolgreichem Publish: Offset vorrücken
+static void spiffs_q_ack() {
+    s_spiffs_ofs++;
+    File f = SPIFFS.open(SPIFFS_Q_OFS, "w");
+    if (f) { f.write((uint8_t*)&s_spiffs_ofs, 2); f.close(); }
+    // Wenn alles gesendet: Dateien löschen (SPIFFS-Platz sparen)
+    if (s_spiffs_ofs >= s_spiffs_total) {
+        SPIFFS.remove(SPIFFS_Q_DATA);
+        SPIFFS.remove(SPIFFS_Q_OFS);
+        s_spiffs_ofs = 0;
+        s_spiffs_total = 0;
+    }
+}
+
+static uint16_t spiffs_q_pending() {
+    return s_spiffs_total - s_spiffs_ofs;
+}
+
 // GPS-Capture-State (Vergleichsbasis für Trigger-Schwellen)
 static double   s_cap_lat = 0.0;
 static double   s_cap_lon = 0.0;
@@ -270,6 +372,9 @@ static void row_try_capture() {
         s_row_send_tail = (uint16_t)((s_row_send_tail + 1) % TELEM_ROW_BUF_SIZE);
     }
     xSemaphoreGive(s_mutex);
+
+    // Crash-sicher auf SPIFFS schreiben — überlebt Reboot/Crash
+    spiffs_q_append(row);
 
     s_cap_lat = lat;
     s_cap_lon = lon;
@@ -561,6 +666,7 @@ void telem_init() {
         s_cache[i].valid = false;
     }
     s_influx_ok = false;
+    spiffs_q_init();  // SPIFFS-Queue: pending Rows aus vorherigem Lauf laden
     syslog("TELEM", "init OK");
 }
 
@@ -608,6 +714,10 @@ uint16_t telem_get_buf_pending() {
 }
 
 uint16_t telem_get_row_pending() {
+    // SPIFFS-Queue hat Vorrang (crash-safe, überlebt Reboot)
+    uint16_t sq = spiffs_q_pending();
+    if (sq > 0) return sq;
+    // Fallback: RAM-Ringpuffer (für Rows die noch nicht auf SPIFFS sind)
     uint16_t n = 0;
     if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         n = s_row_pending;
@@ -715,14 +825,17 @@ void telem_send_influx() {
 
 // ── MQTT: älteste ungesendete Zeile lesen (ohne entfernen) ──
 bool telem_peek_row(TelemetryRow& out) {
+    // SPIFFS-Queue hat Vorrang
+    if (spiffs_q_pending() > 0) {
+        return spiffs_q_peek(out);
+    }
+    // Fallback: RAM-Ringpuffer
     if (!s_mutex) return false;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return false;
-
     if (s_row_pending == 0) {
         xSemaphoreGive(s_mutex);
         return false;
     }
-
     out = s_row_buf[s_row_send_tail];
     xSemaphoreGive(s_mutex);
     return true;
@@ -730,14 +843,26 @@ bool telem_peek_row(TelemetryRow& out) {
 
 // ── MQTT: älteste Zeile als gesendet bestätigen ─────────────
 void telem_ack_row() {
+    // SPIFFS-Queue hat Vorrang
+    if (spiffs_q_pending() > 0) {
+        spiffs_q_ack();
+        // RAM-Ringpuffer parallel vorrücken (Row ist in beiden)
+        if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            if (s_row_pending > 0) {
+                s_row_send_tail = (uint16_t)((s_row_send_tail + 1) % TELEM_ROW_BUF_SIZE);
+                s_row_pending--;
+            }
+            xSemaphoreGive(s_mutex);
+        }
+        return;
+    }
+    // Fallback: nur RAM-Ringpuffer
     if (!s_mutex) return;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
-
     if (s_row_pending > 0) {
         s_row_send_tail = (uint16_t)((s_row_send_tail + 1) % TELEM_ROW_BUF_SIZE);
         s_row_pending--;
     }
-
     xSemaphoreGive(s_mutex);
 }
 

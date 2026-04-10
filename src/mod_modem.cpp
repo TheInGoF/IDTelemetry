@@ -697,6 +697,7 @@ static void modem_task(void* /*param*/) {
 
                         // Ext. GPS übernimmt — internes GPS nicht starten
                         s_gps_enabled = false;
+                        { uint16_t p = telem_get_row_pending(); if (p > 0) { char m[64]; snprintf(m, sizeof(m), "STATE_RUNNING · %u Rows nachsenden", p); syslog("MODEM", m); } }
                         state = STATE_RUNNING;
                         last_stat_ms = now;
                         stat_interval = 5000;
@@ -859,26 +860,47 @@ static void modem_task(void* /*param*/) {
 
                 #ifndef LTE_DISABLED
                 // ── MQTT: Sofort-Publish ausstehender Zeilen ────────────────────
-                // Kein GPS/LTE-Wechsel — ext. GPS liefert Fixes, SIM7080G
-                // bleibt durchgehend in LTE. MQTT-Verbindung ist persistent.
                 {
                     static uint32_t s_mqtt_reconnect_ms = 0;
+                    static uint32_t s_mqtt_last_ok_ms   = millis(); // Watchdog: letzter erfolgreicher Publish
+                    static uint8_t  s_mqtt_fail_count   = 0;        // aufeinanderfolgende Reconnect-Fehlschläge
 
                     // MQTT-Verbindung prüfen / wiederherstellen
                     if (s_sim_ok && !mqtt_is_connected()) {
                         if (now - s_mqtt_reconnect_ms >= MQTT_RECONNECT_MS) {
-                            syslog("MQTT", "Reconnect...");
+                            uint16_t pending = telem_get_row_pending();
+                            { char m[80]; snprintf(m, sizeof(m), "Reconnect... (%u Rows pending, Versuch %d)", pending, s_mqtt_fail_count + 1); syslog("MQTT", m); }
+
                             if (modem_ensure_connected()) {
-                                mqtt_connect();
+                                if (mqtt_connect()) {
+                                    s_mqtt_fail_count = 0;
+                                    syslog("MQTT", "Reconnect OK");
+                                } else {
+                                    s_mqtt_fail_count++;
+                                    syslog("MQTT", "Reconnect: GPRS OK aber MQTT-Connect fehlgeschlagen");
+                                }
                             } else {
+                                s_mqtt_fail_count++;
                                 RegStatus reg = s_modem.getRegistrationStatus();
                                 if (reg != REG_OK_HOME && reg != REG_OK_ROAMING) {
                                     syslog("MODEM", "Netz verloren · Neuregistrierung");
                                     state = STATE_WAIT_FOR_NETWORK;
+                                } else {
+                                    syslog("MODEM", "GPRS fehlgeschlagen · Netz noch da · warte 10s");
                                 }
                             }
-                            // Timer NACH Connect-Versuch neu setzen (inkl. Timeout-Dauer)
                             s_mqtt_reconnect_ms = millis();
+
+                            // Watchdog: nach 5min ohne erfolgreichen Publish → Reboot
+                            if ((now - s_mqtt_last_ok_ms) >= 5UL * 60UL * 1000UL && pending > 0) {
+                                char m[80]; snprintf(m, sizeof(m),
+                                    "WATCHDOG: %lu min ohne Publish, %u Rows pending → Reboot",
+                                    (now - s_mqtt_last_ok_ms) / 60000UL, pending);
+                                syslog("MQTT", m);
+                                Serial.flush();
+                                delay(200);
+                                esp_restart();
+                            }
                         }
                     }
 
@@ -888,13 +910,14 @@ static void modem_task(void* /*param*/) {
                         int sent = 0;
                         while (telem_get_row_pending() > 0 && sent < 10) {
                             if (!telem_peek_row(row)) break;
-                            if (!mqtt_publish_row(row)) {
-                                // Row bleibt im Puffer — nächster Versuch nach Reconnect
-                                break;
-                            }
-                            telem_ack_row();  // erst nach erfolgreichem Publish entfernen
+                            if (!mqtt_publish_row(row)) break;
+                            telem_ack_row();
                             sent++;
                             vTaskDelay(pdMS_TO_TICKS(50));
+                        }
+                        if (sent > 0) {
+                            s_mqtt_last_ok_ms = millis();
+                            s_mqtt_fail_count = 0;
                         }
                     }
 
