@@ -18,6 +18,7 @@
 // SPIFFS-Datei senden + alle Status-Header
 static void send_html(AsyncWebServerRequest* r, const char* path) {
     auto* resp = r->beginResponse(SPIFFS, path, "text/html");
+    if (!resp) { r->send(500, "text/plain", "ERR"); return; }
     headers_apply(resp);
     r->send(resp);
 }

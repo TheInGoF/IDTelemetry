@@ -6,6 +6,7 @@
 #include <Arduino.h>
 
 void headers_apply(AsyncWebServerResponse* resp) {
+    if (!resp) return;  // Response kann NULL sein bei RAM-Mangel oder abgebrochenem Client
     char buf[24];
 
     // GPS-Standort
