@@ -57,7 +57,7 @@
 // ============================================================
 //  WiFi / Access Point / Guard
 // ============================================================
-#define AP_TIMEOUT_MIN         90    // AP abschalten nach X Minuten ohne Client (0 = nie)
+#define AP_TIMEOUT_MIN         10    // AP abschalten nach X Minuten ohne Client (0 = nie)
 #define BLE_RSSI_THRESHOLD    -72    // dBm (Legacy, nicht mehr genutzt)
 #define GUARD_LOCK_S          120    // 2 min Lock nach Fund
 #define GUARD_CHECK_S          60    // 60s bis Rescan
