@@ -865,13 +865,44 @@ static void modem_task(void* /*param*/) {
                     static uint32_t s_mqtt_last_ok_ms   = millis(); // Watchdog: letzter erfolgreicher Publish
                     static uint8_t  s_mqtt_fail_count   = 0;        // aufeinanderfolgende Reconnect-Fehlschläge
 
+                    // Watchdog: VOR dem blockierenden gprsConnect prüfen
+                    // (gprsConnect kann >2min blockieren → Watchdog sonst unerreichbar)
+                    if (s_sim_ok && !s_connected) {
+                        uint16_t wd_pending = telem_get_row_pending();
+                        if ((now - s_mqtt_last_ok_ms) >= 5UL * 60UL * 1000UL && wd_pending > 0) {
+                            char m[80]; snprintf(m, sizeof(m),
+                                "WATCHDOG: %lu min ohne Publish, %u Rows pending → Reboot",
+                                (now - s_mqtt_last_ok_ms) / 60000UL, wd_pending);
+                            syslog("MQTT", m);
+                            Serial.flush();
+                            delay(200);
+                            esp_restart();
+                        }
+                    }
+
                     // MQTT-Verbindung prüfen / wiederherstellen
                     if (s_sim_ok && !mqtt_is_connected()) {
                         if (now - s_mqtt_reconnect_ms >= MQTT_RECONNECT_MS) {
                             uint16_t pending = telem_get_row_pending();
                             { char m[80]; snprintf(m, sizeof(m), "Reconnect... (%u Rows pending, Versuch %d)", pending, s_mqtt_fail_count + 1); syslog("MQTT", m); }
 
-                            if (modem_ensure_connected()) {
+                            // Nach N Fehlversuchen: Modem-Reset (PWRKEY) statt endlos retries
+                            if (s_mqtt_fail_count >= MQTT_FAIL_RESET_COUNT) {
+                                syslog("MODEM", "Modem-Reset nach Reconnect-Fehlern (PWRKEY)");
+                                s_modem.sendAT("+CNACT=0,0");  // GPRS sauber trennen
+                                s_modem.waitResponse(5000L);
+                                modem_pwrkey_pulse();
+                                delay(3000);  // Modem braucht ~3s nach PWRKEY
+                                // AT-Handshake wiederherstellen
+                                for (int i = 0; i < 5; i++) {
+                                    if (s_modem.testAT(1000)) break;
+                                    delay(500);
+                                }
+                                s_connected = false;
+                                s_mqtt_fail_count = 0;
+                                s_mqtt_reconnect_ms = millis();
+                                syslog("MODEM", "Modem-Reset abgeschlossen, naechster Versuch in 10s");
+                            } else if (modem_ensure_connected()) {
                                 if (mqtt_connect()) {
                                     s_mqtt_fail_count = 0;
                                     syslog("MQTT", "Reconnect OK");
@@ -890,17 +921,6 @@ static void modem_task(void* /*param*/) {
                                 }
                             }
                             s_mqtt_reconnect_ms = millis();
-
-                            // Watchdog: nach 5min ohne erfolgreichen Publish → Reboot
-                            if ((now - s_mqtt_last_ok_ms) >= 5UL * 60UL * 1000UL && pending > 0) {
-                                char m[80]; snprintf(m, sizeof(m),
-                                    "WATCHDOG: %lu min ohne Publish, %u Rows pending → Reboot",
-                                    (now - s_mqtt_last_ok_ms) / 60000UL, pending);
-                                syslog("MQTT", m);
-                                Serial.flush();
-                                delay(200);
-                                esp_restart();
-                            }
                         }
                     }
 
@@ -1231,6 +1251,10 @@ bool modem_ensure_connected() {
     if (s_modem.isGprsConnected()) {
         return true;
     }
+
+    // Alten PDP-Kontext sauber trennen (verhindert stuck half-open state)
+    s_modem.sendAT("+CNACT=0,0");
+    s_modem.waitResponse(5000L);
 
     // gprsConnect: setzt APN, sendet +CNACT=0,1, wartet auf "+APP PDP: 0,ACTIVE" URC
     syslog("MODEM", "GPRS verbinden...");

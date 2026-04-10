@@ -313,6 +313,9 @@ void loop() {
                     Serial.println("[CMD] MQTT Test-Publish...");
                     telem_force_capture("Test via Serial");
                     Serial.printf("[CMD] %u Zeilen ausstehend\n", telem_get_row_pending());
+                } else if (strcmp(serial_buf, "mqtt drop") == 0) {
+                    Serial.println("[CMD] MQTT Disconnect erzwungen — Reconnect-Logik wird getestet");
+                    mqtt_disconnect();
                 } else if (strcmp(serial_buf, "can sniff") == 0) {
                     can_sniff(5000);  // 5 Sekunden
                 } else if (strcmp(serial_buf, "gyro cal") == 0) {
@@ -337,7 +340,7 @@ void loop() {
                     if (SPIFFS.exists(SPIFFS_SCAN_LOG)) SPIFFS.remove(SPIFFS_SCAN_LOG);
                     Serial.println("[CMD] Alle Logs geloescht");
                 } else if (strcmp(serial_buf, "help") == 0) {
-                    Serial.println("Befehle: sleep, nosleep, gps, lte, lte scan, mqtt, can sniff, reset");
+                    Serial.println("Befehle: sleep, nosleep, gps, lte, lte scan, mqtt, mqtt drop, can sniff, reset");
                     Serial.println("  LTE:   lte bands, lte bands fix, lte bands all");
                     Serial.println("  Gyro:  gyro cal  (Kalibrierung — Board muss still liegen)");
                     Serial.println("  Debug: at +KOMMANDO  (roher AT-Befehl an Modem)");
