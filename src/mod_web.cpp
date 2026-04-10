@@ -39,6 +39,10 @@ static void on_ws_event(AsyncWebSocket*, AsyncWebSocketClient* c,
 
 void ws_broadcast_json(const char* json) { if (ws.count() > 0) ws.textAll(json); }
 
+static bool     s_ap_active    = true;
+static bool     s_had_client   = false;
+static uint32_t s_ap_start_ms  = 0;
+
 void web_init() {
     if (!SPIFFS.begin(true)) {
         Serial.println("[WEB] SPIFFS Fehler!");
@@ -252,10 +256,6 @@ void web_init() {
     server.addHandler(&ws);
     server.begin();
 }
-
-static bool     s_ap_active    = true;
-static bool     s_had_client   = false;   // je ein Client verbunden seit letztem AP-Start?
-static uint32_t s_ap_start_ms  = 0;       // millis() beim letzten AP-Start
 
 bool web_ap_active() { return s_ap_active; }
 

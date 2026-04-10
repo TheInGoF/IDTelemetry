@@ -240,7 +240,6 @@ void log_ble_snapshot(const char* json_devices) {
 
 String log_ble_to_txt() {
     String out = "Telemetry Stick - BLE Log\r\n";
-    out += "Schwelle: " + String(BLE_RSSI_THRESHOLD) + " dBm\r\n";
     out += "Intervall: 10s\r\n";
     out += "========================================\r\n";
     if (!SPIFFS.exists(SPIFFS_BLE_LOG)) { out += "(leer)\r\n"; return out; }
