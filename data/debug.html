@@ -6,45 +6,8 @@
 <title>Telemetry Stick · Debug</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/style.css">
 <style>
-:root{
-  --bg0:#080b0f;--bg1:#0e1318;--bg2:#141c24;--bg3:#1c2733;
-  --border:#2a3a4a;--accent:#00e5ff;--green:#39ff87;--red:#ff4757;
-  --yellow:#ffd166;--orange:#ff6b35;--text:#d0dde8;--muted:#5a7a96;--blue:#79c0ff;
-  --mono:'Space Mono',monospace;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-size:13px;min-height:100vh}
-header{background:var(--bg1);border-bottom:1px solid var(--border);display:flex;flex-direction:column;position:relative}.hrow1{display:flex;align-items:center;gap:10px;padding:8px 16px;position:relative}.hrow2{display:flex;align-items:center;gap:12px;justify-content:flex-end;padding:2px 16px 6px;border-top:1px solid rgba(42,58,74,.4)}
-header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--accent),transparent 60%)}
-.logo{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:var(--accent);text-shadow:0 0 18px rgba(0,229,255,.35);letter-spacing:.5px}
-.logo span{color:var(--orange)}
-.leds{display:flex;gap:12px;align-items:center}
-.led-g{display:flex;flex-direction:column;align-items:center;gap:3px}
-.led-lbl{font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:'Space Mono',monospace}
-.led{width:9px;height:9px;border-radius:50%;background:rgba(90,122,150,.2);transition:background .2s,box-shadow .2s}
-.led.green{background:var(--green);box-shadow:0 0 7px var(--green)}
-.led.blue{background:var(--blue);box-shadow:0 0 7px rgba(121,192,255,.6)}
-.led.yellow{background:var(--yellow);box-shadow:0 0 7px var(--yellow)}
-.led.red{background:var(--red);box-shadow:0 0 7px var(--red)}
-.tab-nav{display:flex;background:var(--bg1);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
-.tab-nav a{flex:1;text-align:center;padding:11px 4px;font-size:11px;font-weight:700;letter-spacing:.08em;text-decoration:none;color:var(--muted);border-bottom:2px solid transparent;transition:color .15s}
-.tab-nav a.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tab-nav a:hover{color:var(--text)}
-.container{max-width:800px;margin:0 auto;padding:20px}
-.section-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;margin-top:24px;display:flex;align-items:center;gap:8px}
-.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;margin-bottom:8px}
-.lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
-input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:12px}
-.btn{font-size:11px;background:transparent;padding:6px 16px;border-radius:4px;cursor:pointer;font-family:var(--mono);border:1px solid var(--border);color:var(--muted);transition:all .2s}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn.accent{border-color:var(--accent);color:var(--accent)}
-.btn.accent:hover{background:rgba(0,212,255,.1)}
-.btn.danger{border-color:var(--red);color:var(--red)}
-.btn.danger:hover{background:rgba(255,69,96,.1)}
-.btn.active{background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent);font-weight:600}
-.btn:disabled{opacity:.4;cursor:default}
 .tx-box{background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:12px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px}
 .wifi-net{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:4px;margin-bottom:4px;border:1px solid transparent;transition:background .15s}
 .wifi-net:hover{background:rgba(0,212,255,.05);border-color:var(--border)}
@@ -53,17 +16,6 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
 .wifi-ssid{font-family:var(--mono);font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wifi-meta{font-size:10px;color:var(--muted);flex-shrink:0;text-align:right;line-height:1.6}
 .wifi-bar{height:8px;border-radius:2px;flex-shrink:0;min-width:4px}
-.log-box{background:#000;border:1px solid var(--border);border-radius:4px;padding:12px;font-size:11px;color:#fff;max-height:220px;overflow-y:auto;line-height:1.7;font-family:var(--mono)}
-.log-entry{border-bottom:1px solid rgba(255,255,255,.04);padding-bottom:4px;margin-bottom:4px}
-.log-entry:last-child{border:none;margin:0}
-.toast{position:fixed;bottom:20px;right:20px;background:var(--bg1);border:1px solid var(--accent);color:var(--accent);padding:10px 18px;border-radius:6px;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none}
-.toast.show{opacity:1}
-@keyframes spin{to{transform:rotate(360deg)}}
-.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
-/* ── Burger & Modem ── */
-.burger-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 9px;border-radius:4px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;transition:all .15s}.burger-btn:hover{color:var(--accent);border-color:var(--accent)}.drop-nav{position:absolute;top:100%;left:0;background:var(--bg1);border:1px solid var(--border);border-top:2px solid var(--accent);border-radius:0 0 6px 6px;z-index:200;min-width:150px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)}.drop-nav a{display:block;padding:11px 16px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.08em;border-bottom:1px solid var(--border);transition:all .15s}.drop-nav a:last-child{border:none}.drop-nav a:hover,.drop-nav a.active{color:var(--accent);background:var(--bg2)}.modem-w{display:flex;flex-direction:column;align-items:center;gap:2px;padding:0}.modem-bars{display:flex;align-items:flex-end;gap:2px;height:14px}.modem-bar{width:3px;border-radius:1px 1px 0 0;background:rgba(90,122,150,.2)}.modem-bar.on{background:var(--green);box-shadow:0 0 4px var(--green)}.bar1{height:3px}.bar2{height:6px}.bar3{height:9px}.bar4{height:11px}.bar5{height:14px}.modem-op{font-size:7px;color:var(--muted);letter-spacing:.04em;white-space:nowrap;max-width:54px;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;text-align:center}
-
-/* RTC time inputs */
 .time-inputs{display:flex;align-items:center;gap:6px}
 .time-inputs input{width:56px;text-align:center;font-size:16px;font-weight:700;padding:6px 4px}
 .time-sep{font-size:20px;font-weight:700;color:var(--accent);line-height:1}
@@ -72,7 +24,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
 <body>
 <header>
   <div class="hrow1">
-    <button class="burger-btn" onclick="toggleMenu()">☰</button>
+    <button class="burger-btn" onclick="toggleMenu()">&#9776;</button>
     <div class="logo">TS<span>.</span>DEBUG <span id="fw-ver" style="font-size:9px;color:var(--muted);font-weight:400"></span></div>
     <span style="flex:1"></span>
     <div class="led-g"><div class="led" id="led-gps"></div><span class="led-lbl">GPS</span></div>
@@ -107,7 +59,6 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
   <!-- Uhrzeit -->
   <div class="section-title" data-i18n="dbg.rtc_title">Uhrzeit (RTC DS1307)</div>
   <div class="card">
-    <!-- Aktuelle RTC Zeit Anzeige -->
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
       <div style="flex:1">
         <div class="lbl" data-i18n="dbg.rtc_datetime">RTC Datum & Zeit</div>
@@ -119,7 +70,6 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
         <div id="rtc-ok-badge" style="font-size:11px;margin-top:4px"></div>
       </div>
     </div>
-    <!-- Manuelle Zeiteinstellung -->
     <div>
       <div class="lbl" style="margin-bottom:8px" data-i18n="dbg.rtc_manual">Datum & Zeit manuell setzen</div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -169,7 +119,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
       <div style="flex:1;min-width:200px">
         <canvas id="gyro-canvas" style="width:100%;height:110px;display:block;border-radius:3px"></canvas>
         <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:var(--muted);padding:0 2px">
-          <span>−30s</span><span>−20s</span><span>−10s</span><span>jetzt</span>
+          <span>-30s</span><span>-20s</span><span>-10s</span><span>jetzt</span>
         </div>
       </div>
       <div style="flex:0 0 180px;display:flex;flex-direction:column;gap:4px;justify-content:center">
@@ -238,28 +188,25 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
   <div class="section-title">Kompass (QMC5883L)</div>
   <div class="card" style="padding:16px 20px">
     <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
-      <!-- Kompass-Rose -->
       <div style="flex-shrink:0">
         <canvas id="compass-canvas" width="110" height="110"></canvas>
       </div>
-      <!-- Werte -->
       <div style="flex:1;min-width:120px">
         <div style="margin-bottom:8px">
           <div class="lbl">Richtung</div>
           <div style="display:flex;align-items:baseline;gap:8px">
             <span id="compass-deg" style="font-size:28px;font-weight:700;color:var(--accent);letter-spacing:2px">---</span>
-            <span style="font-size:14px;color:var(--muted)">°</span>
+            <span style="font-size:14px;color:var(--muted)">&deg;</span>
             <span id="compass-cardinal" style="font-size:18px;font-weight:700;color:var(--orange);min-width:30px">--</span>
           </div>
         </div>
         <div id="compass-status" style="font-size:10px;color:var(--muted)">Warte auf Sensor...</div>
       </div>
     </div>
-    <!-- Kalibrierung -->
     <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
       <div class="lbl" style="margin-bottom:6px">Automatische Kalibrierung</div>
       <div id="compass-cal-info" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
-      <button onclick="compassCalReset()" style="padding:5px 10px;font-size:11px;opacity:0.7">Kalibrierung zurücksetzen</button>
+      <button onclick="compassCalReset()" style="padding:5px 10px;font-size:11px;opacity:0.7">Kalibrierung zur&uuml;cksetzen</button>
     </div>
   </div>
   </div>
@@ -267,7 +214,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
   <!-- CAN TX Status -->
   <div class="tx-box">
     <div style="font-size:11px;color:var(--muted)" data-i18n="dbg.cantx_label">CAN TX:</div>
-    <div style="font-size:15px;font-weight:700" id="cantx-status">–</div>
+    <div style="font-size:15px;font-weight:700" id="cantx-status">&ndash;</div>
     <div style="font-size:11px;color:var(--muted)" id="cantx-detail"></div>
     <button class="btn accent" id="btn-tx-unlock" style="margin-left:auto" onclick="txUnlock()" data-i18n="dbg.cantx_unlock">TX entsperren</button>
   </div>
@@ -300,7 +247,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
         <div id="wifi-rssi-val" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
       </div>
       <div style="text-align:right">
-        <div id="wifi-state-val" style="font-size:13px;font-weight:700">–</div>
+        <div id="wifi-state-val" style="font-size:13px;font-weight:700">&ndash;</div>
         <button class="btn danger" id="btn-clear-wifi" style="display:none;margin-top:6px;font-size:10px;padding:2px 10px" onclick="clearWifiSsid()" data-i18n="dbg.guard_remove">&#10005; entfernen</button>
       </div>
     </div>
@@ -314,14 +261,14 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
       <button onclick="setMode(0)" class="btn" data-mode="0" data-i18n="dbg.mode_off">W&#228;chter aus</button>
       <button onclick="setMode(1)" class="btn" data-mode="1" data-i18n="dbg.mode_on">W&#228;chter aktiv</button>
     </div>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted)" id="mode-desc">–</div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted)" id="mode-desc">&ndash;</div>
   </div>
 
   <!-- WiFi Log (nur sichtbar wenn log_wifi aktiv) -->
   <div id="sec-wifi-log" style="display:none">
   <div class="section-title" data-i18n="dbg.wifi_log_title">WiFi Scan Log
     <button class="btn danger" style="margin-left:auto;font-size:10px;padding:2px 10px" onclick="clearWifiLog()" data-i18n="dbg.wifi_log_delete">&#10005; L&#246;schen</button>
-    <a href="/download-wifi-log" class="btn accent" style="font-size:10px;padding:2px 10px;text-decoration:none">↓ wifi.log</a>
+    <a href="/download-wifi-log" class="btn accent" style="font-size:10px;padding:2px 10px;text-decoration:none">&darr; wifi.log</a>
   </div>
   <div class="log-box" id="wifi-log" style="white-space:pre">Lade...</div>
   </div>
@@ -330,7 +277,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
   <div id="sec-elm-log" style="display:none">
   <div class="section-title" style="margin-top:16px" data-i18n="dbg.elm_title">ELM327 / ABRP Log
     <button class="btn danger" style="margin-left:auto;font-size:10px;padding:2px 10px" onclick="clearElmLog()" data-i18n="dbg.elm_delete">&#10005; L&#246;schen</button>
-    <a href="/download-elm-log" class="btn" style="border-color:var(--green);color:var(--green);font-size:10px;padding:2px 10px;text-decoration:none">↓ elm.log</a>
+    <a href="/download-elm-log" class="btn" style="border-color:var(--green);color:var(--green);font-size:10px;padding:2px 10px;text-decoration:none">&darr; elm.log</a>
   </div>
   <div class="log-box" id="elm-log" style="white-space:pre">Lade...</div>
   </div>
@@ -346,7 +293,7 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
 
   <!-- System Log -->
   <div class="section-title" style="margin-top:16px" data-i18n="dbg.syslog_title">System Log
-    <button class="btn danger" style="margin-left:auto;font-size:10px;padding:2px 10px" onclick="clearSysLog()">&#x2715; Löschen</button>
+    <button class="btn danger" style="margin-left:auto;font-size:10px;padding:2px 10px" onclick="clearSysLog()">&#x2715; L&ouml;schen</button>
     <a href="/download-sys-log" class="btn" style="border-color:var(--orange);color:var(--orange);font-size:10px;padding:2px 10px;text-decoration:none;white-space:nowrap" download>&#x2193; sys.log</a>
   </div>
   <div style="font-size:10px;color:var(--muted);margin-bottom:6px">
@@ -364,70 +311,45 @@ input[type=text],input[type=number]{width:100%;background:var(--bg3);border:1px 
 
 <div class="toast" id="toast"></div>
 
+<script src="/common.js"></script>
 <script src="/i18n.js"></script>
 <script>
-// ── Burger ─────────────────────────────────────────────
-function toggleMenu(){const m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
-if(!window._menuListener){window._menuListener=true;document.addEventListener('click',e=>{if(!e.target.closest('header')){const m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
-// ── Modem Widget ───────────────────────────────────────
-var _modemLastOp='';
-function updateModem(sig,op,sim,conn){const bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(let i=1;i<=5;i++){const b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}const el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
-
-// ── LED System ─────────────────────────────────────────
-function setLed(id, cls) {
-  const el = document.getElementById('led-'+id);
-  if (el) el.className = 'led'+(cls?' '+cls:'');
-}
-
-function setBatt(v,chg,vbus){const el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
-
-async function fetchStatus(){try{const d=await(await fetch('/status')).json();if(d.fw_version){const v=document.getElementById('fw-ver');if(v)v.textContent='v'+d.fw_version;}setLed('can',d.can_ok?'green':'blue');if(!d.gyro_ok)setLed('gyro','');else setLed('gyro',d.gyro_state===2?'yellow':'green');setLed('gps',d.gps_valid?'green':'');if(d.gyro_threshold!=null){gThr=d.gyro_threshold;const inp=document.getElementById('gyro-thr-input');if(inp)inp.value=gThr.toFixed(3);}
-if(d.gyro_mot_thr!=null){const inp=document.getElementById('gyro-mot-input');if(inp){inp.value=d.gyro_mot_thr;const lbl=document.getElementById('gyro-mot-mg');if(lbl)lbl.textContent='× 32 = '+(d.gyro_mot_thr*32)+'mg';}}setBatt(d.batt_pct??-1,d.charging??false,d.vbus_in??false);updateModem(d.modem_sig??-1,d.modem_op??'',d.modem_sim??false,d.modem_ok??false);compassUpdate(d);}catch(e){}}
+// ── Status Polling ────────────────────────────────────────
+async function fetchStatus(){try{var d=await(await fetch('/status')).json();if(d.fw_version){var v=document.getElementById('fw-ver');if(v)v.textContent='v'+d.fw_version;}setLed('can',d.can_ok?'green':'blue');if(!d.gyro_ok)setLed('gyro','');else setLed('gyro',d.gyro_state===2?'yellow':'green');setLed('gps',d.gps_valid?'green':'');if(d.gyro_threshold!=null){gThr=d.gyro_threshold;var inp=document.getElementById('gyro-thr-input');if(inp)inp.value=gThr.toFixed(3);}
+if(d.gyro_mot_thr!=null){var inp2=document.getElementById('gyro-mot-input');if(inp2){inp2.value=d.gyro_mot_thr;var lbl=document.getElementById('gyro-mot-mg');if(lbl)lbl.textContent='\u00d7 32 = '+(d.gyro_mot_thr*32)+'mg';}}setBatt(d.batt_pct??-1,d.charging??false,d.vbus_in??false);updateModem(d.modem_sig??-1,d.modem_op??'',d.modem_sim??false,d.modem_ok??false);compassUpdate(d);}catch(e){}}
 fetchStatus();
 var _stTimer=setInterval(fetchStatus,6000);
 
-
-// ── Toast ──────────────────────────────────────────────
+// ── Restart ───────────────────────────────────────────────
 async function doRestart(){
   if(!confirm(t('dbg.restart_confirm')))return;
   try{await fetch('/api/restart',{method:'POST'});toast(t('dbg.restart_toast'));}catch(_){toast(t('dbg.restart_err'),false);}
 }
 
-function toast(msg, ok=true) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.style.borderColor = ok ? 'var(--green)' : 'var(--red)';
-  t.style.color = ok ? 'var(--green)' : 'var(--red)';
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
-}
-
-// ── RTC Zeit vom ESP holen und anzeigen ────────────────
-var rtcOffset = null;   // ms seit Epoch wenn RTC läuft, null = kein RTC
+// ── RTC Zeit vom ESP holen und anzeigen ───────────────────
+var rtcOffset = null;
 var rtcFetchedAt = null;
 
 async function loadRtcTime() {
-  const el   = document.getElementById('rtc-display');
-  const stEl = document.getElementById('rtc-status');
-  const okEl = document.getElementById('rtc-ok-badge');
+  var el   = document.getElementById('rtc-display');
+  var stEl = document.getElementById('rtc-status');
+  var okEl = document.getElementById('rtc-ok-badge');
   try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 8000);
-    const d = await (await fetch('/status', {signal: ctrl.signal})).json();
+    var ctrl = new AbortController();
+    var tid  = setTimeout(function(){ ctrl.abort(); }, 8000);
+    var d = await (await fetch('/status', {signal: ctrl.signal})).json();
     clearTimeout(tid);
 
     if (d.rtc_ok && d.rtc_time && d.rtc_time !== '--:--:--') {
-      // RTC läuft: Zeit merken + lokal weiterlaufen lassen
-      const parts = d.rtc_time.split(':').map(Number);
-      const nowMs = Date.now();
+      var parts = d.rtc_time.split(':').map(Number);
+      var nowMs = Date.now();
       rtcOffset = (parts[0]*3600 + parts[1]*60 + parts[2]) * 1000 - (nowMs % 86400000);
       rtcFetchedAt = nowMs;
       okEl.innerHTML = '<span style="color:var(--green)">' + t('dbg.rtc_running') + '</span>';
       stEl.textContent = t('dbg.rtc_stored');
-      // Datum anzeigen
-      const dateEl = document.getElementById('rtc-date-display');
+      var dateEl = document.getElementById('rtc-date-display');
       if (d.rtc_date) {
-        const dp = d.rtc_date.split('-');
+        var dp = d.rtc_date.split('-');
         dateEl.textContent = dp[2] + '.' + dp[1] + '.' + dp[0];
         dateEl.style.color = 'var(--accent)';
       } else {
@@ -439,11 +361,10 @@ async function loadRtcTime() {
       okEl.innerHTML = '<span style="color:var(--red)">' + t('dbg.rtc_stopped') + '</span>';
       stEl.textContent = t('dbg.rtc_auto_browser');
       el.style.color = 'var(--red)';
-      // Automatisch Browser-Zeit setzen wenn RTC nicht läuft
-      const n = new Date();
+      var n = new Date();
       fetch('/wifi/set-time', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({year:n.getUTCFullYear(), month:n.getUTCMonth()+1, day:n.getUTCDate(), hour:n.getUTCHours(), minute:n.getUTCMinutes(), second:n.getUTCSeconds()})
-      }).then(() => setTimeout(loadRtcTime, 500));
+      }).then(function(){ setTimeout(loadRtcTime, 500); });
     } else {
       okEl.innerHTML = '<span style="color:var(--muted)">' + t('dbg.rtc_not_found') + '</span>';
       stEl.textContent = t('dbg.rtc_check_wiring');
@@ -455,22 +376,21 @@ async function loadRtcTime() {
   }
 }
 
-// Uhrzeit-Display jede Sekunde aktualisieren (lokal interpoliert)
-setInterval(() => {
-  const el = document.getElementById('rtc-display');
+setInterval(function() {
+  var el = document.getElementById('rtc-display');
   if (rtcOffset === null) return;
-  const totalSec = Math.floor((Date.now() % 86400000 + rtcOffset) / 1000 + 86400) % 86400;
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  const fmt = n => String(n).padStart(2,'0');
+  var totalSec = Math.floor((Date.now() % 86400000 + rtcOffset) / 1000 + 86400) % 86400;
+  var h = Math.floor(totalSec / 3600);
+  var m = Math.floor((totalSec % 3600) / 60);
+  var s = totalSec % 60;
+  var fmt = function(n){ return String(n).padStart(2,'0'); };
   el.textContent = fmt(h) + ':' + fmt(m) + ':' + fmt(s);
   el.style.color = 'var(--accent)';
 }, 1000);
 
-// ── Manuelle Zeiteinstellung ───────────────────────────
+// ── Manuelle Zeiteinstellung ──────────────────────────────
 function prefillBrowserTime() {
-  const now = new Date();
+  var now = new Date();
   document.getElementById('set-date').value = now.getUTCFullYear() + '-' + String(now.getUTCMonth()+1).padStart(2,'0') + '-' + String(now.getUTCDate()).padStart(2,'0');
   document.getElementById('set-hour').value = now.getUTCHours();
   document.getElementById('set-min').value  = now.getUTCMinutes();
@@ -478,28 +398,28 @@ function prefillBrowserTime() {
 }
 
 async function setRtcTime() {
-  const h = parseInt(document.getElementById('set-hour').value);
-  const m = parseInt(document.getElementById('set-min').value);
-  const s = parseInt(document.getElementById('set-sec').value) || 0;
-  const dateVal = document.getElementById('set-date').value;
-  const dp = dateVal ? dateVal.split('-').map(Number) : [];
-  const yr = dp[0] || new Date().getUTCFullYear();
-  const mo = dp[1] || new Date().getUTCMonth()+1;
-  const dy = dp[2] || new Date().getUTCDate();
+  var h = parseInt(document.getElementById('set-hour').value);
+  var m = parseInt(document.getElementById('set-min').value);
+  var s = parseInt(document.getElementById('set-sec').value) || 0;
+  var dateVal = document.getElementById('set-date').value;
+  var dp = dateVal ? dateVal.split('-').map(Number) : [];
+  var yr = dp[0] || new Date().getUTCFullYear();
+  var mo = dp[1] || new Date().getUTCMonth()+1;
+  var dy = dp[2] || new Date().getUTCDate();
 
   if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
     toast(t('dbg.rtc_invalid'), false);
     return;
   }
   try {
-    const r = await fetch('/wifi/set-time', {
+    var r = await fetch('/wifi/set-time', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({year: yr, month: mo, day: dy, hour: h, minute: m, second: s})
     });
-    const d = await r.json();
+    var d = await r.json();
     if (d.ok) {
-      toast('✓ ' + String(dy).padStart(2,'0') + '.' + String(mo).padStart(2,'0') + '.' + yr + ' ' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0'));
+      toast('\u2713 ' + String(dy).padStart(2,'0') + '.' + String(mo).padStart(2,'0') + '.' + yr + ' ' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0'));
       await loadRtcTime();
     } else {
       toast(t('dbg.rtc_set_err'), false);
@@ -509,52 +429,51 @@ async function setRtcTime() {
   }
 }
 
-// ── WiFi Scan ──────────────────────────────────────────
+// ── WiFi Scan ─────────────────────────────────────────────
 async function loadWifiResult() {
   try {
-    const d = await (await fetch('/wifi/scan-result')).json();
+    var d = await (await fetch('/wifi/scan-result')).json();
     if (d.status === 'running' || !d.networks || d.status !== 'done') return;
     renderWifiNets(d.networks);
   } catch(e) { console.error(e); }
 }
 
 function renderWifiNets(nets) {
-  nets.sort((a,b) => b.rssi - a.rssi);
-  const container = document.getElementById('wifi-list');
+  nets.sort(function(a,b){ return b.rssi - a.rssi; });
+  var container = document.getElementById('wifi-list');
   if (nets.length === 0) {
     container.innerHTML = '<div style="color:var(--muted);font-size:12px">' + t('dbg.wifi_empty') + '</div>';
     return;
   }
-  container.innerHTML = nets.map(net => {
-    const pct = Math.max(4, Math.min(44, (net.rssi + 100) * 0.88));
-    const col = net.rssi > -55 ? 'var(--green)' : net.rssi > -72 ? 'var(--orange)' : 'var(--red)';
-    const guard = net.is_guard;
-    return `<div class="wifi-net${guard?' is-guard':''}">
-      <div class="wifi-bar" style="width:${pct}px;background:${col}"></div>
-      <div class="wifi-ssid">${net.ssid||t('dbg.wifi_hidden')}</div>
-      <div class="wifi-meta">${net.rssi} dBm<br>${net.dist} · ch${net.channel}</div>
-      <button class="btn${guard?' active':''}" style="font-size:10px;padding:3px 10px;flex-shrink:0"
-        onclick="setWifiGuardFromScan('${net.ssid}',${net.rssi})">
-        ${guard ? t('dbg.wifi_guard_set') : t('dbg.wifi_guard_add')}
-      </button>
-    </div>`;
+  container.innerHTML = nets.map(function(net) {
+    var pct = Math.max(4, Math.min(44, (net.rssi + 100) * 0.88));
+    var col = net.rssi > -55 ? 'var(--green)' : net.rssi > -72 ? 'var(--orange)' : 'var(--red)';
+    var guard = net.is_guard;
+    return '<div class="wifi-net' + (guard?' is-guard':'') + '">' +
+      '<div class="wifi-bar" style="width:' + pct + 'px;background:' + col + '"></div>' +
+      '<div class="wifi-ssid">' + (net.ssid||t('dbg.wifi_hidden')) + '</div>' +
+      '<div class="wifi-meta">' + net.rssi + ' dBm<br>' + net.dist + ' &middot; ch' + net.channel + '</div>' +
+      '<button class="btn' + (guard?' active':'') + '" style="font-size:10px;padding:3px 10px;flex-shrink:0"' +
+        ' onclick="setWifiGuardFromScan(\'' + net.ssid + '\',' + net.rssi + ')">' +
+        (guard ? t('dbg.wifi_guard_set') : t('dbg.wifi_guard_add')) +
+      '</button></div>';
   }).join('');
 }
 
 async function loadWifiLog() {
   try {
-    const r = await fetch('/download-wifi-log');
-    const t = await r.text();
-    const el = document.getElementById('wifi-log');
-    if (!t.trim() || t.startsWith('# WiFi Log leer')) {
+    var r = await fetch('/download-wifi-log');
+    var txt = await r.text();
+    var el = document.getElementById('wifi-log');
+    if (!txt.trim() || txt.startsWith('# WiFi Log leer')) {
       el.textContent = t('dbg.wifi_log_empty');
       return;
     }
-    const escW = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const lines = t.trim().split('\n').slice(-40);
-    el.innerHTML = lines.map(l => {
-      if (l.startsWith('[')) return `<span style="color:var(--green)">${escW(l)}</span>\n`;
-      return `<span>${escW(l)}</span>\n`;
+    var escW = function(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+    var lines = txt.trim().split('\n').slice(-40);
+    el.innerHTML = lines.map(function(l) {
+      if (l.startsWith('[')) return '<span style="color:var(--green)">' + escW(l) + '</span>\n';
+      return '<span>' + escW(l) + '</span>\n';
     }).join('');
     el.scrollTop = el.scrollHeight;
   } catch(e) { document.getElementById('wifi-log').textContent = 'Fehler beim Laden'; }
@@ -567,21 +486,21 @@ async function clearWifiLog() {
   loadWifiLog();
 }
 
-// ── WiFi Guard ─────────────────────────────────────────
+// ── WiFi Guard ────────────────────────────────────────────
 async function setWifiGuardFromScan(ssid, rssi) {
-  const threshold = Math.max(-85, rssi - 15);
+  var threshold = Math.max(-85, rssi - 15);
   document.getElementById('wifi-ssid').value = ssid;
   document.getElementById('wifi-rssi').value = threshold;
   await setWifiSsid();
 }
 
 async function setWifiSsid() {
-  const ssid = document.getElementById('wifi-ssid').value.trim();
-  const rssi = parseInt(document.getElementById('wifi-rssi').value);
+  var ssid = document.getElementById('wifi-ssid').value.trim();
+  var rssi = parseInt(document.getElementById('wifi-rssi').value);
   if (!ssid) { toast(t('dbg.guard_ssid_empty'), false); return; }
   await fetch('/wifi/set-ssid', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ssid, rssi})
+    body: JSON.stringify({ssid: ssid, rssi: rssi})
   });
   toast(t('dbg.wifi_guard_set') + ': ' + ssid);
   refreshStatus();
@@ -594,14 +513,14 @@ async function clearWifiSsid() {
   refreshStatus();
 }
 
-// ── TX manuell entsperren ──────────────────────────────
+// ── TX manuell entsperren ─────────────────────────────────
 async function txUnlock() {
   await fetch('/wifi/tx-unlock', {method:'POST'});
   toast(t('dbg.cantx_unlocked'));
   refreshStatus();
 }
 
-// ── Guard Mode ─────────────────────────────────────────
+// ── Guard Mode ────────────────────────────────────────────
 function getModeDesc() { return {
   0: t('dbg.mode_off_desc'),
   1: t('dbg.mode_on_desc')
@@ -610,26 +529,26 @@ function getModeDesc() { return {
 async function setMode(mode) {
   await fetch('/wifi/set-mode', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({mode})
+    body: JSON.stringify({mode: mode})
   });
   toast(t('dbg.mode_set', [mode]));
   refreshStatus();
 }
 
-// ── Status refresh ─────────────────────────────────────
+// ── Status refresh ────────────────────────────────────────
 async function refreshStatus() {
   try {
-    const d = await (await fetch('/wifi/status')).json();
+    var d = await (await fetch('/wifi/status')).json();
 
-    document.querySelectorAll('#mode-btns .btn').forEach(b => {
+    document.querySelectorAll('#mode-btns .btn').forEach(function(b) {
       b.classList.toggle('active', parseInt(b.dataset.mode) === d.mode);
     });
     document.getElementById('mode-desc').textContent = getModeDesc()[d.mode] || '';
 
-    const ssidEl  = document.getElementById('wifi-active-ssid');
-    const stateEl = document.getElementById('wifi-state-val');
-    const rssiEl  = document.getElementById('wifi-rssi-val');
-    const btnCl   = document.getElementById('btn-clear-wifi');
+    var ssidEl  = document.getElementById('wifi-active-ssid');
+    var stateEl = document.getElementById('wifi-state-val');
+    var rssiEl  = document.getElementById('wifi-rssi-val');
+    var btnCl   = document.getElementById('btn-clear-wifi');
 
     if (d.active && d.ssid) {
       ssidEl.textContent = d.ssid;
@@ -640,28 +559,28 @@ async function refreshStatus() {
       ssidEl.style.color = 'var(--muted)';
       btnCl.style.display = 'none';
     }
-    const STATE_TEXT = {
+    var STATE_TEXT = {
       'LOCKED':   t('dbg.state_locked'),
       'LOST':     t('dbg.state_lost'),
       'SCANNING': t('dbg.state_scanning'),
       'IDLE':     t('dbg.state_idle'),
       'CHECK':    t('dbg.state_check')
     };
-    const STATE_COLOR = {
+    var STATE_COLOR = {
       'LOCKED': 'var(--green)', 'LOST': 'var(--red)',
       'SCANNING': 'var(--orange)', 'CHECK': 'var(--orange)',
       'IDLE': 'var(--muted)'
     };
     stateEl.style.color = STATE_COLOR[d.state] || 'var(--muted)';
-    stateEl.textContent = d.active ? (STATE_TEXT[d.state] || d.state) : '–';
-    rssiEl.textContent  = d.active && d.rssi > -999 ? d.rssi + ' dBm · Schwelle: ' + d.threshold + ' dBm' : '';
+    stateEl.textContent = d.active ? (STATE_TEXT[d.state] || d.state) : '\u2013';
+    rssiEl.textContent  = d.active && d.rssi > -999 ? d.rssi + ' dBm \u00b7 Schwelle: ' + d.threshold + ' dBm' : '';
 
-    const txEl     = document.getElementById('cantx-status');
-    const detEl    = document.getElementById('cantx-detail');
-    const btnUnlck = document.getElementById('btn-tx-unlock');
+    var txEl     = document.getElementById('cantx-status');
+    var detEl    = document.getElementById('cantx-detail');
+    var btnUnlck = document.getElementById('btn-tx-unlock');
     txEl.textContent = d.can_tx ? t('dbg.cantx_allowed') : t('dbg.cantx_blocked');
     txEl.style.color = d.can_tx ? 'var(--green)' : 'var(--red)';
-    detEl.textContent = (d.wifi_ok ? t('dbg.cantx_visible') : t('dbg.cantx_invisible')) + '  ·  Guard: ' + (d.mode === 1 ? t('dbg.cantx_guard_on') : t('dbg.cantx_guard_off'));
+    detEl.textContent = (d.wifi_ok ? t('dbg.cantx_visible') : t('dbg.cantx_invisible')) + '  \u00b7  Guard: ' + (d.mode === 1 ? t('dbg.cantx_guard_on') : t('dbg.cantx_guard_off'));
     if (btnUnlck) {
       btnUnlck.disabled = d.manual_unlock;
       btnUnlck.textContent = d.manual_unlock ? t('dbg.cantx_unlocked') : t('dbg.cantx_unlock');
@@ -671,56 +590,56 @@ async function refreshStatus() {
   } catch(e) { console.error(e); }
 }
 
-// ── ELM Log ────────────────────────────────────────────
+// ── ELM Log ───────────────────────────────────────────────
 async function loadElmLog() {
   try {
-    const r = await fetch('/download-elm-log');
-    const t = await r.text();
-    const el = document.getElementById('elm-log');
-    const lines = t.trim().split('\n').slice(-30).reverse();
-    const escE = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    el.innerHTML = lines.map(l => `<span>${escE(l)}</span>\n`).join('') || t('dbg.elm_empty');
+    var r = await fetch('/download-elm-log');
+    var txt = await r.text();
+    var el = document.getElementById('elm-log');
+    var lines = txt.trim().split('\n').slice(-30).reverse();
+    var escE = function(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+    el.innerHTML = lines.map(function(l){ return '<span>' + escE(l) + '</span>\n'; }).join('') || t('dbg.elm_empty');
   } catch(e) {}
 }
 
 async function clearElmLog() {
   if (!confirm(t('dbg.elm_confirm'))) return;
-  const r = await fetch('/clear-elm-log', {method:'POST'});
-  const d = await r.json();
+  var r = await fetch('/clear-elm-log', {method:'POST'});
+  var d = await r.json();
   toast(d.ok ? t('dbg.elm_deleted') : t('dbg.elm_err'), d.ok);
   loadElmLog();
 }
 
-// ── System Log ─────────────────────────────────────────
+// ── System Log ────────────────────────────────────────────
 async function loadSysLog() {
-  const el = document.getElementById('sys-log');
+  var el = document.getElementById('sys-log');
   try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 8000);
-    const r = await fetch('/download-sys-log', {signal: ctrl.signal});
+    var ctrl = new AbortController();
+    var tid  = setTimeout(function(){ ctrl.abort(); }, 8000);
+    var r = await fetch('/download-sys-log', {signal: ctrl.signal});
     clearTimeout(tid);
-    const t = await r.text();
-    if (!t.trim() || t.startsWith('# Sys')) { el.textContent = window.t('dbg.syslog_empty'); return; }
-    const lines = t.trim().split('\n').slice(-60);
-    const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    el.innerHTML = lines.map(l => {
-      const col = (l.includes('PANIC') || l.includes('CRASH') || l.includes('WDT')) ? 'var(--red)'
-                : l.includes('FEHLER') || l.includes('GPS-Fix verloren') || l.includes('Fehler HTTP') ? 'var(--red)'
-                : (l.includes('ERSTER GPS-FIX') || l.includes('GPS-Fix wieder'))   ? 'var(--green)'
-                : l.includes('LTE-M verbunden') || l.includes('GPRS OK')           ? 'var(--green)'
-                : l.includes('OK')                                                  ? 'var(--green)'
-                : l.includes('gesendet')                                            ? 'var(--yellow)'
-                : l.includes('GPS gestoppt')                                        ? 'var(--orange)'
-                : l.includes('!!!! GPS-Capture')                                      ? '#ff79c6'
-                : l.includes('MQTT')                                                ? '#ff79c6'
-                : l.includes('AKKU')                                                ? '#ff79c6'
-                : l.includes('WAKE')                                                ? 'var(--accent)'
-                : (l.includes('SLEEP') || l.includes('pausiert'))                  ? 'var(--yellow)'
-                : l.includes('BOOT')                                                ? 'var(--orange)'
-                : l.includes('CLIENT')                                              ? 'var(--accent)'
-                : l.includes('GUARD')                                               ? 'var(--green)'
-                : '';
-      return col ? `<span style="color:${col}">${esc(l)}</span>\n` : `<span>${esc(l)}</span>\n`;
+    var txt = await r.text();
+    if (!txt.trim() || txt.startsWith('# Sys')) { el.textContent = window.t('dbg.syslog_empty'); return; }
+    var lines = txt.trim().split('\n').slice(-60);
+    var esc = function(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+    el.innerHTML = lines.map(function(l) {
+      var col = (l.includes('PANIC') || l.includes('CRASH') || l.includes('WDT')) ? 'var(--red)'
+              : l.includes('FEHLER') || l.includes('GPS-Fix verloren') || l.includes('Fehler HTTP') ? 'var(--red)'
+              : (l.includes('ERSTER GPS-FIX') || l.includes('GPS-Fix wieder'))   ? 'var(--green)'
+              : l.includes('LTE-M verbunden') || l.includes('GPRS OK')           ? 'var(--green)'
+              : l.includes('OK')                                                  ? 'var(--green)'
+              : l.includes('gesendet')                                            ? 'var(--yellow)'
+              : l.includes('GPS gestoppt')                                        ? 'var(--orange)'
+              : l.includes('!!!! GPS-Capture')                                      ? '#ff79c6'
+              : l.includes('MQTT')                                                ? '#ff79c6'
+              : l.includes('AKKU')                                                ? '#ff79c6'
+              : l.includes('WAKE')                                                ? 'var(--accent)'
+              : (l.includes('SLEEP') || l.includes('pausiert'))                  ? 'var(--yellow)'
+              : l.includes('BOOT')                                                ? 'var(--orange)'
+              : l.includes('CLIENT')                                              ? 'var(--accent)'
+              : l.includes('GUARD')                                               ? 'var(--green)'
+              : '';
+      return col ? '<span style="color:' + col + '">' + esc(l) + '</span>\n' : '<span>' + esc(l) + '</span>\n';
     }).join('');
     el.scrollTop = el.scrollHeight;
   } catch(e) {
@@ -735,22 +654,22 @@ async function clearSysLog() {
   loadSysLog();
 }
 
-// ── Gyro Schreiber ─────────────────────────────────────
-const GBUF = 300;                         // 30s × 10 Hz
-const gBuf  = new Float32Array(GBUF);     // Ringpuffer, vorinitialisiert 0
-var   gHead = 0, gPeak = 0, gWs = null;
-var   gThr  = 0.030;                      // Schwelle, vom Server geladen
+// ── Gyro Schreiber ────────────────────────────────────────
+var GBUF = 300;
+var gBuf  = new Float32Array(GBUF);
+var gHead = 0, gPeak = 0, gWs = null;
+var gThr  = 0.030;
 
 function gyroPeakReset() { gPeak = 0; document.getElementById('gyro-peak').textContent = '--'; }
 
 async function gyroCalibrate() {
-  const btn = document.getElementById('btn-cal');
-  const st  = document.getElementById('cal-status');
+  var btn = document.getElementById('btn-cal');
+  var st  = document.getElementById('cal-status');
   btn.disabled = true;
   st.style.color = 'var(--muted)';
   st.textContent = t('dbg.gyro_cal_measuring');
   try {
-    const d = await (await fetch('/api/gyro/calibrate', {method:'POST'})).json();
+    var d = await (await fetch('/api/gyro/calibrate', {method:'POST'})).json();
     if (d.ok) {
       st.style.color = 'var(--green)';
       st.textContent = t('dbg.gyro_cal_ok_detail', [parseFloat(d.baseline).toFixed(4), parseFloat(d.stddev).toFixed(4)]);
@@ -769,26 +688,26 @@ async function gyroCalibrate() {
 }
 
 async function gyroSetMotThreshold() {
-  const inp = document.getElementById('gyro-mot-input');
-  const v = parseInt(inp.value);
+  var inp = document.getElementById('gyro-mot-input');
+  var v = parseInt(inp.value);
   if (isNaN(v) || v < 1 || v > 255) { inp.style.borderColor='#ff4757'; return; }
   inp.style.borderColor = '';
-  const r = await fetch('/gyro/set-mot-threshold', {
+  var r = await fetch('/gyro/set-mot-threshold', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({value: v})
   });
   if ((await r.json()).ok) {
-    const lbl = document.getElementById('gyro-mot-mg');
-    if (lbl) lbl.textContent = '× 32 = ' + (v * 32) + 'mg';
+    var lbl = document.getElementById('gyro-mot-mg');
+    if (lbl) lbl.textContent = '\u00d7 32 = ' + (v * 32) + 'mg';
   }
 }
 
 async function gyroSetThreshold() {
-  const inp = document.getElementById('gyro-thr-input');
-  const v = parseFloat(inp.value);
+  var inp = document.getElementById('gyro-thr-input');
+  var v = parseFloat(inp.value);
   if (isNaN(v) || v < 0.005 || v > 1.0) { inp.style.borderColor='#ff4757'; return; }
   inp.style.borderColor = '';
-  const r = await fetch('/gyro/set-threshold', {
+  var r = await fetch('/gyro/set-threshold', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({threshold: v})
   });
@@ -804,51 +723,46 @@ function gyroPush(v) {
 }
 
 function gyroDraw() {
-  const canvas = document.getElementById('gyro-canvas');
+  var canvas = document.getElementById('gyro-canvas');
   if (!canvas) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var W = canvas.offsetWidth, H = canvas.offsetHeight;
   if (!W || !H) return;
   canvas.width  = W * dpr;
   canvas.height = H * dpr;
-  const ctx = canvas.getContext('2d');
+  var ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  // Hintergrund
   ctx.fillStyle = '#1c2733';
   ctx.fillRect(0, 0, W, H);
 
-  const THR  = gThr;
-  const yMax = Math.max(0.12, gPeak * 1.25, THR * 4);
-  const toY  = v => H - 2 - (v / yMax) * (H - 5);
+  var THR  = gThr;
+  var yMax = Math.max(0.12, gPeak * 1.25, THR * 4);
+  var toY  = function(v){ return H - 2 - (v / yMax) * (H - 5); };
 
-  // Horizontale Rasterlinien
   ctx.strokeStyle = '#2a3a4a'; ctx.lineWidth = 1;
   ctx.font = '8px monospace'; ctx.fillStyle = '#5a7a96';
-  for (let g = 0.05; g < yMax + 0.001; g += 0.05) {
-    const y = Math.round(toY(g)) + 0.5;
+  for (var g = 0.05; g < yMax + 0.001; g += 0.05) {
+    var y = Math.round(toY(g)) + 0.5;
     if (y < 2 || y > H - 2) continue;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     ctx.fillText(g.toFixed(2) + 'G', 2, y - 2);
   }
 
-  // Vertikale 10s-Rasterlinien
-  [1/3, 2/3].forEach(f => {
-    const x = Math.round(W * f) + 0.5;
+  [1/3, 2/3].forEach(function(f) {
+    var x = Math.round(W * f) + 0.5;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
   });
 
-  // Schwellenlinie (gelb, gestrichelt)
-  const tY = Math.round(toY(THR)) + 0.5;
+  var tY = Math.round(toY(THR)) + 0.5;
   ctx.strokeStyle = '#ffd166'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, tY); ctx.lineTo(W, tY); ctx.stroke();
   ctx.setLineDash([]);
 
-  // Füllfläche
-  const step = W / (GBUF - 1);
+  var step = W / (GBUF - 1);
   ctx.beginPath();
   ctx.moveTo(0, H);
-  for (let i = 0; i < GBUF; i++) {
+  for (var i = 0; i < GBUF; i++) {
     ctx.lineTo(i * step, toY(gBuf[(gHead + i) % GBUF]));
   }
   ctx.lineTo(W, H);
@@ -856,11 +770,10 @@ function gyroDraw() {
   ctx.fillStyle = 'rgba(0,229,255,0.09)';
   ctx.fill();
 
-  // Signallinie
   ctx.beginPath();
-  for (let i = 0; i < GBUF; i++) {
-    const x = i * step, y = toY(gBuf[(gHead + i) % GBUF]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  for (var j = 0; j < GBUF; j++) {
+    var x2 = j * step, y2 = toY(gBuf[(gHead + j) % GBUF]);
+    if (j === 0) ctx.moveTo(x2, y2); else ctx.lineTo(x2, y2);
   }
   ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5;
   ctx.stroke();
@@ -869,9 +782,9 @@ function gyroDraw() {
 function gyroWsConnect() {
   if (gWs && gWs.readyState < 2) return;
   gWs = new WebSocket('ws://' + location.host + '/ws');
-  gWs.onmessage = e => {
+  gWs.onmessage = function(e) {
     try {
-      const d = JSON.parse(e.data);
+      var d = JSON.parse(e.data);
       if (d.type === 'gyro_g') {
         gyroPush(d.g); gyroDraw();
         if (d.ax != null) axisUpdate(d.ax, d.ay, d.az, d.gx, d.gy, d.gz);
@@ -880,16 +793,16 @@ function gyroWsConnect() {
         setLed('gyro', d.state === 2 ? 'yellow' : d.state === 1 ? 'green' : '');
     } catch(_) {}
   };
-  gWs.onerror = () => {};
-  gWs.onclose = () => setTimeout(gyroWsConnect, 3000);
+  gWs.onerror = function(){};
+  gWs.onclose = function(){ setTimeout(gyroWsConnect, 3000); };
 }
 
-// ── Gyro Achsen-Balken (Accel + Drehrate) ────────────
+// ── Gyro Achsen-Balken ────────────────────────────────────
 function setBar(id,valId,v,range,decimals) {
-  const bar=document.getElementById(id), ve=document.getElementById(valId);
+  var bar=document.getElementById(id), ve=document.getElementById(valId);
   if(!bar) return;
-  const clamped = Math.max(-range, Math.min(range, v));
-  const pct = (clamped / range) * 50;
+  var clamped = Math.max(-range, Math.min(range, v));
+  var pct = (clamped / range) * 50;
   if(pct >= 0) { bar.style.left='50%'; bar.style.width=pct+'%'; }
   else { bar.style.left=(50+pct)+'%'; bar.style.width=(-pct)+'%'; }
   if(ve) ve.textContent=v.toFixed(decimals);
@@ -905,127 +818,120 @@ function axisUpdate(ax,ay,az,gx,gy,gz) {
   }
 }
 
-// ── Kompass ────────────────────────────────────────────
+// ── Kompass ───────────────────────────────────────────────
 function compassDraw(deg) {
-  const canvas = document.getElementById('compass-canvas');
+  var canvas = document.getElementById('compass-canvas');
   if (!canvas) return;
-  const W = canvas.width, H = canvas.height;
-  const cx = W/2, cy = H/2, r = W/2 - 6;
-  const ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var cx = W/2, cy = H/2, r = W/2 - 6;
+  var ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
 
-  // Hintergrund
   ctx.fillStyle = '#1c2733';
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
   ctx.strokeStyle = '#2a3a4a'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
 
-  // Skalaticks
-  for (let i = 0; i < 36; i++) {
-    const a = (i * 10 - 90) * Math.PI / 180;
-    const len = (i % 9 === 0) ? 10 : (i % 3 === 0) ? 6 : 3;
-    const x1 = cx + Math.cos(a) * (r - 1), y1 = cy + Math.sin(a) * (r - 1);
-    const x2 = cx + Math.cos(a) * (r - len), y2 = cy + Math.sin(a) * (r - len);
+  for (var i = 0; i < 36; i++) {
+    var a = (i * 10 - 90) * Math.PI / 180;
+    var len = (i % 9 === 0) ? 10 : (i % 3 === 0) ? 6 : 3;
+    var x1 = cx + Math.cos(a) * (r - 1), y1 = cy + Math.sin(a) * (r - 1);
+    var x2 = cx + Math.cos(a) * (r - len), y2 = cy + Math.sin(a) * (r - len);
     ctx.strokeStyle = (i % 9 === 0) ? '#5a7a96' : '#2a3a4a';
     ctx.lineWidth = (i % 9 === 0) ? 1.5 : 1;
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   }
 
-  // Himmelsrichtungen
   ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const dirs = [['N', 0, '#ff4757'], ['O', 90, '#5a7a96'], ['S', 180, '#5a7a96'], ['W', 270, '#5a7a96']];
-  dirs.forEach(([lbl, ang, col]) => {
-    const a = (ang - 90) * Math.PI / 180;
-    const tx = cx + Math.cos(a) * (r - 16), ty = cy + Math.sin(a) * (r - 16);
-    ctx.fillStyle = col; ctx.fillText(lbl, tx, ty);
+  var dirs = [['N', 0, '#ff4757'], ['O', 90, '#5a7a96'], ['S', 180, '#5a7a96'], ['W', 270, '#5a7a96']];
+  dirs.forEach(function(d) {
+    var a2 = (d[1] - 90) * Math.PI / 180;
+    var tx = cx + Math.cos(a2) * (r - 16), ty = cy + Math.sin(a2) * (r - 16);
+    ctx.fillStyle = d[2]; ctx.fillText(d[0], tx, ty);
   });
 
-  // Nadel
-  const rad = (deg - 90) * Math.PI / 180;
-  const tipLen = r - 20, tailLen = 16;
-  const tx = cx + Math.cos(rad) * tipLen, ty = cy + Math.sin(rad) * tipLen;
-  const bx = cx - Math.cos(rad) * tailLen, by = cy - Math.sin(rad) * tailLen;
-  const px = Math.cos(rad + Math.PI/2) * 5, py = Math.sin(rad + Math.PI/2) * 5;
+  var rad = (deg - 90) * Math.PI / 180;
+  var tipLen = r - 20, tailLen = 16;
+  var tipX = cx + Math.cos(rad) * tipLen, tipY = cy + Math.sin(rad) * tipLen;
+  var bx = cx - Math.cos(rad) * tailLen, by = cy - Math.sin(rad) * tailLen;
+  var px = Math.cos(rad + Math.PI/2) * 5, py = Math.sin(rad + Math.PI/2) * 5;
 
-  // Nord-Spitze (rot)
   ctx.fillStyle = '#ff4757';
-  ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(cx+px, cy+py); ctx.lineTo(cx-px, cy-py); ctx.closePath(); ctx.fill();
-  // Süd-Spitze (dunkel)
+  ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(cx+px, cy+py); ctx.lineTo(cx-px, cy-py); ctx.closePath(); ctx.fill();
   ctx.fillStyle = '#2a3a4a';
   ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(cx+px, cy+py); ctx.lineTo(cx-px, cy-py); ctx.closePath(); ctx.fill();
 
-  // Mittelpunkt
   ctx.fillStyle = '#00e5ff';
   ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, Math.PI*2); ctx.fill();
 }
 
 function compassCardinal(deg) {
-  const dirs = ['N','NO','O','SO','S','SW','W','NW'];
+  var dirs = ['N','NO','O','SO','S','SW','W','NW'];
   return dirs[Math.round(deg / 45) % 8];
 }
 
 function compassUpdate(d) {
-  const sec = document.getElementById('sec-compass');
+  var sec = document.getElementById('sec-compass');
   if (!d.compass_ok) { if (sec) sec.style.display = 'none'; return; }
   if (sec) sec.style.display = '';
-  const heading = d.compass_heading || 0;
-  const degEl = document.getElementById('compass-deg');
-  const carEl = document.getElementById('compass-cardinal');
-  const stEl  = document.getElementById('compass-status');
+  var heading = d.compass_heading || 0;
+  var degEl = document.getElementById('compass-deg');
+  var carEl = document.getElementById('compass-cardinal');
+  var stEl  = document.getElementById('compass-status');
   if (degEl) degEl.textContent = Math.round(heading);
   if (carEl) carEl.textContent = compassCardinal(heading);
 
-  // Kalibrierungs-Status
-  const hiOk      = d.compass_hi_ok     || false;
-  const drvOff    = d.compass_drv_off   != null ? d.compass_drv_off.toFixed(1) : '0.0';
-  const infoEl    = document.getElementById('compass-cal-info');
-  if (stEl) stEl.textContent = 'QMC5883L · Echtzeit · automatische Kalibrierung';
+  var hiOk      = d.compass_hi_ok     || false;
+  var drvOff    = d.compass_drv_off   != null ? d.compass_drv_off.toFixed(1) : '0.0';
+  var infoEl    = document.getElementById('compass-cal-info');
+  if (stEl) stEl.textContent = 'QMC5883L \u00b7 Echtzeit \u00b7 automatische Kalibrierung';
   if (infoEl) {
-    const hiTxt  = hiOk ? '✓ Hard-Iron OK' : '⏳ Hard-Iron läuft (mehr Kurven fahren)';
-    const drvTxt = `Fahrtrichtungs-Offset: ${drvOff}°`;
-    infoEl.textContent = `${hiTxt}  ·  ${drvTxt}`;
+    var hiTxt  = hiOk ? '\u2713 Hard-Iron OK' : '\u23f3 Hard-Iron l\u00e4uft (mehr Kurven fahren)';
+    var drvTxt = 'Fahrtrichtungs-Offset: ' + drvOff + '\u00b0';
+    infoEl.textContent = hiTxt + '  \u00b7  ' + drvTxt;
   }
   compassDraw(heading);
 }
 
 async function compassCalReset() {
-  if (!confirm('Kalibrierung wirklich zurücksetzen?')) return;
+  if (!confirm('Kalibrierung wirklich zur\u00fccksetzen?')) return;
   await fetch('/api/compass/cal-reset', {method:'POST'});
 }
 
-// ── MQTT Puffer Preview ───────────────────────────────
+// ── MQTT Puffer Preview ──────────────────────────────────
 async function loadMqttPreview() {
-  const el  = document.getElementById('mqtt-preview');
-  const cnt = document.getElementById('mqtt-count');
+  var el  = document.getElementById('mqtt-preview');
+  var cnt = document.getElementById('mqtt-count');
   try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 8000);
-    const [prev, telem] = await Promise.all([
-      fetch('/api/row-preview', {signal: ctrl.signal}).then(r=>r.text()),
-      fetch('/api/telemetry', {signal: ctrl.signal}).then(r=>r.json())
+    var ctrl = new AbortController();
+    var tid  = setTimeout(function(){ ctrl.abort(); }, 8000);
+    var results = await Promise.all([
+      fetch('/api/row-preview', {signal: ctrl.signal}).then(function(r){return r.text();}),
+      fetch('/api/telemetry', {signal: ctrl.signal}).then(function(r){return r.json();})
     ]);
     clearTimeout(tid);
+    var prev = results[0], telem = results[1];
     cnt.textContent = t('dbg.mqtt_pending', [telem.row_pending||0]);
     if (!prev.trim() || prev.startsWith('Keine')) {
       el.textContent = t('dbg.mqtt_no_gps');
     } else {
-      const escI = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      el.innerHTML = prev.trim().split('\n').map(l =>
-        `<span>${escI(l)}</span>\n`
-      ).join('');
+      var escI = function(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+      el.innerHTML = prev.trim().split('\n').map(function(l) {
+        return '<span>' + escI(l) + '</span>\n';
+      }).join('');
     }
   } catch(e) {
     if (el && el.textContent.includes('Lade')) el.textContent = t('dbg.conn_err_short') || 'Verbindungsfehler';
   }
 }
 
-// ── Log-Sektionen ein/ausblenden je Config ─────────────
+// ── Log-Sektionen ein/ausblenden je Config ────────────────
 var _logCan=false, _logWifi=false;
 var _tiWl=null, _tiEl=null;
 
 async function loadLogConfig() {
   try {
-    const d = await (await fetch('/api/config')).json();
+    var d = await (await fetch('/api/config')).json();
     _logCan = d.log_can === true;
     _logWifi = d.log_wifi === true;
     document.getElementById('sec-wifi-log').style.display = _logWifi ? '' : 'none';
@@ -1035,7 +941,7 @@ async function loadLogConfig() {
   } catch(e) {}
 }
 
-// ── Init (gestaffelt, max 2-3 gleichzeitige Requests) ──
+// ── Init (gestaffelt) ─────────────────────────────────────
 loadRtcTime();
 refreshStatus();
 setTimeout(function(){ loadWifiResult(); loadLogConfig(); }, 1500);
@@ -1047,10 +953,10 @@ var _tiWr=setInterval(loadWifiResult,20000);
 var _tiSl=setInterval(loadSysLog,20000);
 var _tiIx=setInterval(loadMqttPreview,10000);
 
-window.destroyPage=function(){[_stTimer,_tiRtc,_tiSt,_tiWr,_tiWl,_tiEl,_tiSl,_tiIx].forEach(t=>{if(t)clearInterval(t);});if(typeof gWs!=='undefined'&&gWs){gWs.onclose=null;gWs.close();gWs=null;}};
+window.destroyPage=function(){[_stTimer,_tiRtc,_tiSt,_tiWr,_tiWl,_tiEl,_tiSl,_tiIx].forEach(function(t){if(t)clearInterval(t);});if(typeof gWs!=='undefined'&&gWs){gWs.onclose=null;gWs.close();gWs=null;}};
 
 gyroWsConnect();
-requestAnimationFrame(gyroDraw);   // leeres Raster sofort zeichnen
+requestAnimationFrame(gyroDraw);
 </script>
 </body>
 </html>

@@ -6,60 +6,13 @@
 <title>Telemetry Stick · Config</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/style.css">
 <style>
-:root{
-  --bg0:#080b0f;--bg1:#0e1318;--bg2:#141c24;--bg3:#1c2733;
-  --border:#2a3a4a;--accent:#00e5ff;--green:#39ff87;--red:#ff4757;
-  --yellow:#ffd166;--orange:#ff6b35;--text:#d0dde8;--muted:#5a7a96;--blue:#79c0ff;
-  --mono:'Space Mono',monospace;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-size:13px;min-height:100vh}
-header{background:var(--bg1);border-bottom:1px solid var(--border);display:flex;flex-direction:column;position:relative}.hrow1{display:flex;align-items:center;gap:10px;padding:8px 16px;position:relative}.hrow2{display:flex;align-items:center;gap:12px;justify-content:flex-end;padding:2px 16px 6px;border-top:1px solid rgba(42,58,74,.4)}
-header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--accent),transparent 60%)}
-.logo{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:var(--accent);text-shadow:0 0 18px rgba(0,229,255,.35);letter-spacing:.5px}
-.logo span{color:var(--orange)}
-.leds{display:flex;gap:12px;align-items:center}
-.led-g{display:flex;flex-direction:column;align-items:center;gap:3px}
-.led-lbl{font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:'Space Mono',monospace}
-.led{width:9px;height:9px;border-radius:50%;background:rgba(90,122,150,.2);transition:background .2s,box-shadow .2s}
-.led.green{background:var(--green);box-shadow:0 0 7px var(--green)}
-.led.blue{background:var(--blue);box-shadow:0 0 7px rgba(121,192,255,.6)}
-.led.yellow{background:var(--yellow);box-shadow:0 0 7px var(--yellow)}
-.led.red{background:var(--red);box-shadow:0 0 7px var(--red)}
-.container{max-width:800px;margin:0 auto;padding:20px}
-.section-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;margin-top:24px;display:flex;align-items:center;gap:8px}
-.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;margin-bottom:8px}
-.lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
-.field{margin-bottom:12px}
-.field:last-child{margin-bottom:0}
-input[type=text],input[type=password],input[type=number]{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:12px}
-input:focus{outline:none;border-color:var(--accent)}
-.btn{font-size:11px;background:transparent;padding:6px 16px;border-radius:4px;cursor:pointer;font-family:var(--mono);border:1px solid var(--border);color:var(--muted);transition:all .2s}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn.accent{border-color:var(--accent);color:var(--accent)}
-.btn.accent:hover{background:rgba(0,212,255,.1)}
-.btn.danger{border-color:var(--red);color:var(--red)}
-.btn.danger:hover{background:rgba(255,69,96,.1)}
-.btn.green{border-color:var(--green);color:var(--green)}
-.btn.green:hover{background:rgba(57,255,135,.08)}
-.btn:disabled{opacity:.4;cursor:default}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.hint{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5}
-.hint.warn{color:var(--yellow)}
-.toast{position:fixed;bottom:20px;right:20px;background:var(--bg1);border:1px solid var(--accent);color:var(--accent);padding:10px 18px;border-radius:6px;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
-.toast.show{opacity:1}
 .ota-drop{border:2px dashed var(--border);border-radius:6px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
 .ota-drop:hover,.ota-drop.drag{border-color:var(--accent);background:rgba(0,229,255,.04)}
 .ota-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
 .ota-prog{height:6px;border-radius:3px;background:var(--bg3);margin-top:12px;overflow:hidden;display:none}
 .ota-prog-bar{height:100%;width:0;background:var(--accent);transition:width .2s;border-radius:3px}
-.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:.04em}
-.badge.ok{background:rgba(57,255,135,.12);color:var(--green);border:1px solid rgba(57,255,135,.3)}
-.badge.err{background:rgba(255,71,87,.12);color:var(--red);border:1px solid rgba(255,71,87,.3)}
-/* Burger */
-.burger-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 9px;border-radius:4px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;transition:all .15s}.burger-btn:hover{color:var(--accent);border-color:var(--accent)}.drop-nav{position:absolute;top:100%;left:0;background:var(--bg1);border:1px solid var(--border);border-top:2px solid var(--accent);border-radius:0 0 6px 6px;z-index:200;min-width:150px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)}.drop-nav a{display:block;padding:11px 16px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.08em;border-bottom:1px solid var(--border);transition:all .15s}.drop-nav a:last-child{border:none}.drop-nav a:hover,.drop-nav a.active{color:var(--accent);background:var(--bg2)}.modem-w{display:flex;flex-direction:column;align-items:center;gap:2px;padding:0}.modem-bars{display:flex;align-items:flex-end;gap:2px;height:14px}.modem-bar{width:3px;border-radius:1px 1px 0 0;background:rgba(90,122,150,.2)}.modem-bar.on{background:var(--green);box-shadow:0 0 4px var(--green)}.bar1{height:3px}.bar2{height:6px}.bar3{height:9px}.bar4{height:11px}.bar5{height:14px}.modem-op{font-size:7px;color:var(--muted);letter-spacing:.04em;white-space:nowrap;max-width:54px;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;text-align:center}
 </style>
 </head>
 <body>
@@ -231,7 +184,7 @@ input:focus{outline:none;border-color:var(--accent)}
       <input type="checkbox" id="log_wifi" style="width:16px;height:16px;accent-color:var(--accent)">
       <span style="font-size:12px" data-i18n="cfg.log_wifi">WiFi Guard Scan-Log</span>
     </label>
-    <div class="hint" data-i18n="cfg.log_hint">Aktiviert SPIFFS-Logging fuer CAN/ELM327, BLE-Geraete bzw. WiFi-Scans. Syslog (System-Events) laeuft immer.</div>
+    <div class="hint" data-i18n="cfg.log_hint">Aktiviert SPIFFS-Logging f&#252;r CAN/ELM327, BLE-Ger&#228;te bzw. WiFi-Scans. Syslog (System-Events) l&#228;uft immer.</div>
   </div>
 
   <!-- Speichern -->
@@ -269,19 +222,10 @@ input:focus{outline:none;border-color:var(--accent)}
 
 <div class="toast" id="toast"></div>
 
+<script src="/common.js"></script>
 <script src="/i18n.js"></script>
 <script>
-// ── Burger ──────────────────────────────────────────────────
-function toggleMenu(){var m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
-if(!window._menuListener){window._menuListener=true;document.addEventListener('click',function(e){if(!e.target.closest('header')){var m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
-
-// ── Modem Widget ────────────────────────────────────────────
-var _modemLastOp='';
-function updateModem(sig,op,sim,conn){var bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(var i=1;i<=5;i++){var b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}var el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
-
-function setLed(id,cls){var el=document.getElementById('led-'+id);if(el)el.className='led'+(cls?' '+cls:'');}
-function setBatt(v,chg,vbus){var el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
-
+// ── Status Polling ───────────────────────────────────────
 async function fetchStatus(){
   try{
     var d=await(await fetch('/status')).json();
@@ -300,18 +244,7 @@ async function fetchStatus(){
 fetchStatus();
 var _stTimer=setInterval(fetchStatus,8000);
 
-// ── Toast ───────────────────────────────────────────────────
-function toast(msg,ok){
-  if(ok===undefined)ok=true;
-  var el=document.getElementById('toast');
-  el.textContent=msg;
-  el.style.borderColor=ok?'var(--green)':'var(--red)';
-  el.style.color=ok?'var(--green)':'var(--red)';
-  el.classList.add('show');
-  setTimeout(function(){el.classList.remove('show');},2800);
-}
-
-// ── Config laden ────────────────────────────────────────────
+// ── Config laden ─────────────────────────────────────────
 async function loadConfig(){
   try{
     var d=await(await fetch('/api/config')).json();
@@ -341,7 +274,7 @@ async function loadConfig(){
   }
 }
 
-// ── Config speichern ────────────────────────────────────────
+// ── Config speichern ─────────────────────────────────────
 async function saveConfig(){
   var btn=document.getElementById('btn-save');
   btn.disabled=true;
@@ -385,7 +318,7 @@ async function saveConfig(){
   btn.disabled=false;
 }
 
-// ── OTA Upload ──────────────────────────────────────────────
+// ── OTA Upload ───────────────────────────────────────────
 var _otaFile=null;
 
 document.getElementById('ota-file').addEventListener('change',function(){
@@ -401,7 +334,6 @@ document.getElementById('ota-file').addEventListener('change',function(){
   }
 });
 
-// Drag & Drop
 (function(){
   var drop=document.getElementById('ota-drop');
   drop.addEventListener('dragover',function(e){e.preventDefault();drop.classList.add('drag');});
@@ -478,7 +410,7 @@ async function startOta(){
   xhr.send(form);
 }
 
-// ── Init ─────────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────
 loadConfig();
 
 </script>

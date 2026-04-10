@@ -6,30 +6,10 @@
 <title>Telemetry Stick · Data</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/style.css">
 <style>
-:root{
-  --bg0:#080b0f;--bg1:#0e1318;--bg2:#141c24;--bg3:#1c2733;
-  --border:#2a3a4a;--accent:#00e5ff;--green:#39ff87;--red:#ff4757;
-  --yellow:#ffd166;--orange:#ff6b35;--text:#d0dde8;--muted:#5a7a96;--blue:#79c0ff;
-  --mono:'Space Mono',monospace;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-size:14px;line-height:1.35;min-height:100vh}
-header{background:var(--bg1);border-bottom:1px solid var(--border);display:flex;flex-direction:column;position:relative}.hrow1{display:flex;align-items:center;gap:10px;padding:8px 16px;position:relative}.hrow2{display:flex;align-items:center;gap:12px;justify-content:flex-end;padding:2px 16px 6px;border-top:1px solid rgba(42,58,74,.4)}
-header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--accent),transparent 60%)}
-.logo{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:var(--accent);text-shadow:0 0 18px rgba(0,229,255,.35);letter-spacing:.5px}
-.logo span{color:var(--orange)}
-.led-g{display:flex;flex-direction:column;align-items:center;gap:3px}
-.led-lbl{font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:'Space Mono',monospace}
-.led{width:9px;height:9px;border-radius:50%;background:rgba(90,122,150,.2);transition:background .2s,box-shadow .2s}
-.led.green{background:var(--green);box-shadow:0 0 7px var(--green)}
-.led.blue{background:var(--blue);box-shadow:0 0 7px rgba(121,192,255,.6)}
-.led.yellow{background:var(--yellow);box-shadow:0 0 7px var(--yellow)}
-.led.red{background:var(--red);box-shadow:0 0 7px var(--red)}
-/* Burger & Modem */
-.burger-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 9px;border-radius:4px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;transition:all .15s}.burger-btn:hover{color:var(--accent);border-color:var(--accent)}.drop-nav{position:absolute;top:100%;left:0;background:var(--bg1);border:1px solid var(--border);border-top:2px solid var(--accent);border-radius:0 0 6px 6px;z-index:200;min-width:150px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)}.drop-nav a{display:block;padding:11px 16px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.08em;border-bottom:1px solid var(--border);transition:all .15s}.drop-nav a:last-child{border:none}.drop-nav a:hover,.drop-nav a.active{color:var(--accent);background:var(--bg2)}.modem-w{display:flex;flex-direction:column;align-items:center;gap:2px;padding:0}.modem-bars{display:flex;align-items:flex-end;gap:2px;height:14px}.modem-bar{width:3px;border-radius:1px 1px 0 0;background:rgba(90,122,150,.2)}.modem-bar.on{background:var(--green);box-shadow:0 0 4px var(--green)}.bar1{height:3px}.bar2{height:6px}.bar3{height:9px}.bar4{height:11px}.bar5{height:14px}.modem-op{font-size:7px;color:var(--muted);letter-spacing:.04em;white-space:nowrap;max-width:54px;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;text-align:center}
-/* Daten-Tabelle */
-.container{max-width:640px;margin:0 auto;padding:16px}
+body{font-size:14px;line-height:1.35}
+.container{max-width:640px;padding:16px}
 .status-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--muted)}
 .status-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s}
 .status-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
@@ -106,14 +86,13 @@ header::after{content:'';display:block;position:absolute;bottom:0;left:0;right:0
   </table>
 </div>
 
+<div class="toast" id="toast"></div>
+
+<script src="/common.js"></script>
 <script src="/i18n.js"></script>
 <script>
-// ── LED System ────────────────────────────────────────────────
+// ── LED Flash ────────────────────────────────────────────
 var _ledTimers = {};
-function setLed(id, cls) {
-  var el = document.getElementById('led-'+id);
-  if (el) el.className = 'led'+(cls?' '+cls:'');
-}
 function flashLed(id, cls) {
   var el = document.getElementById('led-'+id);
   if (!el) return;
@@ -121,6 +100,8 @@ function flashLed(id, cls) {
   clearTimeout(_ledTimers[id]);
   _ledTimers[id] = setTimeout(function(){ el.classList.remove(cls); }, 150);
 }
+
+// ── Status Polling ───────────────────────────────────────
 async function fetchStatus(){
   try{
     var d=await(await fetch('/status')).json();
@@ -136,19 +117,7 @@ async function fetchStatus(){
 fetchStatus();
 var _statusTimer=setInterval(fetchStatus,6000);
 
-// ── Burger & Nav ─────────────────────────────────────────────
-function toggleMenu(){var m=document.getElementById('drop-nav');if(m)m.style.display=m.style.display==='none'?'block':'none';}
-if(!window._menuListener){window._menuListener=true;document.addEventListener('click',function(e){if(!e.target.closest('header')){var m=document.getElementById('drop-nav');if(m)m.style.display='none';}});}
-
-// ── Modem ─────────────────────────────────────────────────────
-var _modemLastOp='';
-function updateModem(sig,op,sim,conn){var bars=!sim?0:(sig<0||sig===99||sig===0)?0:sig<5?1:sig<10?2:sig<15?3:sig<20?4:5;if(bars>0&&op)_modemLastOp=op;for(var i=1;i<=5;i++){var b=document.getElementById('mb'+i);if(b)b.classList.toggle('on',i<=bars);}var el=document.getElementById('modem-op');if(!el)return;if(!sim){el.textContent='NO SIM';el.style.color='var(--red)';}else if(bars===0){el.textContent=_modemLastOp||'NO NET';el.style.color='var(--muted)';}else{el.textContent=op||'--';el.style.color=conn?'var(--green)':'var(--muted)';}}
-
-// ── Battery ───────────────────────────────────────────────────
-function setBatt(v,chg,vbus){var el=document.getElementById('batt-pct');if(!el)return;if(v<0){el.textContent='off';el.style.color='var(--muted)';}else{el.textContent=(chg?'\u26A1':'')+(vbus&&!chg?'\u2197':'') +v+'%';el.style.color=chg?'var(--yellow)':v>50?'var(--green)':v>20?'var(--yellow)':'var(--red)';}}
-
-
-// ── Telemetrie-Tabelle ────────────────────────────────────────
+// ── Telemetrie-Tabelle ───────────────────────────────────
 var NEVER = 4294967295;
 
 function fmtAge(ms) {
@@ -218,20 +187,16 @@ function buildTable(data) {
 
     var valStr = '\u2014';
     var ageMs  = NEVER;
-    var isValid = false;
 
     if (row.key === '_mqtt') {
       valStr  = data.mqtt_ok ? t('data.mqtt_connected') : t('data.mqtt_disconnected');
       ageMs   = 0;
-      isValid = true;
     } else if (row.key === '_buf_pending') {
       valStr  = String(data.buf_pending ?? 0);
       ageMs   = 0;
-      isValid = true;
     } else if (Array.isArray(row.key)) {
       var fields = row.key.map(function(k){ return f[k]; });
       ageMs   = Math.max.apply(null, fields.map(function(x){ return x ? x.age_ms : NEVER; }));
-      isValid = fields.every(function(x){ return x && x.valid; });
       if (ageMs < NEVER) {
         var vals = fields.map(function(x){ return parseFloat(x.v); });
         try { valStr = row.fmt.apply(null, vals) + (row.unit ? ' '+row.unit : ''); }
@@ -240,13 +205,11 @@ function buildTable(data) {
     } else {
       var fd = f[row.key];
       if (fd) {
-        ageMs   = fd.age_ms;
-        isValid = fd.valid;
+        ageMs = fd.age_ms;
         if (ageMs < NEVER) {
           var v = parseFloat(fd.v);
-          try {
-            valStr = row.fmt(v, fd) + (row.unit ? ' '+row.unit : '');
-          } catch(e) { valStr = '\u2014'; }
+          try { valStr = row.fmt(v, fd) + (row.unit ? ' '+row.unit : ''); }
+          catch(e) { valStr = '\u2014'; }
         }
       }
     }
@@ -266,7 +229,7 @@ function buildTable(data) {
   document.getElementById('tbl-body').innerHTML = html;
 }
 
-// ── Auto-Refresh alle 3 s ─────────────────────────────────────
+// ── Auto-Refresh alle 3 s ────────────────────────────────
 var _telemTimer;
 
 async function fetchTelemetry() {

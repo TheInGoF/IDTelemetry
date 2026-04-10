@@ -6,7 +6,7 @@
 //  Hardware: LILYGO T-SIM7080G-S3 (ESP32-S3-WROOM-1-N16R8) + SN65HVD230
 // ============================================================
 
-#define FW_VERSION  "1.0.5"
+#define FW_VERSION  "1.0.6"
 
 // ============================================================
 //  MODUL-SCHALTER  ← hier ein-/ausschalten
@@ -41,10 +41,11 @@
 // ============================================================
 //  MQTT (persistente Verbindung via SIM7080G nativen Client)
 // ============================================================
-#define MQTT_KEEPALIVE_S        60      // MQTT Keep-Alive Intervall
+#define MQTT_KEEPALIVE_S        30      // Keep-Alive Ping (30s hält o2 CG-NAT offen, war 60s)
 #define MQTT_QOS                1       // QoS 1 = at least once (Broker sendet PUBACK)
 #define MQTT_RECONNECT_MS       10000UL // Reconnect-Intervall bei Verbindungsverlust
 #define MQTT_PUBLISH_TIMEOUT_MS 10000UL // Timeout für Publish
+#define MQTT_FAIL_RESET_COUNT   3       // Nach N Fehlversuchen → Modem-Reset (PWRKEY)
 
 // ============================================================
 //  Deep Sleep / Gyro

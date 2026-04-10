@@ -1,152 +1,190 @@
 # IDTelemetry
 
-ESP32-S3 Telemetrie-Gerät entwickelt für den **VW ID.7 (2025)** mit OBD2/CAN-Bus, GPS, LTE und BLE.
+**TeslaMate for the rest of us** — an ESP32-based telemetry stick for the VW ID.7 (and potentially other VW MEB platform vehicles).
+
+Born out of frustration: the VW ID.7 shows you almost nothing about what's happening under the hood. No real SoC, no battery temperature, no power draw, no charge curve — not even a simple energy consumption history. Even a base-model VW Hybrid will give you more data on the dashboard than an ID.7 does. TeslaMate showed the world what vehicle telemetry *could* look like. This project tries to bring that same spirit to the VW ID family — a DIY box that plugs into OBD2 and turns a black-box EV into something you can actually understand.
+
+## What It Does
+
+- Reads battery, drivetrain and climate data from the CAN bus (UDS/ISO-TP)
+- Pushes telemetry to **InfluxDB** over LTE-M for Grafana dashboards
+- Tracks location via **Traccar** (OsmAnd protocol)
+- Emulates a **BLE ELM327** so ABRP sees the car natively
+- Runs a **WiFi AP with a full Web-UI** for live data, config and debugging
+- Sleeps in the **low-µA range** when parked, wakes on motion
 
 ## Hardware
 
-| Komponente | Details |
-| ---------- | ------- |
-| MCU | LILYGO T-SIM7080G-S3 (ESP32-S3, 16MB Flash, 8MB PSRAM) |
-| CAN-Transceiver | SN65HVD230 |
-| Modem/GPS | SIM7080G (LTE-M/NB-IoT + GPS) |
-| PMU | AXP2101 (onboard auf LILYGO) |
-| RTC | DS1307 |
-| Gyro/Lagesensor | MPU-6050 |
+| Component | Details |
+| --------- | ------- |
+| MCU | LILYGO T-SIM7080G-S3 (ESP32-S3, 16 MB Flash, 8 MB PSRAM) |
+| CAN Transceiver | SN65HVD230 (3.3 V, active mode) |
+| Modem | SIM7080G (LTE-M / NB-IoT), onboard |
+| GPS + Compass | BLITZ Mini M10 (u-blox M10 multi-GNSS + QMC5883L compass) — external via UART |
+| GPS (fallback) | SIM7080G integrated GNSS (used when external GPS is disabled) |
+| PMU | AXP2101 (onboard, manages DC rails for modem, GPS, peripherals) |
+| RTC | DS1307 + CR2032 (keeps time across power cycles) |
+| IMU | MPU-6050 (accelerometer + gyroscope, motion wake-up) |
 
-## Funktionen
+## GPS Modes
 
-- CAN-Bus Scanner (UDS/ISO-TP, OBD2)
-- Echtzeit-Telemetrie via LTE → InfluxDB
-- GPS-Tracking via Traccar (OsmAnd-Protokoll)
-- BLE ELM327-Emulation für ABRP
-- WiFi Access Point mit Web-UI
-- Deep Sleep mit Gyro-Wake
+The firmware supports two GPS configurations controlled by `GPS_EXT_ENABLED` in `config.h`:
 
-## Web-UI
+**External GPS (default, recommended):**
+The BLITZ Mini M10 runs continuously on UART2 (GPIO1/GPIO2) and maintains a fix independently of the modem. LTE stays connected via MQTT at all times — no GPS/LTE cycling needed. The M10 draws ~5–8 mA in idle and keeps tracking even during sleep transitions. Power is supplied via the PMU DC5 rail (3.3 V).
 
-Gerät öffnet einen WiFi Access Point:
+**Internal GPS (fallback):**
+When `GPS_EXT_ENABLED` is set to `false`, the SIM7080G's built-in GNSS is used instead. Because the SIM7080G shares a single radio frontend, GPS and LTE data cannot run simultaneously. The device cycles between modes every 60 seconds:
+
+```text
+GPS active (55 s) → GPS off → LTE on → send data → LTE off → GPS on
+```
+
+The external GPS eliminates this limitation entirely.
+
+## Web UI
+
+The device opens a WiFi Access Point:
 
 - SSID: `IDTelemetry`
-- Passwort: `IDTelemetry1`
+- Password: `IDTelemetry1`
 - URL: `http://192.168.4.1`
 
-## Installationsanleitung
+Three pages: **Data** (live telemetry table), **Debug** (gyro graph, compass, CAN tools, logs) and **Config** (WiFi, SIM/APN, MQTT, OTA firmware update).
 
-### Was du brauchst
+## Installation Guide
 
-| Teil | Beschreibung | ca. Preis |
-| ---- | ------------ | --------- |
-| LILYGO T-SIM7080G-S3 | ESP32-S3 Board mit LTE-M/NB-IoT Modem + GPS | ~35 € |
-| SN65HVD230 CAN-Transceiver | 3.3V CAN-Bus Modul | ~3 € |
-| OBD2-Stecker mit Kabel | 16-Pin OBD2 Stecker (Pin 6 + 14 für CAN) | ~5 € |
-| DS1307 RTC Modul | Echtzeituhr (I2C) mit Knopfzelle | ~2 € |
-| MPU-6050 Breakout | Beschleunigungs-/Lagesensor (I2C) | ~3 € |
-| LTE-M SIM-Karte | z.B. ThingsMobile (Prepaid, kein Vertrag) | ~15 € |
-| USB-C Kabel | Zum Flashen und für Stromversorgung | — |
+### Bill of Materials
 
-### Schritt 1 — Software installieren
+| Part | Description | approx. Price |
+| ---- | ----------- | ------------- |
+| LILYGO T-SIM7080G-S3 | ESP32-S3 board with LTE-M/NB-IoT modem | ~35 € |
+| SN65HVD230 CAN Transceiver | 3.3 V CAN bus module | ~3 € |
+| OBD2 plug with cable | 16-pin OBD2 connector (pin 6 + 14 for CAN) | ~5 € |
+| BLITZ Mini M10 | u-blox M10 GNSS + QMC5883L compass (UART) | ~40 € |
+| DS1307 RTC module | Real-time clock (I2C) with coin cell | ~2 € |
+| MPU-6050 breakout | Accelerometer / gyroscope (I2C) | ~3 € |
+| LTE-M SIM card | e.g. ThingsMobile (prepaid, no contract) | ~15 € |
+| USB-C cable | For flashing and power | — |
 
-1. [VSCode](https://code.visualstudio.com) installieren
-2. In VSCode die Extension **PlatformIO IDE** installieren
-3. Dieses Repository klonen oder als ZIP herunterladen
+### Step 1 — Install Toolchain
 
-### Schritt 2 — Zugangsdaten eintragen
+1. Install [VSCode](https://code.visualstudio.com)
+2. Install the **PlatformIO IDE** extension in VSCode
+3. Clone this repo or download it as a ZIP
+
+### Step 2 — Add Credentials
 
 ```bash
 cp src/secrets.h.example src/secrets.h
 ```
 
-`src/secrets.h` öffnen und ausfüllen:
+Open `src/secrets.h` and fill in:
 
-- **APN** eures Mobilfunkanbieters (z.B. `TM` für ThingsMobile)
-- **Traccar** Host + Geräte-ID (falls GPS-Tracking gewünscht)
-- **InfluxDB** Host, Org, Bucket, Token (falls Telemetrie gewünscht)
-- **Guard SSID** des Fahrzeug-Hotspots (z.B. `"My VW 1747"`)
+- **APN** of your mobile carrier (e.g. `TM` for ThingsMobile)
+- **Traccar** host + device ID (if you want GPS tracking)
+- **InfluxDB** host, org, bucket, token (if you want telemetry dashboards)
+- **Guard SSID** of the car's hotspot (e.g. `"My VW 1747"`)
 
-### Schritt 3 — Verdrahten
+### Step 3 — Wiring
 
 ```text
-LILYGO T-SIM7080G-S3          Externe Module
+LILYGO T-SIM7080G-S3          External Modules
 ┌──────────────────┐
-│ GPIO17 (TX) ─────┼──→ SN65HVD230 CTX ──→ OBD2 Pin 6  (CAN-H)
-│ GPIO18 (RX) ─────┼──→ SN65HVD230 CRX ──→ OBD2 Pin 14 (CAN-L)
+│                  │         ┌─── CAN Bus (OBD2) ───┐
+│ GPIO17 (CAN TX) ─┼──→ SN65HVD230 CTX ──→ OBD2 Pin 6  (CAN-H)
+│ GPIO18 (CAN RX) ─┼──→ SN65HVD230 CRX ──→ OBD2 Pin 14 (CAN-L)
 │                  │
-│ GPIO45 (SDA) ────┼──→ DS1307 SDA + MPU-6050 SDA
-│ GPIO21 (SCL) ────┼──→ DS1307 SCL + MPU-6050 SCL
+│                  │         ┌─── I2C Bus (shared) ──┐
+│ GPIO45 (SDA) ────┼──→ DS1307 + MPU-6050 + QMC5883L (SDA)
+│ GPIO21 (SCL) ────┼──→ DS1307 + MPU-6050 + QMC5883L (SCL)
 │                  │
-│ 3V3 ─────────────┼──→ VCC für alle Module
-│ GND ─────────────┼──→ GND für alle Module
+│ GPIO3  (INT) ────┼──← MPU-6050 INT (deep sleep wake-up)
+│                  │
+│                  │         ┌─── External GPS ──────┐
+│ GPIO1  (RX) ─────┼──← BLITZ M10 TX  (UART2, 115200 baud)
+│ GPIO2  (TX) ─────┼──→ BLITZ M10 RX
+│                  │
+│ 3V3 ─────────────┼──→ VCC for CAN transceiver + RTC
+│ GND ─────────────┼──→ GND for all modules
 └──────────────────┘
+
+Onboard (no wiring needed):
+  GPIO5/4   → SIM7080G UART   (modem, UART1)
+  GPIO41    → SIM7080G PWRKEY
+  GPIO42    → SIM7080G DTR
+  GPIO40    → SIM7080G STATUS
+  GPIO44    → SIM7080G FLIGHT (RF kill)
+  GPIO15/7  → AXP2101 I2C     (PMU, Wire1)
+  GPIO6     → AXP2101 INT     (VBUS wake-up)
 ```
 
-SIM-Karte in den Slot auf der Unterseite des LILYGO einlegen (Nano-SIM).
+Insert a nano-SIM card into the slot on the bottom of the LILYGO board.
 
-### Schritt 4 — Firmware flashen
+**Note:** The MPU-6050 AD0 pin must be pulled to 3.3 V so it uses I2C address `0x69` (avoiding collision with the DS1307 at `0x68`). The BLITZ M10 is powered by the PMU DC5 rail (3.3 V).
 
-Board per USB-C anschließen, dann in VSCode/PlatformIO:
+### Step 4 — Flash Firmware
 
-1. **Upload Filesystem Image** — lädt die Web-UI auf den ESP32 (nur einmalig nötig, bzw. bei HTML-Änderungen)
-2. **Upload** — flasht die Firmware
+Connect the board via USB-C, then in VSCode/PlatformIO:
 
-Oder per Terminal:
+1. **Upload Filesystem Image** — uploads the Web UI to SPIFFS (only needed once, or after HTML changes)
+2. **Upload** — flashes the firmware
+
+Or via terminal:
 
 ```bash
-pio run --target uploadfs   # Web-UI hochladen
-pio run --target upload      # Firmware flashen
+pio run --target uploadfs   # upload Web UI
+pio run --target upload      # flash firmware
 ```
 
-### Schritt 5 — Verbinden
+### Step 5 — Connect
 
-1. Mit dem WLAN **IDTelemetry** verbinden (Passwort: `IDTelemetry1`)
-2. Im Browser `http://192.168.4.1` öffnen
-3. Auf der Config-Seite den WiFi Guard und Schwellenwerte einstellen
+1. Connect to the **IDTelemetry** WiFi (password: `IDTelemetry1`)
+2. Open `http://192.168.4.1` in your browser
+3. Configure WiFi Guard, thresholds and backend credentials on the Config page
 
-## Verdrahtung
+## GPIO Reference
 
-```text
-ESP32 GPIO17 → SN65HVD230 CTX
-ESP32 GPIO18 → SN65HVD230 CRX
-SN65HVD230 CANH → OBD2 Pin 6
-SN65HVD230 CANL → OBD2 Pin 14
+| GPIO | Function | Direction | Bus |
+| ---- | -------- | --------- | --- |
+| 1 | External GPS RX (← M10 TX) | IN | UART2 |
+| 2 | External GPS TX (→ M10 RX) | OUT | UART2 |
+| 3 | MPU-6050 INT (deep sleep wake) | IN | EXT1 |
+| 4 | Modem RX (← SIM7080G TX) | IN | UART1 |
+| 5 | Modem TX (→ SIM7080G RX) | OUT | UART1 |
+| 6 | PMU interrupt (VBUS wake) | IN | — |
+| 7 | PMU SCL | BIDIR | I2C Wire1 |
+| 15 | PMU SDA | BIDIR | I2C Wire1 |
+| 17 | CAN TX | OUT | TWAI |
+| 18 | CAN RX | IN | TWAI |
+| 21 | Sensor SCL | BIDIR | I2C Wire0 |
+| 40 | Modem STATUS | IN | — |
+| 41 | Modem PWRKEY | OUT | — |
+| 42 | Modem DTR | OUT | — |
+| 44 | Modem FLIGHT / RF kill | OUT | — |
+| 45 | Sensor SDA | BIDIR | I2C Wire0 |
 
-ESP32 GPIO45 → SDA  (DS1307 + MPU-6050)
-ESP32 GPIO21 → SCL  (DS1307 + MPU-6050)
+I2C Wire0 devices: DS1307 (`0x68`), MPU-6050 (`0x69`), QMC5883L (`0x0D` — onboard BLITZ M10)
 
-ESP32 GPIO4  → MODEM TX
-ESP32 GPIO5  → MODEM RX
-```
-
-## Sicherheit & Energiesparen
+## Safety & Power Management
 
 ### WiFi Guard
 
-Der Guard ist **nur aktiv solange die konfigurierte WLAN-SSID des Fahrzeugs sichtbar ist**. Nur in diesem Zustand ist der CAN-Bus Sendebetrieb (TX) freigegeben. Ist die Fahrzeug-SSID nicht in Reichweite, bleibt TX gesperrt.
+CAN bus TX is **only enabled while the configured car WiFi SSID is visible**. If the car's hotspot goes out of range, TX is locked immediately. This prevents accidental bus writes when the stick is powered outside the vehicle. An alternative guard mode uses VBUS detection (external 12 V power present = car is on).
 
 ### Deep Sleep
 
-Bei Inaktivität (kein Fahrbetrieb laut Gyro) fährt das Gerät in den Deep Sleep:
+When the gyro detects no movement (car parked):
 
-1. Letzte Telemetriedaten werden noch gesendet
-2. ESP32-S3 wechselt in Deep Sleep (µA-Bereich)
-3. Aufwachen automatisch sobald der Gyro Bewegung erkennt (Fahrzeug bewegt sich)
+1. Final telemetry batch is sent
+2. GPS enters idle mode (M10 keeps tracking at ~5 mA, resumes instantly)
+3. ESP32-S3 enters deep sleep (µA range)
+4. Wakes on MPU-6050 motion interrupt (GPIO3) or VBUS insertion (GPIO6)
 
-## Bekannte Einschränkungen (SIM7080G)
+## Open-Source Dependencies
 
-Der SIM7080G kann GPS und LTE-Datenverbindung **nicht gleichzeitig** betreiben.
-Das Gerät wechselt daher alle 60 Sekunden zwischen beiden Modi:
-
-```text
-GPS aktiv (55s) → GPS aus → LTE an → Traccar + InfluxDB senden → LTE aus → GPS an
-```
-
-- Während der LTE-Phase (~5s) werden keine GPS-Koordinaten aktualisiert
-- Während der GPS-Phase ist keine Datenverbindung aktiv
-- Bei Stillstand (>3 min laut Gyro) pausiert der Zyklus komplett um Strom zu sparen
-
-## Open-Source-Abhängigkeiten
-
-| Bibliothek | Lizenz | Autor |
-| ---------- | ------ | ----- |
+| Library | License | Author |
+| ------- | ------- | ------ |
 | [arduino-esp32](https://github.com/espressif/arduino-esp32) | Apache 2.0 | Espressif |
 | [AsyncTCP](https://github.com/mathieucarbou/AsyncTCP) | LGPL v3 | mathieucarbou |
 | [ESPAsyncWebServer](https://github.com/mathieucarbou/ESPAsyncWebServer) | LGPL v3 | mathieucarbou |
@@ -157,23 +195,22 @@ GPS aktiv (55s) → GPS aus → LTE an → Traccar + InfluxDB senden → LTE aus
 | [XPowersLib](https://github.com/lewisxhe/XPowersLib) | MIT | lewis he |
 | Space Mono & Syne | OFL | Google Fonts |
 
-**Hinweise:**
+**Notes:**
 
-- ELM327 AT-Befehlssatz: proprietäres Protokoll von [ELM Electronics](https://www.elmelectronics.com). Dieses Projekt implementiert eine Emulation für ABRP-Kompatibilität.
-- OBD-II PIDs: SAE J1979 / ISO 15031 Standard, frei verwendbar.
-- VW-spezifische UDS-DIDs (Service 0x22): Community-Reverse-Engineering, keine offizielle Dokumentation.
+- ELM327 AT command set: proprietary protocol by [ELM Electronics](https://www.elmelectronics.com). This project implements an emulation layer for ABRP compatibility.
+- OBD-II PIDs: SAE J1979 / ISO 15031 standard, freely usable.
+- VW-specific UDS DIDs (service 0x22): community reverse-engineering, no official documentation.
 
-## Entwicklung
+## Development
 
-Dieses Projekt entstand nach dem **HITL-Prinzip (Human in the Loop)**:
-Konzeption, Entscheidungen und Richtung kommen vom Menschen — der Code wird von [Claude](https://claude.ai) (Anthropic) geschrieben.
+This project follows the **HITL principle (Human in the Loop)**: concept, decisions and direction come from the human — code is AI-assisted.
 
-## Lizenz
+## License
 
-GNU Affero General Public License v3.0 © 2026 Ingo F — siehe [LICENSE](LICENSE)
+GNU Affero General Public License v3.0 © 2026 Ingo F — see [LICENSE](LICENSE)
 
 ---
 
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/lordvonbaum)
 
-> Spenden sind freiwillig und dienen ausschliesslich der Unterstuetzung des Projekts. Sie haben keinen Einfluss auf die Priorisierung von Bugs, Feature-Wuenschen oder Support-Anfragen.
+> Donations are voluntary and solely support the project. They have no influence on bug prioritization, feature requests or support.

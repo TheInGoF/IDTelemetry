@@ -314,6 +314,14 @@ void ble_web_routes_init() {
     server.on("/config", HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/config.html"); });
     server.on("/daten",  HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/daten.html");  });
 
+    // Shared Assets
+    server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest* r) {
+        r->send(SPIFFS, "/style.css", "text/css");
+    });
+    server.on("/common.js", HTTP_GET, [](AsyncWebServerRequest* r) {
+        r->send(SPIFFS, "/common.js", "application/javascript");
+    });
+
     // i18n — Sprachdateien
     server.on("/i18n.js", HTTP_GET, [](AsyncWebServerRequest* r) {
         r->send(SPIFFS, "/i18n.js", "application/javascript");
