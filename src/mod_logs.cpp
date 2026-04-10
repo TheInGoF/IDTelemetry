@@ -216,25 +216,9 @@ void log_ble_snapshot(const char* json_devices) {
     JsonArray arr = doc.as<JsonArray>();
     uint32_t now = millis();
 
-    const char* state      = "?";
-    bool        guard_active = false;
-    int         guard_rssi   = -999;
-    const char* guard_mac    = "";
-
-    for (JsonObject item : arr) {
-        if (strcmp(item["type"], "guard") == 0) {
-            state        = item["state"] | "?";
-            guard_active = item["active"] | false;
-            guard_rssi   = item["rssi"]   | -999;
-            guard_mac    = item["mac"]    | "";
-            break;
-        }
-    }
-
-    char hdr[120];
+    char hdr[80];
     snprintf(hdr, sizeof(hdr),
-             "--- %9lums | State:%-8s | Wächter:%s RSSI:%d dBm ---\r\n",
-             now, state, guard_active ? guard_mac : "KEIN", guard_rssi);
+             "--- %9lums ---\r\n", now);
     spiffs_append_ring(SPIFFS_BLE_LOG, hdr,
                        (size_t)SPIFFS_BLE_LOG_MAX_KB * 1024);
 
@@ -245,12 +229,10 @@ void log_ble_snapshot(const char* json_devices) {
         int  rssi        = item["rssi"]    | -999;
         int  age         = item["age_s"]   | 0;
         const char* dist = item["dist"]    | "?";
-        bool is_guard    = item["is_guard"]| false;
-
         char line[120];
         snprintf(line, sizeof(line),
-                 "  %s | %-20s | %4d dBm | %-4s | %3ds%s\r\n",
-                 mac, name, rssi, dist, age, is_guard ? " [WÄCHTER]" : "");
+                 "  %s | %-20s | %4d dBm | %-4s | %3ds\r\n",
+                 mac, name, rssi, dist, age);
         spiffs_append_ring(SPIFFS_BLE_LOG, line,
                            (size_t)SPIFFS_BLE_LOG_MAX_KB * 1024);
     }

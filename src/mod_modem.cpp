@@ -13,7 +13,6 @@
 #include "mod_gps_ext.h"
 #include "mod_rtc.h"
 #include "mod_logs.h"
-#include "mod_wifi_guard.h"
 #include "mod_pmu.h"
 #include <Arduino.h>
 #include <SPIFFS.h>
@@ -219,23 +218,12 @@ static const PlmnEntry PLMN_TABLE[] = {
 };
 static const int PLMN_COUNT = sizeof(PLMN_TABLE) / sizeof(PLMN_TABLE[0]);
 
-// ---- PLMN-Sperrliste (Soft + Hard Block) ----
-// Soft-Block: 30 Min (kein Signal, Timeout) → RAM
-// Hard-Block: 30 Tage (abgelehnt, Daten gehen nicht) → SPIFFS
-enum BlockType : uint8_t { BLOCK_SOFT = 0, BLOCK_HARD = 1 };
-struct BlockedPlmn { char plmn[8]; uint32_t blocked_at; BlockType type; };
-static const uint32_t SOFT_BLOCK_MS = 30UL * 60UL * 1000UL;         // 30 Minuten
-static const uint32_t HARD_BLOCK_MS = 30UL * 24UL * 60UL * 60000UL; // 30 Tage (millis reicht ~49 Tage)
-static const int      MAX_BLOCKED   = 20;
-static BlockedPlmn    s_blocked[MAX_BLOCKED];
-static int            s_blocked_count = 0;
-
-static const char* HARD_BLOCK_FILE = "/plmn_block.txt";
 static const char* GREEN_LIST_FILE = "/plmn_good.txt";
 
 // ---- Green-List: bekannt funktionierende PLMNs ----
-// Wird zuerst versucht → schnelle Verbindung ohne alle 38 durchzugehen.
-// In SPIFFS gespeichert (ueberlebt Reboot), max 4 Eintraege.
+// Wird zuerst versucht (manuell COPS=1), dann Auto-Modus als Fallback.
+// Bei Erfolg wird der Provider auf die Green-List gesetzt (MRU-Reihenfolge).
+// Nie gepurged — waechst nur durch neue erfolgreiche Verbindungen.
 static const int MAX_GREEN = 4;
 static char s_green[MAX_GREEN][8];
 static int  s_green_count = 0;
@@ -301,89 +289,6 @@ static bool is_green(const char* plmn) {
         if (strcmp(s_green[i], plmn) == 0) return true;
     }
     return false;
-}
-
-// Hard-Blocks beim Boot aus SPIFFS laden
-static void load_hard_blocks() {
-    if (!SPIFFS.exists(HARD_BLOCK_FILE)) return;
-    File f = SPIFFS.open(HARD_BLOCK_FILE, "r");
-    if (!f) return;
-    s_blocked_count = 0;
-    while (f.available() && s_blocked_count < MAX_BLOCKED) {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (line.length() < 5) continue;
-        // Format: "PLMN,boot_count" — wir speichern millis=0, wird beim ersten Check bereinigt
-        int comma = line.indexOf(',');
-        if (comma < 0) continue;
-        String plmn = line.substring(0, comma);
-        strncpy(s_blocked[s_blocked_count].plmn, plmn.c_str(), 7);
-        s_blocked[s_blocked_count].plmn[7] = '\0';
-        s_blocked[s_blocked_count].blocked_at = 0;  // = Boot-Zeitpunkt
-        s_blocked[s_blocked_count].type = BLOCK_HARD;
-        s_blocked_count++;
-    }
-    f.close();
-    if (s_blocked_count > 0) {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "%d Hard-Blocks geladen", s_blocked_count);
-        syslog("MODEM", msg);
-    }
-}
-
-// Hard-Blocks in SPIFFS speichern
-static void save_hard_blocks() {
-    File f = SPIFFS.open(HARD_BLOCK_FILE, "w");
-    if (!f) return;
-    for (int i = 0; i < s_blocked_count; i++) {
-        if (s_blocked[i].type == BLOCK_HARD) {
-            f.printf("%s,1\n", s_blocked[i].plmn);
-        }
-    }
-    f.close();
-}
-
-static bool is_plmn_blocked(const char* plmn) {
-    uint32_t now = millis();
-    for (int i = 0; i < s_blocked_count; i++) {
-        if (strcmp(s_blocked[i].plmn, plmn) != 0) continue;
-        uint32_t duration = (s_blocked[i].type == BLOCK_HARD) ? HARD_BLOCK_MS : SOFT_BLOCK_MS;
-        if (now - s_blocked[i].blocked_at < duration) return true;
-        // Abgelaufen — entfernen
-        char msg[64];
-        snprintf(msg, sizeof(msg), "Block abgelaufen: %s", plmn);
-        syslog("MODEM", msg);
-        s_blocked[i] = s_blocked[--s_blocked_count];
-        if (s_blocked[i].type == BLOCK_HARD) save_hard_blocks();
-        return false;
-    }
-    return false;
-}
-
-static void block_plmn(const char* plmn, BlockType type) {
-    const char* label = (type == BLOCK_HARD) ? "HARD 30d" : "SOFT 30m";
-    char msg[64];
-    snprintf(msg, sizeof(msg), "Block %s: %s", label, plmn);
-    syslog("MODEM", msg);
-    // Update falls schon in Liste (Upgrade soft→hard moeglich)
-    for (int i = 0; i < s_blocked_count; i++) {
-        if (strcmp(s_blocked[i].plmn, plmn) == 0) {
-            s_blocked[i].blocked_at = millis();
-            if (type == BLOCK_HARD && s_blocked[i].type != BLOCK_HARD) {
-                s_blocked[i].type = BLOCK_HARD;
-                save_hard_blocks();
-            }
-            return;
-        }
-    }
-    if (s_blocked_count < MAX_BLOCKED) {
-        strncpy(s_blocked[s_blocked_count].plmn, plmn, 7);
-        s_blocked[s_blocked_count].plmn[7] = '\0';
-        s_blocked[s_blocked_count].blocked_at = millis();
-        s_blocked[s_blocked_count].type = type;
-        s_blocked_count++;
-        if (type == BLOCK_HARD) save_hard_blocks();
-    }
 }
 
 // SIM PIN pruefen und ggf. eingeben. Gibt true zurueck wenn SIM READY.
@@ -502,26 +407,25 @@ static RegStatus wait_for_reg(uint32_t wait_s) {
 }
 
 // Netz-Registrierung: erst Green-List PLMNs manuell, dann Auto-Modus.
-// Bei denied wird das PLMN soft-geblockt und das naechste probiert.
+// Green-List wird nie gepurged — nur durch neue Provider erweitert.
+// Jeder neue Provider kostet ~30ct/Monat (ThingsMobile), daher bevorzugt
+// immer den bekannten Provider nehmen statt blind durchprobieren.
 static bool try_register(char* operator_out, size_t op_size) {
     char syslog_msg[128];
 
-    // --- Phase 1: Green-List PLMNs manuell (zuletzt erfolgreich) ---
-    for (int i = 0; i < s_green_count && !g_shutdown; i++) {
-        if (is_plmn_blocked(s_green[i])) continue;
-        snprintf(syslog_msg, sizeof(syslog_msg), "Versuche Green-PLMN %s...", s_green[i]);
+    // --- Phase 1: Letzten bekannten Provider manuell probieren ---
+    if (s_green_count > 0 && !g_shutdown) {
+        snprintf(syslog_msg, sizeof(syslog_msg), "Versuche letzten Provider %s...", s_green[0]);
         syslog("MODEM", syslog_msg);
-        // COPS=1,2,"PLMN",7  → manuell, numerisch, LTE-M
-        s_modem.sendAT("+COPS=1,2,\"", s_green[i], "\",7");
+        s_modem.sendAT("+COPS=1,2,\"", s_green[0], "\",7");
         if (s_modem.waitResponse(30000L) == 1) {
             RegStatus r = wait_for_reg(30);
             if (r == REG_OK_HOME || r == REG_OK_ROAMING) goto registered;
-            if (r == REG_DENIED) block_plmn(s_green[i], BLOCK_SOFT);
         }
     }
 
     // --- Phase 2: Auto-Modus (Modem wählt bestes verfügbares Netz) ---
-    syslog("MODEM", "Green-List erschoepft · Auto-Modus 60s");
+    syslog("MODEM", "Green-List nicht erreichbar · Auto-Modus 60s");
     s_modem.sendAT("+COPS=0");
     s_modem.waitResponse(10000L);
     {
@@ -720,7 +624,7 @@ static void modem_task(void* /*param*/) {
 
             // =================================================================
 
-                // Sleep-Entscheidung trifft mod_sleep (WiFi Guard)
+                // Sleep-Entscheidung trifft mod_sleep
                 // Modem läuft einfach weiter bis Deep Sleep
 
 
@@ -854,7 +758,7 @@ static void modem_task(void* /*param*/) {
                             vTaskDelay(pdMS_TO_TICKS(300));
                             // Ausstehende Zeilen werden unten im MQTT-Block gepublisht
                         }
-                        // VBUS weg aber Guard noch da → VW-Kurzzeitabschaltung, weiter warten
+                        // VBUS weg → VW-Kurzzeitabschaltung möglich, weiter warten
                     }
                 }
 
@@ -1178,8 +1082,7 @@ void modem_init() {
     }
     #endif
 
-    // PLMN-Listen aus SPIFFS laden (ueberleben Reboot)
-    load_hard_blocks();
+    // Green-List aus SPIFFS laden (ueberlebt Reboot)
     load_green_list();
 
     syslog("MODEM", "Init abgeschlossen");

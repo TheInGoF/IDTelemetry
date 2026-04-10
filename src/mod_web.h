@@ -7,7 +7,9 @@ void ws_broadcast_json(const char* json);
 // ============================================================
 
 void web_init();
-void web_ap_stop();   // AP + WebServer abschalten (Power-Saving nach Timeout)
+void web_ap_update(); // im loop() aufrufen — AP-Timeout + VBUS-Restart
+void web_ap_stop();   // AP + WebServer sofort abschalten
+void web_ap_start();  // AP + WebServer einschalten (2-min-Timer neu)
 bool web_ap_active(); // true solange AP noch läuft
 
 void ble_web_routes_init();

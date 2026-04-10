@@ -4,7 +4,6 @@
 #include "mod_telemetry.h"
 #include "mod_modem.h"
 #include "mod_can.h"
-#include "mod_wifi_guard.h"
 #include "mod_pmu.h"
 #include "shared.h"
 #include "mod_gps_ext.h"
@@ -20,7 +19,7 @@
 //  mod_sleep - Deep Sleep Management
 // ============================================================
 
-#define SLEEP_NO_GUARD_MS  (5UL * 60UL * 1000UL)  // 5 min ohne Guard → Sleep
+#define SLEEP_NO_VBUS_MS   (5UL * 60UL * 1000UL)  // 5 min ohne VBUS → Sleep
 
 // Globales Shutdown-Flag: wird von enter_deep_sleep() gesetzt.
 // Alle FreeRTOS-Tasks prüfen dies in ihrer Loop und beenden sich sauber,
@@ -31,7 +30,7 @@ volatile bool g_sleep_requested = false;
 volatile bool g_trip_ending    = false;
 
 static uint32_t g_boot_ms = 0;
-static uint32_t g_last_guard_seen_ms = 0;  // letzter Zeitpunkt mit Guard in Range
+static uint32_t g_last_vbus_seen_ms = 0;  // letzter Zeitpunkt mit VBUS
 static esp_sleep_wakeup_cause_t g_wake_cause = ESP_SLEEP_WAKEUP_UNDEFINED;
 
 bool sleep_was_deep() {
@@ -103,7 +102,7 @@ void sleep_update() {
     // ─── VBUS = Auto an → wach bleiben ─────────────────────
     bool vbus = pmu_is_vbus_in();
     if (vbus) {
-        g_last_guard_seen_ms = now;
+        g_last_vbus_seen_ms = now;
         // Sleep-Anforderung zurücknehmen falls VBUS zurückgekehrt ist
         if (g_sleep_requested) {
             g_sleep_requested = false;
@@ -115,8 +114,8 @@ void sleep_update() {
     }
 
     // VBUS weg → 5 min Schonfrist (Kurzunterbrechung, Tankpause)
-    uint32_t vbus_gone_ms = now - g_last_guard_seen_ms;
-    bool vbus_sleep = vbus_gone_ms >= SLEEP_NO_GUARD_MS;
+    uint32_t vbus_gone_ms = now - g_last_vbus_seen_ms;
+    bool vbus_sleep = vbus_gone_ms >= SLEEP_NO_VBUS_MS;
 
     // Gyro-Fallback: kein VBUS aber Bewegung → wach bleiben (z.B. Transport)
     // Erst prüfen wenn VBUS mindestens 15s weg ist — kurze Glitches ignorieren.
@@ -192,7 +191,7 @@ void sleep_update() {
     char msg[96];
     if (vbus_sleep) {
         snprintf(msg, sizeof(msg), "Deep Sleep: VBUS weg seit %lu min",
-                 SLEEP_NO_GUARD_MS / 60000UL);
+                 SLEEP_NO_VBUS_MS / 60000UL);
     } else {
         snprintf(msg, sizeof(msg), "Deep Sleep: %lu min keine Gyro-Bewegung",
                  SLEEP_INACTIVITY_MS / 60000UL);

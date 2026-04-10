@@ -56,12 +56,9 @@
 #define GYRO_HOLD_MS            30000   // SHAKE bleibt 30s aktiv
 
 // ============================================================
-//  WiFi / Access Point / Guard
+//  WiFi / Access Point
 // ============================================================
-#define AP_TIMEOUT_MIN         10    // AP abschalten nach X Minuten ohne Client (0 = nie)
-#define BLE_RSSI_THRESHOLD    -72    // dBm (Legacy, nicht mehr genutzt)
-#define GUARD_LOCK_S          120    // 2 min Lock nach Fund
-#define GUARD_CHECK_S          60    // 60s bis Rescan
+#define AP_TIMEOUT_MS    (2UL * 60UL * 1000UL)  // 2 min ohne Client → AP aus
 
 // ============================================================
 //  Log

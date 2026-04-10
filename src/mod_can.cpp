@@ -2,7 +2,17 @@
 #include "mod_sleep.h"
 #include "mod_logs.h"
 #include "driver/twai.h"
-#include "mod_wifi_guard.h"
+#include "mod_pmu.h"
+#include "mod_gyro.h"
+#include "config.h"
+
+// CAN TX nur bei VBUS (Auto an) + Gyro-Bewegung innerhalb GYRO_HOLD_MS
+static bool can_tx_allowed() {
+    if (!pmu_is_vbus_in()) return false;
+    uint32_t last = gyro_last_shake_ms();
+    if (last == 0) return false;
+    return (millis() - last) < GYRO_HOLD_MS;
+}
 
 // ============================================================
 //  mod_can - CAN Bus, UDS, OBD2, Scanner
@@ -256,7 +266,7 @@ int can_isotp_query(uint32_t tx_id, uint32_t rx_id,
                     uint8_t* resp, uint16_t max_resp,
                     uint32_t timeout_ms) {
     if (!can_running || req_len == 0 || req_len > 7) return -1;
-    if (!guard_can_tx_allowed()) return -1;
+    if (!can_tx_allowed()) return -1;
     if (!can_lock(timeout_ms + 200)) return -1;
     int result = isotp_query_inner(tx_id, rx_id, req, req_len, resp, max_resp, timeout_ms);
     can_unlock();
@@ -269,7 +279,7 @@ int can_isotp_query(uint32_t tx_id, uint32_t rx_id,
 bool can_tx(uint32_t id, uint8_t* data, uint8_t len, const char* label) {
     if (!can_running) return false;
     // BLE Wächter prüfen
-    if (!guard_can_tx_allowed()) {
+    if (!can_tx_allowed()) {
         syslog("CAN", "TX gesperrt — kein VBUS oder keine Bewegung");
         return false;
     }
@@ -324,7 +334,7 @@ int can_rx_collect(uint32_t resp_id, uint32_t timeout_ms,
 bool uds_read_did(uint32_t req_id, uint32_t resp_id, uint16_t did,
                   uint8_t* resp_data, uint8_t* resp_len) {
     if (!can_running) return false;
-    if (!guard_can_tx_allowed()) return false;
+    if (!can_tx_allowed()) return false;
     if (!can_lock()) return false;
 
     // UDS Request: Service 0x22 + DID (2 Bytes) = 3 Bytes PDU
@@ -527,7 +537,7 @@ void can_start_scan(int mode, uint32_t req_id, uint32_t resp_id, const char* nam
 // ============================================================
 bool can_tx_elm(uint32_t id, uint8_t* data, uint8_t len, const char* label) {
     if (!can_running) return false;
-    if (!guard_can_tx_allowed()) return false;
+    if (!can_tx_allowed()) return false;
     twai_message_t msg = {};
     msg.identifier       = id;
     msg.data_length_code = len;
@@ -574,7 +584,7 @@ int can_isotp_query_elm(uint32_t tx_id, uint32_t rx_id,
                         uint32_t out_ids[], int max_frames,
                         uint32_t timeout_ms) {
     if (!can_running || req_len == 0 || req_len > 7 || max_frames < 1) return 0;
-    if (!guard_can_tx_allowed()) return 0;
+    if (!can_tx_allowed()) return 0;
 
     // FC-ID: 0 = tx_id verwenden (Standard-Verhalten)
     uint32_t fc_tx_id = (fc_id != 0) ? fc_id : tx_id;

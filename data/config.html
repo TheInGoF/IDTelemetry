@@ -131,20 +131,6 @@
     <div class="hint" data-i18n="cfg.mq_hint">Publishes auf {prefix}/data. Port 8883 aktiviert TLS automatisch.</div>
   </div>
 
-  <!-- Guard -->
-  <div class="section-title" data-i18n="cfg.guard_title">Guard (CAN TX Freigabe)</div>
-  <div class="card">
-    <div class="field">
-      <div class="lbl" data-i18n="cfg.guard_label">Guard Modus</div>
-      <select id="guard_mode" style="width:100%;padding:6px 8px;background:var(--card);color:var(--fg);border:1px solid #333;border-radius:4px;font-size:12px">
-        <option value="4" data-i18n="cfg.guard_vbus">VBUS &#8212; externe Spannung (USB/12V)</option>
-        <option value="1" data-i18n="cfg.guard_wifi">WiFi &#8212; Fahrzeug-SSID scannen</option>
-        <option value="0" data-i18n="cfg.guard_off">AUS &#8212; CAN TX immer gesperrt</option>
-      </select>
-    </div>
-    <div class="hint" data-i18n="cfg.guard_hint">VBUS: CAN wird freigegeben wenn externe Spannung am USB anliegt (z.B. 12V-Adapter im Fahrzeug). WiFi: Freigabe nur wenn die Guard-SSID in Reichweite ist.</div>
-  </div>
-
   <!-- BLE Standby -->
   <div class="section-title" data-i18n="cfg.ble_title">BLE / ABRP</div>
   <div class="card">
@@ -179,10 +165,6 @@
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
       <input type="checkbox" id="log_ble" style="width:16px;height:16px;accent-color:var(--accent)">
       <span style="font-size:12px" data-i18n="cfg.log_ble">BLE Log</span>
-    </label>
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:10px">
-      <input type="checkbox" id="log_wifi" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px" data-i18n="cfg.log_wifi">WiFi Guard Scan-Log</span>
     </label>
     <div class="hint" data-i18n="cfg.log_hint">Aktiviert SPIFFS-Logging f&#252;r CAN/ELM327, BLE-Ger&#228;te bzw. WiFi-Scans. Syslog (System-Events) l&#228;uft immer.</div>
   </div>
@@ -264,9 +246,7 @@ async function loadConfig(){
     document.getElementById('mod_compass').checked = d.mod_compass === true;
     document.getElementById('log_can').checked = d.log_can === true;
     document.getElementById('log_ble').checked = d.log_ble === true;
-    document.getElementById('log_wifi').checked = d.log_wifi === true;
     document.getElementById('lang').value = d.lang || 'de';
-    if(d.guard_mode!=null) document.getElementById('guard_mode').value = d.guard_mode;
     document.getElementById('save-status').textContent=t('cfg.loaded');
     setTimeout(function(){document.getElementById('save-status').textContent='';},1500);
   }catch(e){
@@ -295,9 +275,7 @@ async function saveConfig(){
     mod_compass:  document.getElementById('mod_compass').checked,
     log_can:      document.getElementById('log_can').checked,
     log_ble:      document.getElementById('log_ble').checked,
-    log_wifi:     document.getElementById('log_wifi').checked,
     lang:         document.getElementById('lang').value,
-    guard_mode:   parseInt(document.getElementById('guard_mode').value),
   };
   try{
     var r=await fetch('/api/config',{

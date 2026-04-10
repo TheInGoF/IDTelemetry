@@ -11,8 +11,6 @@
 .tx-box{background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:12px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px}
 .wifi-net{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:4px;margin-bottom:4px;border:1px solid transparent;transition:background .15s}
 .wifi-net:hover{background:rgba(0,212,255,.05);border-color:var(--border)}
-.wifi-net.is-guard{border-color:var(--green);background:rgba(0,255,157,.04)}
-.wifi-net.is-guard .wifi-ssid{color:var(--green)}
 .wifi-ssid{font-family:var(--mono);font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wifi-meta{font-size:10px;color:var(--muted);flex-shrink:0;text-align:right;line-height:1.6}
 .wifi-bar{height:8px;border-radius:2px;flex-shrink:0;min-width:4px}
@@ -211,66 +209,11 @@
   </div>
   </div>
 
-  <!-- CAN TX Status -->
-  <div class="tx-box">
-    <div style="font-size:11px;color:var(--muted)" data-i18n="dbg.cantx_label">CAN TX:</div>
-    <div style="font-size:15px;font-weight:700" id="cantx-status">&ndash;</div>
-    <div style="font-size:11px;color:var(--muted)" id="cantx-detail"></div>
-    <button class="btn accent" id="btn-tx-unlock" style="margin-left:auto" onclick="txUnlock()" data-i18n="dbg.cantx_unlock">TX entsperren</button>
-  </div>
-
   <!-- WiFi Umgebung -->
   <div class="section-title" data-i18n="dbg.wifi_title">Netzwerke in Reichweite</div>
   <div class="card">
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px" data-i18n="dbg.wifi_subtitle">Letzter automatischer Scan (alle 15s, nur wenn kein Client verbunden)</div>
     <div id="wifi-list"><div style="color:var(--muted);font-size:12px" data-i18n="dbg.wifi_loading">Lade...</div></div>
-  </div>
-
-  <!-- WiFi Guard -->
-  <div class="section-title" data-i18n="dbg.guard_title">Fahrzeug-W&#228;chter</div>
-  <div class="card">
-    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
-      <div style="flex:1;min-width:160px">
-        <div class="lbl" data-i18n="dbg.guard_ssid_label">Fahrzeug WLAN-Name</div>
-        <input id="wifi-ssid" type="text" data-i18n-ph="dbg.guard_ssid_ph" placeholder="z.B. VW-ID7-12345">
-      </div>
-      <div style="width:110px">
-        <div class="lbl" data-i18n="dbg.guard_rssi_label">Min. RSSI (dBm)</div>
-        <input id="wifi-rssi" type="number" value="-75" min="-100" max="-30">
-      </div>
-      <button class="btn accent" onclick="setWifiSsid()" data-i18n="dbg.guard_set">Setzen</button>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg3);border-radius:4px;margin-bottom:10px">
-      <div style="flex:1">
-        <div class="lbl" data-i18n="dbg.guard_active_label">&#220;berwachtes Fahrzeug</div>
-        <div id="wifi-active-ssid" style="font-size:14px;font-weight:700;color:var(--muted)" data-i18n="dbg.guard_none">Kein Guard gesetzt</div>
-        <div id="wifi-rssi-val" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
-      </div>
-      <div style="text-align:right">
-        <div id="wifi-state-val" style="font-size:13px;font-weight:700">&ndash;</div>
-        <button class="btn danger" id="btn-clear-wifi" style="display:none;margin-top:6px;font-size:10px;padding:2px 10px" onclick="clearWifiSsid()" data-i18n="dbg.guard_remove">&#10005; entfernen</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Guard Mode -->
-  <div class="section-title" data-i18n="dbg.mode_title">W&#228;chter-Modus</div>
-  <div class="card">
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px" data-i18n="dbg.mode_question">Wann ist CAN TX erlaubt?</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap" id="mode-btns">
-      <button onclick="setMode(0)" class="btn" data-mode="0" data-i18n="dbg.mode_off">W&#228;chter aus</button>
-      <button onclick="setMode(1)" class="btn" data-mode="1" data-i18n="dbg.mode_on">W&#228;chter aktiv</button>
-    </div>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted)" id="mode-desc">&ndash;</div>
-  </div>
-
-  <!-- WiFi Log (nur sichtbar wenn log_wifi aktiv) -->
-  <div id="sec-wifi-log" style="display:none">
-  <div class="section-title" data-i18n="dbg.wifi_log_title">WiFi Scan Log
-    <button class="btn danger" style="margin-left:auto;font-size:10px;padding:2px 10px" onclick="clearWifiLog()" data-i18n="dbg.wifi_log_delete">&#10005; L&#246;schen</button>
-    <a href="/download-wifi-log" class="btn accent" style="font-size:10px;padding:2px 10px;text-decoration:none">&darr; wifi.log</a>
-  </div>
-  <div class="log-box" id="wifi-log" style="white-space:pre">Lade...</div>
   </div>
 
   <!-- ELM Log (nur sichtbar wenn log_can aktiv) -->
@@ -297,7 +240,7 @@
     <a href="/download-sys-log" class="btn" style="border-color:var(--orange);color:var(--orange);font-size:10px;padding:2px 10px;text-decoration:none;white-space:nowrap" download>&#x2193; sys.log</a>
   </div>
   <div style="font-size:10px;color:var(--muted);margin-bottom:6px">
-    <span data-i18n="dbg.syslog_desc">Neustarts &bull; Client-Events &bull; Guard-Status &bull; Zeit-Events</span>
+    <span data-i18n="dbg.syslog_desc">Neustarts &bull; Client-Events &bull; Zeit-Events</span>
   </div>
   <div class="log-box" id="sys-log" style="max-height:400px;white-space:pre">Lade...</div>
 
@@ -448,146 +391,12 @@ function renderWifiNets(nets) {
   container.innerHTML = nets.map(function(net) {
     var pct = Math.max(4, Math.min(44, (net.rssi + 100) * 0.88));
     var col = net.rssi > -55 ? 'var(--green)' : net.rssi > -72 ? 'var(--orange)' : 'var(--red)';
-    var guard = net.is_guard;
-    return '<div class="wifi-net' + (guard?' is-guard':'') + '">' +
+    return '<div class="wifi-net">' +
       '<div class="wifi-bar" style="width:' + pct + 'px;background:' + col + '"></div>' +
       '<div class="wifi-ssid">' + (net.ssid||t('dbg.wifi_hidden')) + '</div>' +
       '<div class="wifi-meta">' + net.rssi + ' dBm<br>' + net.dist + ' &middot; ch' + net.channel + '</div>' +
-      '<button class="btn' + (guard?' active':'') + '" style="font-size:10px;padding:3px 10px;flex-shrink:0"' +
-        ' onclick="setWifiGuardFromScan(\'' + net.ssid + '\',' + net.rssi + ')">' +
-        (guard ? t('dbg.wifi_guard_set') : t('dbg.wifi_guard_add')) +
-      '</button></div>';
+      '</div>';
   }).join('');
-}
-
-async function loadWifiLog() {
-  try {
-    var r = await fetch('/download-wifi-log');
-    var txt = await r.text();
-    var el = document.getElementById('wifi-log');
-    if (!txt.trim() || txt.startsWith('# WiFi Log leer')) {
-      el.textContent = t('dbg.wifi_log_empty');
-      return;
-    }
-    var escW = function(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-    var lines = txt.trim().split('\n').slice(-40);
-    el.innerHTML = lines.map(function(l) {
-      if (l.startsWith('[')) return '<span style="color:var(--green)">' + escW(l) + '</span>\n';
-      return '<span>' + escW(l) + '</span>\n';
-    }).join('');
-    el.scrollTop = el.scrollHeight;
-  } catch(e) { document.getElementById('wifi-log').textContent = 'Fehler beim Laden'; }
-}
-
-async function clearWifiLog() {
-  if (!confirm(t('dbg.wifi_log_confirm'))) return;
-  await fetch('/clear-wifi-log', {method:'POST'});
-  toast(t('dbg.wifi_log_deleted'));
-  loadWifiLog();
-}
-
-// ── WiFi Guard ────────────────────────────────────────────
-async function setWifiGuardFromScan(ssid, rssi) {
-  var threshold = Math.max(-85, rssi - 15);
-  document.getElementById('wifi-ssid').value = ssid;
-  document.getElementById('wifi-rssi').value = threshold;
-  await setWifiSsid();
-}
-
-async function setWifiSsid() {
-  var ssid = document.getElementById('wifi-ssid').value.trim();
-  var rssi = parseInt(document.getElementById('wifi-rssi').value);
-  if (!ssid) { toast(t('dbg.guard_ssid_empty'), false); return; }
-  await fetch('/wifi/set-ssid', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ssid: ssid, rssi: rssi})
-  });
-  toast(t('dbg.wifi_guard_set') + ': ' + ssid);
-  refreshStatus();
-  loadWifiResult();
-}
-
-async function clearWifiSsid() {
-  await fetch('/wifi/clear-ssid', {method:'POST'});
-  toast(t('dbg.guard_removed'));
-  refreshStatus();
-}
-
-// ── TX manuell entsperren ─────────────────────────────────
-async function txUnlock() {
-  await fetch('/wifi/tx-unlock', {method:'POST'});
-  toast(t('dbg.cantx_unlocked'));
-  refreshStatus();
-}
-
-// ── Guard Mode ────────────────────────────────────────────
-function getModeDesc() { return {
-  0: t('dbg.mode_off_desc'),
-  1: t('dbg.mode_on_desc')
-}; }
-
-async function setMode(mode) {
-  await fetch('/wifi/set-mode', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({mode: mode})
-  });
-  toast(t('dbg.mode_set', [mode]));
-  refreshStatus();
-}
-
-// ── Status refresh ────────────────────────────────────────
-async function refreshStatus() {
-  try {
-    var d = await (await fetch('/wifi/status')).json();
-
-    document.querySelectorAll('#mode-btns .btn').forEach(function(b) {
-      b.classList.toggle('active', parseInt(b.dataset.mode) === d.mode);
-    });
-    document.getElementById('mode-desc').textContent = getModeDesc()[d.mode] || '';
-
-    var ssidEl  = document.getElementById('wifi-active-ssid');
-    var stateEl = document.getElementById('wifi-state-val');
-    var rssiEl  = document.getElementById('wifi-rssi-val');
-    var btnCl   = document.getElementById('btn-clear-wifi');
-
-    if (d.active && d.ssid) {
-      ssidEl.textContent = d.ssid;
-      ssidEl.style.color = d.in_range ? 'var(--green)' : 'var(--orange)';
-      btnCl.style.display = 'inline-block';
-    } else {
-      ssidEl.textContent = t('dbg.guard_no_vehicle');
-      ssidEl.style.color = 'var(--muted)';
-      btnCl.style.display = 'none';
-    }
-    var STATE_TEXT = {
-      'LOCKED':   t('dbg.state_locked'),
-      'LOST':     t('dbg.state_lost'),
-      'SCANNING': t('dbg.state_scanning'),
-      'IDLE':     t('dbg.state_idle'),
-      'CHECK':    t('dbg.state_check')
-    };
-    var STATE_COLOR = {
-      'LOCKED': 'var(--green)', 'LOST': 'var(--red)',
-      'SCANNING': 'var(--orange)', 'CHECK': 'var(--orange)',
-      'IDLE': 'var(--muted)'
-    };
-    stateEl.style.color = STATE_COLOR[d.state] || 'var(--muted)';
-    stateEl.textContent = d.active ? (STATE_TEXT[d.state] || d.state) : '\u2013';
-    rssiEl.textContent  = d.active && d.rssi > -999 ? d.rssi + ' dBm \u00b7 Schwelle: ' + d.threshold + ' dBm' : '';
-
-    var txEl     = document.getElementById('cantx-status');
-    var detEl    = document.getElementById('cantx-detail');
-    var btnUnlck = document.getElementById('btn-tx-unlock');
-    txEl.textContent = d.can_tx ? t('dbg.cantx_allowed') : t('dbg.cantx_blocked');
-    txEl.style.color = d.can_tx ? 'var(--green)' : 'var(--red)';
-    detEl.textContent = (d.wifi_ok ? t('dbg.cantx_visible') : t('dbg.cantx_invisible')) + '  \u00b7  Guard: ' + (d.mode === 1 ? t('dbg.cantx_guard_on') : t('dbg.cantx_guard_off'));
-    if (btnUnlck) {
-      btnUnlck.disabled = d.manual_unlock;
-      btnUnlck.textContent = d.manual_unlock ? t('dbg.cantx_unlocked') : t('dbg.cantx_unlock');
-      btnUnlck.style.borderColor = d.manual_unlock ? 'var(--green)' : '';
-      btnUnlck.style.color       = d.manual_unlock ? 'var(--green)' : '';
-    }
-  } catch(e) { console.error(e); }
 }
 
 // ── ELM Log ───────────────────────────────────────────────
@@ -637,7 +446,6 @@ async function loadSysLog() {
               : (l.includes('SLEEP') || l.includes('pausiert'))                  ? 'var(--yellow)'
               : l.includes('BOOT')                                                ? 'var(--orange)'
               : l.includes('CLIENT')                                              ? 'var(--accent)'
-              : l.includes('GUARD')                                               ? 'var(--green)'
               : '';
       return col ? '<span style="color:' + col + '">' + esc(l) + '</span>\n' : '<span>' + esc(l) + '</span>\n';
     }).join('');
@@ -926,34 +734,29 @@ async function loadMqttPreview() {
 }
 
 // ── Log-Sektionen ein/ausblenden je Config ────────────────
-var _logCan=false, _logWifi=false;
-var _tiWl=null, _tiEl=null;
+var _logCan=false;
+var _tiEl=null;
 
 async function loadLogConfig() {
   try {
     var d = await (await fetch('/api/config')).json();
     _logCan = d.log_can === true;
-    _logWifi = d.log_wifi === true;
-    document.getElementById('sec-wifi-log').style.display = _logWifi ? '' : 'none';
     document.getElementById('sec-elm-log').style.display = _logCan ? '' : 'none';
-    if (_logWifi && !_tiWl) { loadWifiLog(); _tiWl = setInterval(loadWifiLog, 35000); }
     if (_logCan && !_tiEl)  { loadElmLog();  _tiEl = setInterval(loadElmLog, 15000); }
   } catch(e) {}
 }
 
 // ── Init (gestaffelt) ─────────────────────────────────────
 loadRtcTime();
-refreshStatus();
 setTimeout(function(){ loadWifiResult(); loadLogConfig(); }, 1500);
 setTimeout(function(){ loadSysLog(); }, 3000);
 setTimeout(function(){ loadMqttPreview(); }, 4500);
 var _tiRtc=setInterval(loadRtcTime,30000);
-var _tiSt=setInterval(refreshStatus,8000);
 var _tiWr=setInterval(loadWifiResult,20000);
 var _tiSl=setInterval(loadSysLog,20000);
 var _tiIx=setInterval(loadMqttPreview,10000);
 
-window.destroyPage=function(){[_stTimer,_tiRtc,_tiSt,_tiWr,_tiWl,_tiEl,_tiSl,_tiIx].forEach(function(t){if(t)clearInterval(t);});if(typeof gWs!=='undefined'&&gWs){gWs.onclose=null;gWs.close();gWs=null;}};
+window.destroyPage=function(){[_stTimer,_tiRtc,_tiWr,_tiEl,_tiSl,_tiIx].forEach(function(t){if(t)clearInterval(t);});if(typeof gWs!=='undefined'&&gWs){gWs.onclose=null;gWs.close();gWs=null;}};
 
 gyroWsConnect();
 requestAnimationFrame(gyroDraw);

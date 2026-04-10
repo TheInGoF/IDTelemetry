@@ -55,7 +55,7 @@ bool        cfg_mod_gps();      // Internes GPS (SIM7080G GNSS)
 // Log-Schalter (SPIFFS-Logging ein/aus, zur Laufzeit änderbar)
 bool        cfg_log_can();    // CAN/ELM SPIFFS-Log
 bool        cfg_log_ble();    // BLE SPIFFS-Log
-bool        cfg_log_wifi();   // WiFi Guard Scan-Log
+bool        cfg_log_wifi();   // WiFi Scan-Log (Legacy)
 
 // Web-API: POST-Body (JSON) in NVS schreiben + RAM aktualisieren
 bool        cfg_save_json(const uint8_t* body, size_t len);

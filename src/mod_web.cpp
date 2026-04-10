@@ -2,7 +2,6 @@
 #include "mod_web.h"
 #include "mod_can.h"
 #include "mod_logs.h"
-#include "mod_wifi_guard.h"
 #include "mod_rtc.h"
 #include "mod_gyro.h"
 #include "mod_pmu.h"
@@ -27,7 +26,6 @@ static void on_ws_event(AsyncWebSocket*, AsyncWebSocketClient* c,
                         AwsEventType t, void*, uint8_t*, size_t) {
     if (t == WS_EVT_CONNECT) {
         { char m[40]; snprintf(m, sizeof(m), "WebSocket #%u verbunden", c->id()); syslog("CLIENT", m); }
-        wifi_guard_client_connected();
         JsonDocument doc;
         doc["type"]   = "status";
         doc["uptime"] = millis();
@@ -36,7 +34,6 @@ static void on_ws_event(AsyncWebSocket*, AsyncWebSocketClient* c,
         c->text(out);
     } else if (t == WS_EVT_DISCONNECT) {
         { char m[40]; snprintf(m, sizeof(m), "WebSocket #%u getrennt", c->id()); syslog("CLIENT", m); }
-        wifi_guard_client_disconnected();
     }
 }
 
@@ -48,6 +45,7 @@ void web_init() {
         return;
     }
     WiFi.softAP(cfg_ap_ssid(), cfg_ap_pass());
+    s_ap_start_ms = millis();
 
     server.on("/", HTTP_GET, [](AsyncWebServerRequest* r) {
         r->redirect("/daten");
@@ -159,7 +157,6 @@ void web_init() {
         doc["can_ok"]      = can_hw_ok();
         doc["log_cnt"]     = log_count;
         doc["scan"]        = scan_running;
-        doc["can_tx_ok"]   = guard_can_tx_allowed();
         doc["rtc_time"]    = rtc_now_str();
         doc["rtc_ok"]      = rtc_is_running();
         { int y,mo,d,h,mi,s;
@@ -256,60 +253,63 @@ void web_init() {
     server.begin();
 }
 
-static bool s_ap_active = true;
+static bool     s_ap_active    = true;
+static bool     s_had_client   = false;   // je ein Client verbunden seit letztem AP-Start?
+static uint32_t s_ap_start_ms  = 0;       // millis() beim letzten AP-Start
 
 bool web_ap_active() { return s_ap_active; }
 
 void web_ap_stop() {
     if (!s_ap_active) return;
     s_ap_active = false;
+    s_had_client = false;
     ws.closeAll();
     server.end();
     WiFi.softAPdisconnect(true);
-    syslog("WEB", "AP + WebServer abgeschaltet (Timeout)");
-    syslog("WEB", "AP abgeschaltet — Timeout");
+    syslog("WEB", "AP abgeschaltet");
+}
+
+void web_ap_start() {
+    if (s_ap_active) return;
+    WiFi.softAP(cfg_ap_ssid(), cfg_ap_pass());
+    server.begin();
+    s_ap_active   = true;
+    s_had_client  = false;
+    s_ap_start_ms = millis();
+    syslog("WEB", "AP eingeschaltet (VBUS)");
+}
+
+// Im loop() aufrufen — schaltet AP nach 2 min ohne Client ab,
+// startet ihn bei VBUS-Flanke (aus→an) wieder.
+void web_ap_update() {
+    static bool s_vbus_prev = true;  // Boot: VBUS wahrscheinlich an
+    bool vbus = pmu_is_vbus_in();
+
+    // VBUS Flanke aus→an → AP wieder einschalten
+    if (vbus && !s_vbus_prev && !s_ap_active) {
+        web_ap_start();
+    }
+    s_vbus_prev = vbus;
+
+    if (!s_ap_active) return;
+
+    // Client da? → Timer stoppen, merken
+    bool has_client = (WiFi.softAPgetStationNum() > 0);
+    if (has_client) {
+        s_had_client = true;
+        return;
+    }
+
+    // Hatte Client, ist jetzt weg → AP bleibt an (Seitenwechsel, kurze Pause)
+    if (s_had_client) return;
+
+    // Nie ein Client → 2-min-Timeout prüfen
+    if ((millis() - s_ap_start_ms) >= AP_TIMEOUT_MS) {
+        web_ap_stop();
+    }
 }
 
 void ble_web_routes_init() {
-    server.on("/wifi/status", HTTP_GET, [](AsyncWebServerRequest* r) {
-        r->send(200, "application/json", wifi_guard_status_json());
-    });
-
-    server.on("/wifi/set-ssid", HTTP_POST,
-        [](AsyncWebServerRequest* r) {},
-        nullptr,
-        [](AsyncWebServerRequest* r, uint8_t* data, size_t len, size_t, size_t) {
-            JsonDocument doc;
-            if (deserializeJson(doc, data, len)) { r->send(400, "application/json", "{\"ok\":false}"); return; }
-            const char* ssid = doc["ssid"] | "";
-            int thresh       = doc["rssi"] | WIFI_RSSI_THRESHOLD_DEF;
-            if (strlen(ssid) == 0) { r->send(400, "application/json", "{\"ok\":false}"); return; }
-            wifi_guard_set_ssid(ssid, thresh);
-            r->send(200, "application/json", "{\"ok\":true}");
-        }
-    );
-
-    server.on("/wifi/clear-ssid", HTTP_POST, [](AsyncWebServerRequest* r) {
-        wifi_guard_clear_ssid();
-        r->send(200, "application/json", "{\"ok\":true}");
-    });
-
-    server.on("/wifi/tx-unlock", HTTP_POST, [](AsyncWebServerRequest* r) {
-        wifi_guard_manual_tx_unlock();
-        r->send(200, "application/json", "{\"ok\":true}");
-    });
-
-    server.on("/wifi/set-mode", HTTP_POST,
-        [](AsyncWebServerRequest* r) {},
-        nullptr,
-        [](AsyncWebServerRequest* r, uint8_t* data, size_t len, size_t, size_t) {
-            JsonDocument doc;
-            if (deserializeJson(doc, data, len)) { r->send(400, "application/json", "{\"ok\":false}"); return; }
-            wifi_guard_set_mode(doc["mode"] | 0);
-            r->send(200, "application/json", "{\"ok\":true}");
-        }
-    );
-
     server.on("/debug",  HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/debug.html");  });
     server.on("/config", HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/config.html"); });
     server.on("/daten",  HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/daten.html");  });
@@ -444,7 +444,6 @@ void ble_web_routes_init() {
             int h = doc["hour"] | -1, m = doc["minute"] | 0, s = doc["second"] | 0;
             int yr = doc["year"] | 0, mo = doc["month"] | 0, dy = doc["day"] | 0;
             if (h >= 0 && h < 24 && m >= 0 && m < 60) {
-                wifi_guard_set_time(h, m, s);
                 if (yr >= 2024 && mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31) {
                     rtc_set_datetime(yr, mo, dy, h, m, s);
                     char msg[48];
@@ -485,19 +484,9 @@ void ble_web_routes_init() {
             net["rssi"]     = rssi;
             net["channel"]  = WiFi.channel(i);
             net["dist"]     = rssi > -55 ? "<5m" : rssi > -65 ? "~10m" : rssi > -75 ? "~20m" : ">30m";
-            net["is_guard"] = (String(wifi_guard_get_ssid()) == WiFi.SSID(i));
         }
         String out; serializeJson(doc, out);
         r->send(200, "application/json", out);
-    });
-
-    server.on("/download-wifi-log", HTTP_GET, [](AsyncWebServerRequest* r) {
-        if (SPIFFS.exists("/wifi.log")) r->send(SPIFFS, "/wifi.log", "text/plain");
-        else r->send(200, "text/plain", "# WiFi Log leer\n");
-    });
-    server.on("/clear-wifi-log", HTTP_POST, [](AsyncWebServerRequest* r) {
-        if (SPIFFS.exists("/wifi.log")) SPIFFS.remove("/wifi.log");
-        r->send(200, "application/json", "{\"ok\":true}");
     });
 
     server.on("/download-sys-log", HTTP_GET, [](AsyncWebServerRequest* r) {

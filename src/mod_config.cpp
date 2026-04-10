@@ -1,5 +1,4 @@
 #include "mod_config.h"
-#include "mod_wifi_guard.h"
 #include "config.h"
 #include <Preferences.h>
 #include <ArduinoJson.h>

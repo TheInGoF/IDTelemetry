@@ -35,7 +35,6 @@
 #include "mod_web.h"
 #include "mod_elm327.h"
 #include "mod_ble_scan.h"
-#include "mod_wifi_guard.h"
 #include "mod_rtc.h"
 #include "mod_gyro.h"
 #include "mod_gps_ext.h"
@@ -227,7 +226,6 @@ void setup() {
     {
         int h, m, s;
         if (rtc_get_time(h, m, s)) {
-            wifi_guard_set_time(h, m, s);
             char m2[32]; snprintf(m2, sizeof(m2), "Zeit übernommen: %02d:%02d:%02d", h, m, s); syslog("RTC", m2);
         } else {
             syslog("RTC", "Zeitübernahme fehlgeschlagen");
@@ -247,10 +245,7 @@ void setup() {
     elm327_init();
     NimBLEDevice::startAdvertising();
 
-    // 5. WiFi Guard
-    wifi_guard_init();
-
-    // 6. CAN
+    // 5. CAN
     gps_ext_init();      // Ext. GPS (BLITZ Mini M10, UART2) — nach CAN damit TWAI-Interrupts Vorrang haben
     if (!can_init(CAN_SPEED_KBPS)) {
         Serial.println("[CAN] FEHLER - Checklist:");
@@ -356,7 +351,8 @@ void loop() {
     }
 
     ws.cleanupClients(1);  // max 1 WS-Client: alte Verbindung beim Seitenwechsel sofort schließen
-    sleep_update();        // 10-min-Inaktivität → Deep Sleep
+    web_ap_update();       // AP-Timeout (2 min ohne Client) + VBUS-Restart
+    sleep_update();        // Inaktivität → Deep Sleep
 
     // Minütlicher Status-Log
     static uint32_t s_last_batt_log_ms = 0;
