@@ -309,8 +309,9 @@ void loop() {
                     telem_force_capture("Test via Serial");
                     Serial.printf("[CMD] %u Zeilen ausstehend\n", telem_get_row_pending());
                 } else if (strcmp(serial_buf, "mqtt drop") == 0) {
-                    Serial.println("[CMD] MQTT Disconnect erzwungen — Reconnect-Logik wird getestet");
+                    Serial.println("[CMD] MQTT + GPRS getrennt — simuliert Funkloch");
                     mqtt_disconnect();
+                    modem_send_at("+CNACT=0,0");  // GPRS/PDP trennen
                 } else if (strcmp(serial_buf, "can sniff") == 0) {
                     can_sniff(5000);  // 5 Sekunden
                 } else if (strcmp(serial_buf, "gyro cal") == 0) {

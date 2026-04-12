@@ -282,8 +282,16 @@ void web_ap_start() {
 // Im loop() aufrufen — schaltet AP nach 2 min ohne Client ab,
 // startet ihn bei VBUS-Flanke (aus→an) wieder.
 void web_ap_update() {
-    static bool s_vbus_prev = true;  // Boot: VBUS wahrscheinlich an
+    static bool s_vbus_prev = true;   // Boot: VBUS wahrscheinlich an
+    static uint8_t s_vbus_off_cnt = 0; // Entprellung: zählt aufeinanderfolgende false-Reads
     bool vbus = pmu_is_vbus_in();
+
+    // VBUS-Entprellung: erst nach 3× false als "weg" werten (AXP2101 I2C-Glitch)
+    if (!vbus) {
+        if (s_vbus_off_cnt < 3) { s_vbus_off_cnt++; vbus = true; }
+    } else {
+        s_vbus_off_cnt = 0;
+    }
 
     // VBUS Flanke aus→an → AP wieder einschalten
     if (vbus && !s_vbus_prev && !s_ap_active) {
