@@ -34,6 +34,10 @@
 static HardwareSerial  s_serial(1);         // UART1 — exklusiv
 static TinyGsm         s_modem(s_serial);
 
+// ---- RTC-persistenter Reboot-Limiter (überlebt esp_restart, nicht Power-Loss) ----
+RTC_DATA_ATTR static uint8_t  s_wd_reboot_count       = 0;
+RTC_DATA_ATTR static uint32_t s_wd_first_reboot_epoch = 0;
+
 // ---- Zustand ----------------------------------------------
 
 static volatile bool   s_connected   = false;
@@ -218,75 +222,10 @@ static const PlmnEntry PLMN_TABLE[] = {
 };
 static const int PLMN_COUNT = sizeof(PLMN_TABLE) / sizeof(PLMN_TABLE[0]);
 
-static const char* GREEN_LIST_FILE = "/plmn_good.txt";
-
-// ---- Green-List: bekannt funktionierende PLMNs ----
-// Wird zuerst versucht (manuell COPS=1), dann Auto-Modus als Fallback.
-// Bei Erfolg wird der Provider auf die Green-List gesetzt (MRU-Reihenfolge).
-// Nie gepurged — waechst nur durch neue erfolgreiche Verbindungen.
-static const int MAX_GREEN = 4;
-static char s_green[MAX_GREEN][8];
-static int  s_green_count = 0;
-
-static void load_green_list() {
-    if (!SPIFFS.exists(GREEN_LIST_FILE)) return;
-    File f = SPIFFS.open(GREEN_LIST_FILE, "r");
-    if (!f) return;
-    s_green_count = 0;
-    while (f.available() && s_green_count < MAX_GREEN) {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (line.length() >= 5) {
-            strncpy(s_green[s_green_count], line.c_str(), 7);
-            s_green[s_green_count][7] = '\0';
-            s_green_count++;
-        }
-    }
-    f.close();
-    if (s_green_count > 0) {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "%d Green-PLMNs geladen", s_green_count);
-        syslog("MODEM", msg);
-    }
-}
-
-static void save_green_list() {
-    File f = SPIFFS.open(GREEN_LIST_FILE, "w");
-    if (!f) return;
-    for (int i = 0; i < s_green_count; i++) {
-        f.printf("%s\n", s_green[i]);
-    }
-    f.close();
-}
-
-// PLMN als "gut" merken — an den Anfang der Liste (zuletzt gut = hoechste Prio)
-static void green_plmn(const char* plmn) {
-    // Schon drin? An Position 0 schieben
-    for (int i = 0; i < s_green_count; i++) {
-        if (strcmp(s_green[i], plmn) == 0) {
-            if (i == 0) return;  // Schon an Position 0
-            char tmp[8];
-            memcpy(tmp, s_green[i], 8);
-            memmove(&s_green[1], &s_green[0], i * 8);
-            memcpy(s_green[0], tmp, 8);
-            save_green_list();
-            return;
-        }
-    }
-    // Neu: an Position 0 einfuegen, Rest nach hinten
-    if (s_green_count < MAX_GREEN) s_green_count++;
-    memmove(&s_green[1], &s_green[0], (s_green_count - 1) * 8);
-    strncpy(s_green[0], plmn, 7);
-    s_green[0][7] = '\0';
-    save_green_list();
-    char msg[64];
-    snprintf(msg, sizeof(msg), "Green-List: %s hinzugefuegt", plmn);
-    syslog("MODEM", msg);
-}
-
-static bool is_green(const char* plmn) {
-    for (int i = 0; i < s_green_count; i++) {
-        if (strcmp(s_green[i], plmn) == 0) return true;
+// ---- PLMN-Hilfsfunktion: ist PLMN in PLMN_TABLE (Whitelist)? ----
+static bool is_allowed_plmn(const char* plmn) {
+    for (int i = 0; i < PLMN_COUNT; i++) {
+        if (strcmp(PLMN_TABLE[i].plmn, plmn) == 0) return true;
     }
     return false;
 }
@@ -406,38 +345,27 @@ static RegStatus wait_for_reg(uint32_t wait_s) {
     return reg_s;
 }
 
-// Netz-Registrierung: erst Green-List PLMNs manuell, dann Auto-Modus.
-// Green-List wird nie gepurged — nur durch neue Provider erweitert.
-// Jeder neue Provider kostet ~30ct/Monat (ThingsMobile), daher bevorzugt
-// immer den bekannten Provider nehmen statt blind durchprobieren.
-static bool try_register(char* operator_out, size_t op_size) {
+// Aktuelles PLMN numerisch abfragen
+static void get_current_plmn(char* plmn_out, size_t size) {
+    plmn_out[0] = '\0';
+    s_modem.sendAT("+COPS=3,2");
+    s_modem.waitResponse(3000L);
+    String resp = "";
+    s_modem.sendAT("+COPS?");
+    s_modem.waitResponse(3000L, resp);
+    int q1 = resp.indexOf('"');
+    int q2 = (q1 >= 0) ? resp.indexOf('"', q1 + 1) : -1;
+    if (q1 >= 0 && q2 > q1) {
+        String plmn = resp.substring(q1 + 1, q2);
+        strncpy(plmn_out, plmn.c_str(), size - 1);
+        plmn_out[size - 1] = '\0';
+    }
+}
+
+// Operator-Name ermitteln und loggen (nach erfolgreicher Registrierung)
+static void lookup_operator(char* operator_out, size_t op_size) {
     char syslog_msg[128];
 
-    // --- Phase 1: Letzten bekannten Provider manuell probieren ---
-    if (s_green_count > 0 && !g_shutdown) {
-        snprintf(syslog_msg, sizeof(syslog_msg), "Versuche letzten Provider %s...", s_green[0]);
-        syslog("MODEM", syslog_msg);
-        s_modem.sendAT("+COPS=1,2,\"", s_green[0], "\",7");
-        if (s_modem.waitResponse(30000L) == 1) {
-            RegStatus r = wait_for_reg(30);
-            if (r == REG_OK_HOME || r == REG_OK_ROAMING) goto registered;
-        }
-    }
-
-    // --- Phase 2: Auto-Modus (Modem wählt bestes verfügbares Netz) ---
-    syslog("MODEM", "Green-List nicht erreichbar · Auto-Modus 60s");
-    s_modem.sendAT("+COPS=0");
-    s_modem.waitResponse(10000L);
-    {
-        RegStatus r = wait_for_reg(60);
-        if (r == REG_OK_HOME || r == REG_OK_ROAMING) goto registered;
-    }
-
-    return false;
-
-registered:
-
-    // Registriert — Operator-Name abfragen
     String op = s_modem.getOperator();
     op.trim();
     if (op.length() > 0) {
@@ -448,22 +376,14 @@ registered:
         operator_out[op_size - 1] = '\0';
     }
 
-    // PLMN fuer Green-List ermitteln (numerisches Format)
-    s_modem.sendAT("+COPS=3,2");  // Format auf numerisch stellen
-    s_modem.waitResponse(3000L);
-    String resp = "";
-    s_modem.sendAT("+COPS?");
-    s_modem.waitResponse(3000L, resp);
-    int q1 = resp.indexOf('"');
-    int q2 = (q1 >= 0) ? resp.indexOf('"', q1 + 1) : -1;
-    if (q1 >= 0 && q2 > q1) {
-        String plmn = resp.substring(q1 + 1, q2);
-        green_plmn(plmn.c_str());
-        snprintf(syslog_msg, sizeof(syslog_msg), "PLMN: %s", plmn.c_str());
+    char plmn[8] = "";
+    get_current_plmn(plmn, sizeof(plmn));
+    if (plmn[0]) {
+        snprintf(syslog_msg, sizeof(syslog_msg), "PLMN: %s", plmn);
         syslog("MODEM", syslog_msg);
         // Name aus PLMN_TABLE nachschlagen
         for (int j = 0; j < PLMN_COUNT; j++) {
-            if (strcmp(PLMN_TABLE[j].plmn, plmn.c_str()) == 0) {
+            if (strcmp(PLMN_TABLE[j].plmn, plmn) == 0) {
                 strncpy(operator_out, PLMN_TABLE[j].name, op_size - 1);
                 operator_out[op_size - 1] = '\0';
                 break;
@@ -473,8 +393,179 @@ registered:
     // Format zurueck auf Langname
     s_modem.sendAT("+COPS=3,0");
     s_modem.waitResponse(3000L);
+}
 
+// PLMN-Scan: verfuegbare Netze scannen, gegen PLMN_TABLE filtern, bestes verbinden.
+// ACHTUNG: AT+COPS=? deregistriert das Modem vom aktuellen Netz!
+// Gibt true bei erfolgreicher Registrierung zurueck.
+static bool plmn_scan_and_register(char* operator_out, size_t op_size) {
+    char syslog_msg[128];
+
+    syslog("MODEM", "PLMN-Scan laeuft (bis 3 Min)...");
+
+    s_modem.sendAT("+COPS=?");
+    String cops = "";
+    int r = s_modem.waitResponse(180000L, cops);
+
+    // Kandidaten sammeln (max 5, auf dem Stack)
+    struct Candidate { char plmn[8]; int stat; };
+    Candidate cands[5];
+    int cand_count = 0;
+
+    if (r == 1 && cops.length() > 5) {
+        // Format: (stat,"longname","shortname","plmn",act)
+        int pos = 0;
+        while (pos < (int)cops.length() && cand_count < 5) {
+            int ns = cops.indexOf('(', pos);
+            if (ns < 0) break;
+            int ne = cops.indexOf(')', ns);
+            if (ne < 0) break;
+            String entry = cops.substring(ns + 1, ne);
+
+            // stat (1=available, 2=current, 3=forbidden)
+            int stat_e = entry.substring(0, entry.indexOf(',')).toInt();
+
+            // act (letztes Feld) — nur LTE-M (7) akzeptieren
+            int lc = entry.lastIndexOf(',');
+            int act = (lc >= 0) ? entry.substring(lc + 1).toInt() : 0;
+
+            // PLMN extrahieren (3. Quoted-String: "plmn")
+            int q = -1;
+            for (int skip = 0; skip < 4; skip++) {  // 4 Quotes überspringen = 2 Strings
+                q = entry.indexOf('"', q + 1);
+                if (q < 0) break;
+            }
+            int q5 = (q >= 0) ? entry.indexOf('"', q + 1) : -1;  // Start des 3. Strings
+            int q6 = (q5 >= 0) ? entry.indexOf('"', q5 + 1) : -1;
+
+            if (q5 >= 0 && q6 > q5 && act == 7 && (stat_e == 1 || stat_e == 2)) {
+                String plmn = entry.substring(q5 + 1, q6);
+                if (is_allowed_plmn(plmn.c_str())) {
+                    strncpy(cands[cand_count].plmn, plmn.c_str(), 7);
+                    cands[cand_count].plmn[7] = '\0';
+                    cands[cand_count].stat = stat_e;
+                    cand_count++;
+                }
+            }
+            pos = ne + 1;
+        }
+    }
+
+    if (cand_count == 0) {
+        syslog("MODEM", "PLMN-Scan: keine erlaubten Netze gefunden");
+        // Fallback: Auto-Modus
+        syslog("MODEM", "Fallback Auto-Modus 60s");
+        s_modem.sendAT("+COPS=0");
+        s_modem.waitResponse(10000L);
+        RegStatus reg = wait_for_reg(60);
+        if (reg == REG_OK_HOME || reg == REG_OK_ROAMING) goto registered;
+        return false;
+    }
+
+    snprintf(syslog_msg, sizeof(syslog_msg), "PLMN-Scan: %d erlaubte Netze gefunden", cand_count);
+    syslog("MODEM", syslog_msg);
+
+    // Kandidaten durchprobieren (Reihenfolge: PLMN_TABLE-Priorität)
+    for (int i = 0; i < cand_count && !g_shutdown; i++) {
+        snprintf(syslog_msg, sizeof(syslog_msg), "Versuche %s...", cands[i].plmn);
+        syslog("MODEM", syslog_msg);
+        s_modem.sendAT("+COPS=1,2,\"", cands[i].plmn, "\",7");
+        if (s_modem.waitResponse(30000L) == 1) {
+            RegStatus reg = wait_for_reg(30);
+            if (reg == REG_OK_HOME || reg == REG_OK_ROAMING) goto registered;
+        }
+    }
+
+    // Alle Kandidaten gescheitert → Auto-Modus als letzter Versuch
+    syslog("MODEM", "Alle Kandidaten gescheitert · Auto-Modus 60s");
+    s_modem.sendAT("+COPS=0");
+    s_modem.waitResponse(10000L);
+    {
+        RegStatus reg = wait_for_reg(60);
+        if (reg == REG_OK_HOME || reg == REG_OK_ROAMING) goto registered;
+    }
+    return false;
+
+registered:
+    // Operator-Name und PLMN loggen
+    lookup_operator(operator_out, op_size);
     return true;
+}
+
+// Letzten erfolgreichen Provider in NVS speichern/laden
+static void save_last_plmn(const char* plmn) {
+    Preferences p;
+    p.begin("modem", false);
+    p.putString("last_plmn", plmn);
+    p.end();
+}
+
+static void load_last_plmn(char* plmn_out, size_t size) {
+    Preferences p;
+    p.begin("modem", true);
+    String v = p.getString("last_plmn", "");
+    p.end();
+    strncpy(plmn_out, v.c_str(), size - 1);
+    plmn_out[size - 1] = '\0';
+}
+
+// Netz-Registrierung: 3 Phasen mit steigender Dauer.
+// Nach Watchdog-Reboot wird der gecachte Provider übersprungen → anderer bekommt Chance.
+static bool try_register(char* operator_out, size_t op_size) {
+    char syslog_msg[128];
+
+    // --- Phase 1: Letzten Provider manuell (schnell, ~10s) ---
+    // Nur wenn KEIN Watchdog-Reboot vorliegt (sonst war genau dieser Provider das Problem)
+    if (s_wd_reboot_count == 0) {
+        char last_plmn[8] = "";
+        load_last_plmn(last_plmn, sizeof(last_plmn));
+        if (last_plmn[0] && is_allowed_plmn(last_plmn)) {
+            snprintf(syslog_msg, sizeof(syslog_msg), "Versuche letzten Provider %s...", last_plmn);
+            syslog("MODEM", syslog_msg);
+            s_modem.sendAT("+COPS=1,2,\"", last_plmn, "\",7");
+            if (s_modem.waitResponse(30000L) == 1) {
+                RegStatus r = wait_for_reg(30);
+                if (r == REG_OK_HOME || r == REG_OK_ROAMING) {
+                    lookup_operator(operator_out, op_size);
+                    return true;
+                }
+            }
+        }
+    } else {
+        snprintf(syslog_msg, sizeof(syslog_msg),
+            "Watchdog-Reboot #%d · ueberspringe letzten Provider", s_wd_reboot_count);
+        syslog("MODEM", syslog_msg);
+    }
+
+    // --- Phase 2: Auto-Modus (Modem wählt bestes verfügbares Netz, ~60s) ---
+    syslog("MODEM", "Auto-Modus 60s");
+    s_modem.sendAT("+COPS=0");
+    s_modem.waitResponse(10000L);
+    {
+        RegStatus r = wait_for_reg(60);
+        if (r == REG_OK_HOME || r == REG_OK_ROAMING) {
+            char plmn[8] = "";
+            get_current_plmn(plmn, sizeof(plmn));
+            if (plmn[0] && is_allowed_plmn(plmn)) {
+                save_last_plmn(plmn);
+                lookup_operator(operator_out, op_size);
+                return true;
+            }
+            // Provider nicht in Whitelist (z.B. Vodafone DE) → PLMN-Scan
+            snprintf(syslog_msg, sizeof(syslog_msg),
+                "Provider %s nicht erlaubt · starte PLMN-Scan", plmn);
+            syslog("MODEM", syslog_msg);
+        }
+    }
+
+    // --- Phase 3: PLMN-Scan (verfügbare Netze scannen, Whitelist filtern) ---
+    if (plmn_scan_and_register(operator_out, op_size)) {
+        char plmn[8] = "";
+        get_current_plmn(plmn, sizeof(plmn));
+        if (plmn[0]) save_last_plmn(plmn);
+        return true;
+    }
+    return false;
 }
 
 
@@ -763,68 +854,135 @@ static void modem_task(void* /*param*/) {
                 }
 
                 #ifndef LTE_DISABLED
-                // ── MQTT: Sofort-Publish ausstehender Zeilen ────────────────────
+                // ── MQTT: Publish + 4-Stufen-Eskalation bei Verbindungsverlust ──
+                //
+                //  Stufe 1: MQTT Reconnect alle 10s
+                //  Stufe 2: Nach 3 MQTT-Fails → Modem-Reset (PWRKEY)
+                //  Stufe 3: Nach 2 Modem-Resets → PLMN-Scan + neuer Provider
+                //  Stufe 4: Nach 2 PLMN-Scans → Reboot (max 3x in 30 min)
                 {
                     static uint32_t s_mqtt_reconnect_ms = 0;
-                    static uint32_t s_mqtt_last_ok_ms   = millis(); // Watchdog: letzter erfolgreicher Publish
-                    static uint8_t  s_mqtt_fail_count   = 0;        // aufeinanderfolgende Reconnect-Fehlschläge
-
-                    // Watchdog: VOR dem blockierenden gprsConnect prüfen
-                    // (gprsConnect kann >2min blockieren → Watchdog sonst unerreichbar)
-                    if (s_sim_ok && !s_connected) {
-                        uint16_t wd_pending = telem_get_row_pending();
-                        if ((now - s_mqtt_last_ok_ms) >= 5UL * 60UL * 1000UL && wd_pending > 0) {
-                            char m[80]; snprintf(m, sizeof(m),
-                                "WATCHDOG: %lu min ohne Publish, %u Rows pending → Reboot",
-                                (now - s_mqtt_last_ok_ms) / 60000UL, wd_pending);
-                            syslog("MQTT", m);
-                            Serial.flush();
-                            delay(200);
-                            esp_restart();
-                        }
-                    }
+                    static uint8_t  s_mqtt_fail_count   = 0;  // Stufe 1 → 2
+                    static uint8_t  s_modem_reset_count = 0;  // Stufe 2 → 3
+                    static uint8_t  s_plmn_scan_count   = 0;  // Stufe 3 → 4
 
                     // MQTT-Verbindung prüfen / wiederherstellen
                     if (s_sim_ok && !mqtt_is_connected()) {
                         if (now - s_mqtt_reconnect_ms >= MQTT_RECONNECT_MS) {
-                            uint16_t pending = telem_get_row_pending();
-                            { char m[80]; snprintf(m, sizeof(m), "Reconnect... (%u Rows pending, Versuch %d)", pending, s_mqtt_fail_count + 1); syslog("MQTT", m); }
 
-                            // Nach N Fehlversuchen: Modem-Reset (PWRKEY) statt endlos retries
-                            if (s_mqtt_fail_count >= MQTT_FAIL_RESET_COUNT) {
+                            // ── Stufe 4: Reboot (mit RTC-Limiter) ──
+                            if (s_plmn_scan_count >= PLMN_SCAN_ESCALATE) {
+                                uint32_t epoch = rtc_unix_timestamp();
+                                // Reboot-Fenster abgelaufen? Counter zurücksetzen
+                                if (epoch > 0 && s_wd_first_reboot_epoch > 0
+                                    && (epoch - s_wd_first_reboot_epoch) >= WD_REBOOT_WINDOW_S) {
+                                    s_wd_reboot_count = 0;
+                                    s_wd_first_reboot_epoch = 0;
+                                }
+                                if (s_wd_reboot_count >= WD_REBOOT_MAX) {
+                                    // Reboot-Limit erreicht — weiter puffern, Eskalation zurücksetzen
+                                    char m[96]; snprintf(m, sizeof(m),
+                                        "REBOOT-LIMIT: %d Reboots in %lu min · kein weiterer Reboot, weiter puffern",
+                                        s_wd_reboot_count, (epoch - s_wd_first_reboot_epoch) / 60UL);
+                                    syslog("MQTT", m);
+                                    s_plmn_scan_count = 0;
+                                    s_modem_reset_count = 0;
+                                    s_mqtt_fail_count = 0;
+                                } else {
+                                    uint16_t pending = telem_get_row_pending();
+                                    char m[96]; snprintf(m, sizeof(m),
+                                        "ESKALATION: Reboot nach Erschoepfung aller Mittel · %u Rows pending",
+                                        pending);
+                                    syslog("MQTT", m);
+                                    if (s_wd_reboot_count == 0 && epoch > 0) s_wd_first_reboot_epoch = epoch;
+                                    s_wd_reboot_count++;
+                                    Serial.flush();
+                                    delay(200);
+                                    esp_restart();
+                                }
+                                s_mqtt_reconnect_ms = millis();
+
+                            // ── Stufe 3: PLMN-Scan + Provider-Wechsel ──
+                            } else if (s_modem_reset_count >= MODEM_RESET_ESCALATE) {
+                                syslog("MODEM", "PLMN-Scan: Provider-Wechsel nach Modem-Reset-Fehlschlaegen");
+                                char op[48] = "";
+                                if (plmn_scan_and_register(op, sizeof(op))) {
+                                    snprintf(syslog_msg, sizeof(syslog_msg), "Neuer Provider: %s", op);
+                                    syslog("MODEM", syslog_msg);
+                                    strncpy(s_operator, op, sizeof(s_operator) - 1);
+                                    // Neuen Provider merken
+                                    char plmn[8] = "";
+                                    get_current_plmn(plmn, sizeof(plmn));
+                                    if (plmn[0]) save_last_plmn(plmn);
+                                    // GPRS + MQTT neu verbinden
+                                    if (modem_ensure_connected() && mqtt_connect()) {
+                                        syslog("MQTT", "Reconnect OK nach Provider-Wechsel");
+                                        s_mqtt_fail_count = 0;
+                                        s_modem_reset_count = 0;
+                                        s_plmn_scan_count = 0;
+                                    } else {
+                                        s_plmn_scan_count++;
+                                        s_mqtt_fail_count = 0;
+                                        s_modem_reset_count = 0;
+                                    }
+                                } else {
+                                    syslog("MODEM", "PLMN-Scan gescheitert");
+                                    s_plmn_scan_count++;
+                                    s_mqtt_fail_count = 0;
+                                    s_modem_reset_count = 0;
+                                }
+                                s_mqtt_reconnect_ms = millis();
+
+                            // ── Stufe 2: Modem-Reset (PWRKEY) ──
+                            } else if (s_mqtt_fail_count >= MQTT_FAIL_RESET_COUNT) {
                                 syslog("MODEM", "Modem-Reset nach Reconnect-Fehlern (PWRKEY)");
-                                s_modem.sendAT("+CNACT=0,0");  // GPRS sauber trennen
+                                s_modem.sendAT("+CNACT=0,0");
                                 s_modem.waitResponse(5000L);
                                 modem_pwrkey_pulse();
-                                delay(3000);  // Modem braucht ~3s nach PWRKEY
-                                // AT-Handshake wiederherstellen
+                                delay(3000);
                                 for (int i = 0; i < 5; i++) {
                                     if (s_modem.testAT(1000)) break;
                                     delay(500);
                                 }
                                 s_connected = false;
                                 s_mqtt_fail_count = 0;
+                                s_modem_reset_count++;
                                 s_mqtt_reconnect_ms = millis();
-                                syslog("MODEM", "Modem-Reset abgeschlossen, naechster Versuch in 10s");
-                            } else if (modem_ensure_connected()) {
-                                if (mqtt_connect()) {
-                                    s_mqtt_fail_count = 0;
-                                    syslog("MQTT", "Reconnect OK");
+                                char m[80]; snprintf(m, sizeof(m),
+                                    "Modem-Reset #%d abgeschlossen, naechster Versuch in 10s",
+                                    s_modem_reset_count);
+                                syslog("MODEM", m);
+
+                            // ── Stufe 1: MQTT Reconnect ──
+                            } else {
+                                uint16_t pending = telem_get_row_pending();
+                                { char m[80]; snprintf(m, sizeof(m),
+                                    "Reconnect... (%u Rows pending, Versuch %d)",
+                                    pending, s_mqtt_fail_count + 1);
+                                  syslog("MQTT", m); }
+
+                                if (modem_ensure_connected()) {
+                                    if (mqtt_connect()) {
+                                        s_mqtt_fail_count = 0;
+                                        s_modem_reset_count = 0;
+                                        s_plmn_scan_count = 0;
+                                        syslog("MQTT", "Reconnect OK");
+                                    } else {
+                                        s_mqtt_fail_count++;
+                                        syslog("MQTT", "Reconnect: GPRS OK aber MQTT-Connect fehlgeschlagen");
+                                    }
                                 } else {
                                     s_mqtt_fail_count++;
-                                    syslog("MQTT", "Reconnect: GPRS OK aber MQTT-Connect fehlgeschlagen");
+                                    RegStatus reg = s_modem.getRegistrationStatus();
+                                    if (reg != REG_OK_HOME && reg != REG_OK_ROAMING) {
+                                        syslog("MODEM", "Netz verloren · Neuregistrierung");
+                                        state = STATE_WAIT_FOR_NETWORK;
+                                    } else {
+                                        syslog("MODEM", "GPRS fehlgeschlagen · Netz noch da · warte 10s");
+                                    }
                                 }
-                            } else {
-                                s_mqtt_fail_count++;
-                                RegStatus reg = s_modem.getRegistrationStatus();
-                                if (reg != REG_OK_HOME && reg != REG_OK_ROAMING) {
-                                    syslog("MODEM", "Netz verloren · Neuregistrierung");
-                                    state = STATE_WAIT_FOR_NETWORK;
-                                } else {
-                                    syslog("MODEM", "GPRS fehlgeschlagen · Netz noch da · warte 10s");
-                                }
+                                s_mqtt_reconnect_ms = millis();
                             }
-                            s_mqtt_reconnect_ms = millis();
                         }
                     }
 
@@ -840,8 +998,12 @@ static void modem_task(void* /*param*/) {
                             vTaskDelay(pdMS_TO_TICKS(50));
                         }
                         if (sent > 0) {
-                            s_mqtt_last_ok_ms = millis();
                             s_mqtt_fail_count = 0;
+                            s_modem_reset_count = 0;
+                            s_plmn_scan_count = 0;
+                            // Reboot-Limiter zurücksetzen nach erfolgreichem Publish
+                            s_wd_reboot_count = 0;
+                            s_wd_first_reboot_epoch = 0;
                         }
                     }
 
@@ -1082,8 +1244,8 @@ void modem_init() {
     }
     #endif
 
-    // Green-List aus SPIFFS laden (ueberlebt Reboot)
-    load_green_list();
+    // Alte Green-List aufräumen (wurde durch PLMN-Scan ersetzt)
+    SPIFFS.remove("/plmn_good.txt");
 
     syslog("MODEM", "Init abgeschlossen");
 }

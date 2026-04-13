@@ -81,6 +81,20 @@ static uint16_t s_spiffs_ofs = 0;  // Anzahl gesendeter Rows (aus Datei geladen)
 static uint16_t s_spiffs_total = 0; // Gesamte Rows in Datei
 
 static void spiffs_q_init() {
+    // Alte Queue-Datei verwerfen wenn Dateigröße kein Vielfaches der aktuellen Row-Größe ist
+    // (schützt vor Format-Breaks zwischen Firmware-Versionen)
+    if (SPIFFS.exists(SPIFFS_Q_DATA)) {
+        File f = SPIFFS.open(SPIFFS_Q_DATA, "r");
+        if (f) {
+            size_t sz = f.size();
+            f.close();
+            if (sz % sizeof(TelemetryRow) != 0) {
+                SPIFFS.remove(SPIFFS_Q_DATA);
+                SPIFFS.remove(SPIFFS_Q_OFS);
+                syslog("TELEM", "SPIFFS-Queue: Format-Break erkannt, alte Datei verworfen");
+            }
+        }
+    }
     // Offset laden
     if (SPIFFS.exists(SPIFFS_Q_OFS)) {
         File f = SPIFFS.open(SPIFFS_Q_OFS, "r");
@@ -186,7 +200,7 @@ static bool  s_prev_has[TELEM_FIELD_COUNT];  // true = Feld wurde min. 1× gesen
 // Max-Alter bevor ein Wert als veraltet gilt (0 = kein Limit / immer senden)
 // Faustregel: 3× Poll-Intervall
 static const uint32_t s_max_age_ms[TELEM_FIELD_COUNT] = {
-    90000,   // SOC          (30s poll)
+    300000,  // SOC          (30s poll · 5 min Toleranz)
     15000,   // VOLTAGE      (5s poll)
     15000,   // CURRENT      (5s poll)
     15000,   // POWER        (berechnet aus V×I)
@@ -212,7 +226,7 @@ static const uint32_t s_max_age_ms[TELEM_FIELD_COUNT] = {
 
 // Mindest-Änderung damit ein Wert gesendet wird (0 = bei jeder Änderung)
 static const float s_min_delta[TELEM_FIELD_COUNT] = {
-    0.3f,    // SOC (%)
+    0.1f,    // SOC (%)
     0.5f,    // VOLTAGE (V)
     0.5f,    // CURRENT (A)
     0.1f,    // POWER (kW)
@@ -312,50 +326,37 @@ static void row_try_capture() {
 
     TelemetryRow row;
     row.unix_s  = (uint32_t)unix_s;
-    row.eq_mask = 0;
-    row.na_mask = 0;
     for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
         float val = s_cache[f].value;
         bool  ok  = s_cache[f].valid && (s_cache[f].timestamp_ms > 0);
 
-        // Max-Age: veraltete Werte → na_mask
+        // Max-Age: zu alte Werte fallen raus
         if (ok && s_max_age_ms[f] > 0) {
             uint32_t age = now - s_cache[f].timestamp_ms;
             if (age > s_max_age_ms[f]) ok = false;
         }
 
-        if (!ok) {
-            row.valid[f]  = false;
-            row.values[f] = 0;
-            row.na_mask  |= (1UL << f);
-        } else if (s_prev_has[f] && fabsf(val - s_prev_val[f]) <= s_min_delta[f]) {
-            // Unverändert → eq_mask
-            row.valid[f]  = false;
-            row.values[f] = val;
-            row.eq_mask  |= (1UL << f);
-        } else {
-            // Neuer/geänderter Wert → senden
-            row.valid[f]  = true;
-            row.values[f] = val;
+        // min_delta: nur bei wirklich relevanter Änderung senden (spart Payload ohne Lücken)
+        if (ok && s_prev_has[f] && fabsf(val - s_prev_val[f]) < s_min_delta[f]) {
+            // Keine relevante Änderung → alten Wert wiederholen (nicht eq_mask)
+            val = s_prev_val[f];
         }
+
+        row.valid[f]  = ok;
+        row.values[f] = ok ? val : 0;
     }
 
-    // GPS frisch überschreiben (Trigger — immer senden, nie in Masks)
+    // GPS frisch überschreiben (Trigger — immer senden)
     row.values[TELEM_GPS_LAT] = (float)lat;
     row.values[TELEM_GPS_LON] = (float)lon;
     row.valid[TELEM_GPS_LAT]  = true;
     row.valid[TELEM_GPS_LON]  = true;
-    row.eq_mask &= ~((1UL << TELEM_GPS_LAT) | (1UL << TELEM_GPS_LON));
-    row.na_mask &= ~((1UL << TELEM_GPS_LAT) | (1UL << TELEM_GPS_LON));
-    // Heading: GPS Course-Over-Ground (GNRMC Feld 8) — zuverlässiger als Kompass
     if (g_gps.speed_kmh >= TELEM_GPS_MIN_SPEED_KMH) {
         row.values[TELEM_GPS_HEADING] = g_gps.course_deg;
         row.valid[TELEM_GPS_HEADING]  = true;
-        row.eq_mask &= ~(1UL << TELEM_GPS_HEADING);
-        row.na_mask &= ~(1UL << TELEM_GPS_HEADING);
     }
 
-    // Prev-Werte aktualisieren für nächsten Delta-Vergleich
+    // Prev-Werte aktualisieren (für min_delta-Vergleich in der nächsten Row)
     for (int f = 0; f < TELEM_FIELD_COUNT; f++) {
         if (row.valid[f]) {
             s_prev_val[f] = row.values[f];
@@ -868,8 +869,8 @@ void telem_ack_row() {
 
 
 #define TELEM_ROWS_FILE     "/telem_rows.bin"
-#define TELEM_PERSIST_MAGIC 0x544C4D02UL  // 'TLM' + Version 2 (eq_mask/na_mask)
-#define TELEM_ROWS_MAGIC    0x544C5201UL  // 'TLR' + Version 1
+#define TELEM_PERSIST_MAGIC 0x544C4D03UL  // 'TLM' + Version 3 (ohne eq_mask/na_mask)
+#define TELEM_ROWS_MAGIC    0x544C5202UL  // 'TLR' + Version 2 (ohne eq_mask/na_mask)
 
 struct PersistHeader {
     uint32_t magic;

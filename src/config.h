@@ -46,6 +46,10 @@
 #define MQTT_RECONNECT_MS       10000UL // Reconnect-Intervall bei Verbindungsverlust
 #define MQTT_PUBLISH_TIMEOUT_MS 10000UL // Timeout für Publish
 #define MQTT_FAIL_RESET_COUNT   3       // Nach N Fehlversuchen → Modem-Reset (PWRKEY)
+#define MODEM_RESET_ESCALATE    2       // Nach N Modem-Resets ohne Erfolg → PLMN-Scan
+#define PLMN_SCAN_ESCALATE      2       // Nach N PLMN-Scans ohne Erfolg → Reboot
+#define WD_REBOOT_MAX           3       // Max Reboots innerhalb WD_REBOOT_WINDOW_S
+#define WD_REBOOT_WINDOW_S      1800    // 30 Minuten Fenster fuer Reboot-Limiter
 
 // ============================================================
 //  Deep Sleep / Gyro
