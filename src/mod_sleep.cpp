@@ -10,6 +10,7 @@
 #include "config.h"
 #include <esp_sleep.h>
 #include <esp_wifi.h>
+#include <esp_core_dump.h>
 #include <driver/rtc_io.h>
 #include <Arduino.h>
 #include <WiFi.h>
@@ -74,6 +75,31 @@ void sleep_log_wakeup_syslog() {
         syslog("BOOT", msg);
         if (reason == ESP_RST_PANIC || reason == ESP_RST_TASK_WDT || reason == ESP_RST_INT_WDT) {
             syslog("BOOT", msg);  // doppelt loggen für Sichtbarkeit bei Crash
+
+            // Coredump-Summary aus Flash-Partition lesen (falls vorhanden)
+            esp_core_dump_summary_t* summary = (esp_core_dump_summary_t*)malloc(sizeof(esp_core_dump_summary_t));
+            if (summary) {
+                if (esp_core_dump_get_summary(summary) == ESP_OK) {
+                    char cd[160];
+                    snprintf(cd, sizeof(cd),
+                        "PANIC Task:%s PC:0x%08lx EXC:%lu BT:",
+                        summary->exc_task,
+                        (unsigned long)summary->exc_pc,
+                        (unsigned long)summary->ex_info.exc_cause);
+                    // Backtrace PCs anhängen (bis max. 6 Frames)
+                    size_t depth = summary->exc_bt_info.depth;
+                    if (depth > 6) depth = 6;
+                    for (size_t i = 0; i < depth; i++) {
+                        char f[12];
+                        snprintf(f, sizeof(f), "%08lx ", (unsigned long)summary->exc_bt_info.bt[i]);
+                        strncat(cd, f, sizeof(cd) - strlen(cd) - 1);
+                    }
+                    syslog("PANIC", cd);
+                    // Nach Auslesen löschen — nächster Crash bekommt frischen Slot
+                    esp_core_dump_image_erase();
+                }
+                free(summary);
+            }
         }
     }
 }

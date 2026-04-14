@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 // ============================================================
 //  mod_modem - SIM7080G Modem (LTE + GPS)
@@ -27,6 +28,7 @@ bool modem_is_connected();
 // Modem-Status (SIM7080G) — alle ~30 s aktualisiert
 int8_t      modem_signal_quality(); // CSQ 0-31, 99=kein Signal, -1=unbekannt
 const char* modem_operator();       // Netzanbieter-Name oder ""
+uint16_t    modem_plmn();           // Numerisches PLMN (z.B. 26201 Telekom DE), 0 = unbekannt
 bool        modem_sim_ok();         // SIM vorhanden und bereit
 
 // GPS + GPRS deaktivieren, dann AT+CPOF — vor Deep Sleep aufrufen.

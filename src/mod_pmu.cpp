@@ -73,9 +73,27 @@ void pmu_init() {
 void pmu_update() {
     if (!s_pmu_ok) return;
     if (!PMU.isBatteryConnect()) { s_batt_pct = -1; return; }
-    s_batt_pct = (int)PMU.getBatteryPercent();
-    if (s_batt_pct < 0)   s_batt_pct = 0;
-    if (s_batt_pct > 100) s_batt_pct = 100;
+
+    int    pct = (int)PMU.getBatteryPercent();
+    uint16_t mv = PMU.getBattVoltage();  // rohe ADC-Messung, immer zuverlaessig
+
+    // Glitch-Filter: Fuel-Gauge meldet gelegentlich 0% obwohl der Akku voll ist
+    // (BAT_PERCENT_DATA Register noch nicht bereit nach Boot/Wake oder I2C-Glitch).
+    // Wenn Spannung gesund ist (>3.3V = nicht tiefentladen), aber Prozent sagt 0
+    // oder einen implausibel grossen Sprung zum letzten Wert — alten Wert behalten.
+    if (pct <= 0 && mv > 3300) {
+        // Gauge liefert 0 obwohl Akku OK → verwerfen
+        if (s_batt_pct < 0) s_batt_pct = -1;  // initial: unbekannt
+        return;
+    }
+    // Plausibler Sprung: >20% Aenderung in einer Sekunde ist unmoeglich (ausser beim ersten Boot)
+    if (s_batt_pct >= 0 && mv > 3300 && abs(pct - s_batt_pct) > 20) {
+        return;  // Glitch, ignorieren
+    }
+
+    if (pct < 0)   pct = 0;
+    if (pct > 100) pct = 100;
+    s_batt_pct = pct;
 }
 
 int pmu_batt_pct() { return s_batt_pct; }

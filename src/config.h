@@ -51,6 +51,12 @@
 #define WD_REBOOT_MAX           3       // Max Reboots innerhalb WD_REBOOT_WINDOW_S
 #define WD_REBOOT_WINDOW_S      1800    // 30 Minuten Fenster fuer Reboot-Limiter
 
+// Bevorzugter Provider: wird bei jeder Registrierung zuerst versucht.
+// Telekom DE (26201) statt o2 (26203), weil o2 auf dem Land unzuverlaessig ist.
+// Leer lassen ("") fuer reinen Auto-Modus.
+#define PREFERRED_PLMN          "26201"
+#define PREFERRED_PLMN_TIMEOUT_S 15     // Max Wartezeit fuer Praeferenz (sonst Fallback)
+
 // ============================================================
 //  Deep Sleep / Gyro
 // ============================================================

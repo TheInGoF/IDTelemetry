@@ -39,7 +39,14 @@ static void ubx_send(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t l
 static void inject_time() {
     int y, mo, d, h, mi, s;
     if (!rtc_get_datetime(y, mo, d, h, mi, s)) return;
-    if (y < 2020) return;  // RTC nicht gesetzt
+    // Plausibilisieren: DS1307 liefert gelegentlich I2C-Glitches mit unsinnigen Werten
+    // (Jahr 2093, Monat 25 etc.). Nur akzeptieren wenn komplett plausibel.
+    if (y < 2024 || y > 2040) return;
+    if (mo < 1 || mo > 12) return;
+    if (d  < 1 || d  > 31) return;
+    if (h  < 0 || h  > 23) return;
+    if (mi < 0 || mi > 59) return;
+    if (s  < 0 || s  > 59) return;
 
     uint8_t p[24] = {};
     p[0]  = 0x10;           // type: TIME_UTC

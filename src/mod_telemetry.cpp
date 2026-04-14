@@ -288,6 +288,22 @@ static void row_try_capture() {
                      : haversine_m(s_cap_lat, s_cap_lon, lat, lon);
     uint32_t elapsed = (s_cap_ms == 0) ? 99999UL : (now - s_cap_ms);
 
+    // Plausibilitaetsfilter: GPS-Glitches liefern manchmal absurde Positionssprünge
+    // (im Log: 6048 km in 3 s). Alles > 200 m/s (=720 km/h) ist physikalisch unmoeglich
+    // fuer ein Auto und wird als Glitch verworfen. Der s_cap_*-State bleibt erhalten,
+    // der naechste Tick versucht es erneut mit einer frischen Position.
+    if (s_cap_ms > 0 && elapsed > 0 && elapsed < 10000UL) {
+        float max_m = (elapsed / 1000.0f) * 200.0f;  // 200 m/s
+        if (max_m < 500.0f) max_m = 500.0f;           // Mindestens 500 m zulassen (GPS-Rauschen)
+        if (dist > max_m) {
+            char m[96]; snprintf(m, sizeof(m),
+                "GPS-Glitch verworfen: %.0fm in %lums (max %.0fm)",
+                dist, (unsigned long)elapsed, max_m);
+            syslog("TELEM", m);
+            return;
+        }
+    }
+
     // Geschwindigkeitsabhängige Distanzschwelle
     float spd = g_gps.speed_kmh;
     float dist_thresh = (spd > 110.0f) ? 250.0f :
@@ -595,16 +611,17 @@ static void telem_task(void* /*param*/) {
             bool sig_valid = (sig >= 0 && sig != 99);
             telem_update(TELEM_LTE_SIGNAL, sig_valid ? (float)sig : 0.0f, sig_valid);
 
-            // LTE-Operator
+            // LTE-Operator (Name-String fuer Web-UI, PLMN-Zahl fuer MQTT-Payload)
             {
                 const char* op = modem_operator();
+                uint16_t plmn  = modem_plmn();
                 if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     strncpy(s_operator_str, op ? op : "", sizeof(s_operator_str) - 1);
                     s_operator_str[sizeof(s_operator_str) - 1] = '\0';
                     uint32_t ts = millis();
                     s_cache[TELEM_LTE_OPERATOR].timestamp_ms = ts;
-                    s_cache[TELEM_LTE_OPERATOR].value        = 0.0f;
-                    s_cache[TELEM_LTE_OPERATOR].valid        = true;
+                    s_cache[TELEM_LTE_OPERATOR].value        = (float)plmn;
+                    s_cache[TELEM_LTE_OPERATOR].valid        = (plmn > 0);
                     xSemaphoreGive(s_mutex);
                 }
             }

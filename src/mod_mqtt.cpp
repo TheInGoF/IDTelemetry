@@ -61,6 +61,7 @@ enum BinField : uint32_t {
     BF_ODOMETER  = (1 << 16),
     BF_LTE_SIG   = (1 << 17),
     BF_BATT_DEV  = (1 << 18),
+    BF_LTE_PLMN  = (1 << 19),  // numerisches PLMN als uint16 (z.B. 26201=Telekom DE)
 };
 
 // ---- Zustand ----
@@ -316,19 +317,31 @@ static int build_binary(const TelemetryRow& row, uint8_t* buf, int buf_size) {
         pos += 4;
     }
 
-    // LTE Signal
+    // LTE Signal (bit 17)
     if (row.valid[TELEM_LTE_SIGNAL] && pos + 1 <= buf_size) {
         mask |= BF_LTE_SIG;
         put_u8(buf + pos, (uint8_t)row.values[TELEM_LTE_SIGNAL]);
         pos += 1;
     }
 
-    // ESP-Akku
+    // ESP-Akku (bit 18)
     int batt = pmu_batt_pct();
     if (batt >= 0 && pos + 1 <= buf_size) {
         mask |= BF_BATT_DEV;
         put_u8(buf + pos, (uint8_t)batt);
         pos += 1;
+    }
+
+    // LTE PLMN (bit 19, numerisch, z.B. 26201 = Telekom DE, 26203 = o2 DE)
+    // Wert steht im LTE_OPERATOR-Cache als Float (von modem_task befuellt).
+    // WICHTIG: Reihenfolge nach Bit-Nummer (17, 18, 19) — Server dekodiert so.
+    if (row.valid[TELEM_LTE_OPERATOR] && pos + 2 <= buf_size) {
+        uint32_t plmn = (uint32_t)row.values[TELEM_LTE_OPERATOR];
+        if (plmn > 0 && plmn < 65536) {
+            mask |= BF_LTE_PLMN;
+            put_u16(buf + pos, (uint16_t)plmn);
+            pos += 2;
+        }
     }
 
     // Header schreiben (jetzt wo mask komplett ist)
@@ -438,7 +451,16 @@ bool mqtt_publish_row(const TelemetryRow& row) {
     s_last_pub_ms = millis();
     s_pub_count++;
 
-    Serial.printf("[MQTT] → %s (%d Bytes) OK #%u\n", topic, plen, s_pub_count);
+    // Debug: welche Felder sind in der Payload (erste 4 Bytes plain = mask)
+    uint32_t mask = plain[0] | (plain[1] << 8) | (plain[2] << 16) | (plain[3] << 24);
+    Serial.printf("[MQTT] → %s (%d B enc, %d B plain) mask=0x%06lX #%u %s%s%s%s%s%s\n",
+        topic, plen, plain_len, (unsigned long)mask, s_pub_count,
+        (mask & BF_SOC)      ? "SoC "  : "",
+        (mask & BF_SPEED)    ? "Spd "  : "",
+        (mask & BF_VOLTAGE)  ? "V "    : "",
+        (mask & BF_LTE_SIG)  ? "LTE "  : "",
+        (mask & BF_LTE_PLMN) ? "LP "   : "",
+        (mask & BF_BATT_DEV) ? "Batt " : "");
 
     return true;
 }

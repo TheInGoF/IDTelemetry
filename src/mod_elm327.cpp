@@ -775,10 +775,13 @@ static void process_command(const char* raw) {
 static const char* JSON_BLE_CONN   = "{\"type\":\"ble_status\",\"connected\":1}";
 static const char* JSON_BLE_DISCONN = "{\"type\":\"ble_status\",\"connected\":0}";
 
+// Verbindungs-Statistik fuer BLE-Diagnose (zwischen on/onDisconnect erhalten)
+static uint32_t s_ble_conn_start_ms = 0;
+static uint8_t  s_ble_peer_mac[6]   = {0};
+
 class ServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* s) override {
         ble_connected = true;
-        // Alten Session-State bereinigen: Partial-Command + Queue-Reste
         cmd_len = 0;
         if (s_cmd_queue) {
             char junk[64];
@@ -788,14 +791,42 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         extern void ws_broadcast_json(const char*);
         ws_broadcast_json(JSON_BLE_CONN);
     }
+    // Variante mit Connection-Descriptor — loggt Peer-MAC + Verbindungsparameter
+    void onConnect(NimBLEServer* s, ble_gap_conn_desc* desc) override {
+        s_ble_conn_start_ms = millis();
+        memcpy(s_ble_peer_mac, desc->peer_ota_addr.val, 6);
+        // conn_itvl: Einheit 1.25 ms; supervision_timeout: Einheit 10 ms
+        uint16_t itvl_ms = (uint16_t)(desc->conn_itvl * 1.25f);
+        uint16_t sup_ms  = (uint16_t)(desc->supervision_timeout * 10);
+        int n_conn = s->getConnectedCount();
+        char msg[128];
+        snprintf(msg, sizeof(msg),
+            "BLE Peer %02X:%02X:%02X:%02X:%02X:%02X itvl=%ums sup=%ums lat=%u conns=%d",
+            s_ble_peer_mac[5], s_ble_peer_mac[4], s_ble_peer_mac[3],
+            s_ble_peer_mac[2], s_ble_peer_mac[1], s_ble_peer_mac[0],
+            itvl_ms, sup_ms, desc->conn_latency, n_conn);
+        syslog("BLE", msg);
+    }
     void onDisconnect(NimBLEServer* s) override {
         ble_connected = false;
-        // Queue leeren — Befehle der alten Session nicht bei Reconnect verarbeiten
         if (s_cmd_queue) {
             char junk[64];
             while (xQueueReceive(s_cmd_queue, junk, 0) == pdTRUE) {}
         }
-        syslog("BLE", "App getrennt");
+        // Uptime seit Connect — wenn <2s: wahrscheinlich Stack-Churn oder Auth-Fehler
+        uint32_t uptime_ms = (s_ble_conn_start_ms > 0) ? (millis() - s_ble_conn_start_ms) : 0;
+        int n_conn = s->getConnectedCount();
+        char msg[96];
+        if (uptime_ms < 2000) {
+            snprintf(msg, sizeof(msg), "App getrennt · kurz (%lums) conns=%d %s",
+                (unsigned long)uptime_ms, n_conn,
+                (uptime_ms < 500) ? "· FLAP?" : "");
+        } else {
+            snprintf(msg, sizeof(msg), "App getrennt · uptime %lus conns=%d",
+                (unsigned long)(uptime_ms / 1000), n_conn);
+        }
+        syslog("BLE", msg);
+        s_ble_conn_start_ms = 0;
         extern void ws_broadcast_json(const char*);
         ws_broadcast_json(JSON_BLE_DISCONN);
         NimBLEDevice::startAdvertising();

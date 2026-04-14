@@ -40,11 +40,12 @@ RTC_DATA_ATTR static uint32_t s_wd_first_reboot_epoch = 0;
 
 // ---- Zustand ----------------------------------------------
 
-static volatile bool   s_connected   = false;
-static bool            s_had_lte     = false;  // true nach erster erfolgreicher GPRS-Verbindung
-static char            s_operator[48] = "";
-static volatile int8_t s_sig_quality  = -1;  // CSQ 0-31, 99=kein Signal, -1=unbekannt
-static volatile bool   s_sim_ok       = false;
+static volatile bool     s_connected   = false;
+static bool              s_had_lte     = false;  // true nach erster erfolgreicher GPRS-Verbindung
+static char              s_operator[48] = "";
+static volatile int8_t   s_sig_quality  = -1;  // CSQ 0-31, 99=kein Signal, -1=unbekannt
+static volatile uint16_t s_plmn_num     = 0;   // aktuelles PLMN als Zahl (26201 Telekom, 26203 o2)
+static volatile bool     s_sim_ok       = false;
 
 // ---- GPS-Details (vom Task geschrieben, per Getter lesbar) ----
 static volatile float  s_gps_alt      = 0;
@@ -381,6 +382,8 @@ static void lookup_operator(char* operator_out, size_t op_size) {
     if (plmn[0]) {
         snprintf(syslog_msg, sizeof(syslog_msg), "PLMN: %s", plmn);
         syslog("MODEM", syslog_msg);
+        // Numerischen PLMN fuer Telemetrie ablegen
+        s_plmn_num = (uint16_t)atoi(plmn);
         // Name aus PLMN_TABLE nachschlagen
         for (int j = 0; j < PLMN_COUNT; j++) {
             if (strcmp(PLMN_TABLE[j].plmn, plmn) == 0) {
@@ -389,6 +392,8 @@ static void lookup_operator(char* operator_out, size_t op_size) {
                 break;
             }
         }
+    } else {
+        s_plmn_num = 0;
     }
     // Format zurueck auf Langname
     s_modem.sendAT("+COPS=3,0");
@@ -514,12 +519,35 @@ static void load_last_plmn(char* plmn_out, size_t size) {
 static bool try_register(char* operator_out, size_t op_size) {
     char syslog_msg[128];
 
+    // --- Phase 0: Bevorzugter Provider (hartkodiert, z.B. Telekom DE) ---
+    // o2 ist zuhause staerker, aber auf dem Land oft kaputt. Wir erzwingen Telekom
+    // wenn verfuegbar. Kurzer Timeout (15s), damit ein fehlgeschlagener Versuch
+    // nicht den Boot blockiert wenn Telekom nicht erreichbar ist.
+    if (PREFERRED_PLMN[0] && s_wd_reboot_count == 0 && !g_shutdown) {
+        snprintf(syslog_msg, sizeof(syslog_msg),
+            "Praeferenz %s (Telekom DE, %ds Timeout)...", PREFERRED_PLMN, PREFERRED_PLMN_TIMEOUT_S);
+        syslog("MODEM", syslog_msg);
+        s_modem.sendAT("+COPS=1,2,\"", PREFERRED_PLMN, "\",7");
+        if (s_modem.waitResponse(PREFERRED_PLMN_TIMEOUT_S * 1000L) == 1) {
+            RegStatus r = wait_for_reg(PREFERRED_PLMN_TIMEOUT_S);
+            if (r == REG_OK_HOME || r == REG_OK_ROAMING) {
+                syslog("MODEM", "Praeferenz erfolgreich");
+                save_last_plmn(PREFERRED_PLMN);
+                lookup_operator(operator_out, op_size);
+                return true;
+            }
+        }
+        syslog("MODEM", "Praeferenz nicht erreichbar · Fallback");
+        // COPS-State ist jetzt "kein Operator" — COPS=0/Scan uebernehmen
+    }
+
     // --- Phase 1: Letzten Provider manuell (schnell, ~10s) ---
     // Nur wenn KEIN Watchdog-Reboot vorliegt (sonst war genau dieser Provider das Problem)
+    // UND letzter Provider != Praeferenz (waere Doppel-Versuch)
     if (s_wd_reboot_count == 0) {
         char last_plmn[8] = "";
         load_last_plmn(last_plmn, sizeof(last_plmn));
-        if (last_plmn[0] && is_allowed_plmn(last_plmn)) {
+        if (last_plmn[0] && is_allowed_plmn(last_plmn) && strcmp(last_plmn, PREFERRED_PLMN) != 0) {
             snprintf(syslog_msg, sizeof(syslog_msg), "Versuche letzten Provider %s...", last_plmn);
             syslog("MODEM", syslog_msg);
             s_modem.sendAT("+COPS=1,2,\"", last_plmn, "\",7");
@@ -972,14 +1000,15 @@ static void modem_task(void* /*param*/) {
                                         syslog("MQTT", "Reconnect: GPRS OK aber MQTT-Connect fehlgeschlagen");
                                     }
                                 } else {
+                                    // GPRS fehlgeschlagen (z.B. 0.0.0.0 oder echte Trennung).
+                                    // Keine voreilige state-transition — die Eskalation (Stufe 2
+                                    // Modem-Reset, Stufe 3 PLMN-Scan) uebernimmt das Recovery.
                                     s_mqtt_fail_count++;
                                     RegStatus reg = s_modem.getRegistrationStatus();
-                                    if (reg != REG_OK_HOME && reg != REG_OK_ROAMING) {
-                                        syslog("MODEM", "Netz verloren · Neuregistrierung");
-                                        state = STATE_WAIT_FOR_NETWORK;
-                                    } else {
-                                        syslog("MODEM", "GPRS fehlgeschlagen · Netz noch da · warte 10s");
-                                    }
+                                    char m[80]; snprintf(m, sizeof(m),
+                                        "GPRS fehlgeschlagen · reg=%d · Eskalation greift (fail=%d)",
+                                        (int)reg, s_mqtt_fail_count);
+                                    syslog("MODEM", m);
                                 }
                                 s_mqtt_reconnect_ms = millis();
                             }
@@ -1328,9 +1357,23 @@ bool modem_ensure_connected() {
         s_connected = false;
         return false;
     }
+
+    // IP-Plausibilität prüfen: SIM7080G meldet manchmal "GPRS OK" mit 0.0.0.0
+    // (halb-offener PDP-Kontext). MQTT-Connect scheitert dann garantiert.
+    String ip = s_modem.getLocalIP();
+    if (ip.length() == 0 || ip == "0.0.0.0" || ip.startsWith("0.0.0")) {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "GPRS OK mit ungueltiger IP (%s) · Abbruch", ip.c_str());
+        syslog("MODEM", msg);
+        s_modem.sendAT("+CNACT=0,0");  // PDP explizit trennen für nächsten Versuch
+        s_modem.waitResponse(5000L);
+        s_connected = false;
+        return false;
+    }
+
     s_connected = true;
     char syslog_msg[64];
-    snprintf(syslog_msg, sizeof(syslog_msg), "GPRS OK: %s", s_modem.getLocalIP().c_str());
+    snprintf(syslog_msg, sizeof(syslog_msg), "GPRS OK: %s", ip.c_str());
     syslog("MODEM", syslog_msg);
     s_had_lte = true;
     return true;
@@ -1339,6 +1382,7 @@ bool modem_ensure_connected() {
 bool        modem_is_connected()    { return s_connected; }
 int8_t      modem_signal_quality()  { return s_sig_quality; }
 const char* modem_operator()        { return s_operator; }
+uint16_t    modem_plmn()             { return s_plmn_num; }
 bool        modem_sim_ok()          { return s_sim_ok; }
 
 void modem_pre_sleep_flush() {
