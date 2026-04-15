@@ -292,9 +292,10 @@ static void row_try_capture() {
     // (im Log: 6048 km in 3 s). Alles > 200 m/s (=720 km/h) ist physikalisch unmoeglich
     // fuer ein Auto und wird als Glitch verworfen. Der s_cap_*-State bleibt erhalten,
     // der naechste Tick versucht es erneut mit einer frischen Position.
-    if (s_cap_ms > 0 && elapsed > 0 && elapsed < 10000UL) {
+    if (s_cap_ms > 0 && elapsed > 0) {
         float max_m = (elapsed / 1000.0f) * 200.0f;  // 200 m/s
-        if (max_m < 500.0f) max_m = 500.0f;           // Mindestens 500 m zulassen (GPS-Rauschen)
+        if (max_m < 500.0f)  max_m = 500.0f;          // Mindestens 500 m zulassen (GPS-Rauschen)
+        if (max_m > 2000.0f) max_m = 2000.0f;         // Deckel: zwischen Rows nie >2 km (Nachsenden ist row-by-row)
         if (dist > max_m) {
             char m[96]; snprintf(m, sizeof(m),
                 "GPS-Glitch verworfen: %.0fm in %lums (max %.0fm)",
@@ -306,7 +307,7 @@ static void row_try_capture() {
 
     // Geschwindigkeitsabhängige Distanzschwelle
     float spd = g_gps.speed_kmh;
-    float dist_thresh = (spd > 110.0f) ? 250.0f :
+    float dist_thresh = (spd > 110.0f) ? 350.0f :
                         (spd >  80.0f) ? 200.0f :
                         (spd >  50.0f) ? 150.0f : 100.0f;
 

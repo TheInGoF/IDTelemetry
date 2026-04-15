@@ -6,7 +6,7 @@
 //  Hardware: LILYGO T-SIM7080G-S3 (ESP32-S3-WROOM-1-N16R8) + SN65HVD230
 // ============================================================
 
-#define FW_VERSION  "1.0.6"
+#define FW_VERSION  "1.1.0"
 
 // ============================================================
 //  MODUL-SCHALTER  ← hier ein-/ausschalten
