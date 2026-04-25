@@ -62,8 +62,9 @@ void pmu_init() {
         syslog("PMU", "Wake-IRQ gelöscht (VBUS-Insert)");
     }
 
-    // ---- Lade-Parameter (wie LilyGo-Beispiel) ----
-    PMU.setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_300MA);
+    // ---- Lade-Parameter ----
+    PMU.setVbusCurrentLimit(XPOWERS_AXP2101_VBUS_CUR_LIM_2000MA);  // PD-Lader liefert genug
+    PMU.setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_1000MA);    // 2200 mAh Zelle, ~0.5C
     PMU.setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V1);
     PMU.enableCellbatteryCharge();  // Laden aktivieren (war ggf. vor Deep Sleep deaktiviert)
 

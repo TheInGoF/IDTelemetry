@@ -630,8 +630,11 @@ static void telem_task(void* /*param*/) {
             last_sensor_ms = now;
         }
 
-        // ── PMU-Akku: alle 60 s ─────────────────────────────
-        if (now - last_pmu_ms >= 60000UL) {
+        // ── PMU-Akku: alle 10 s ─────────────────────────────
+        // I2C-Read ist billig; telem_update filtert per delta (0.0 = jede %-Aenderung
+        // triggert einen Send), max_age 180s als Heartbeat.
+        if (now - last_pmu_ms >= 10000UL) {
+            pmu_update();
             int batt = pmu_batt_pct();
             telem_update(TELEM_BATT_DEVICE, (float)batt, batt >= 0);
             last_pmu_ms = now;
