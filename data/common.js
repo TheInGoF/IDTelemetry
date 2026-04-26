@@ -1,0 +1,60 @@
+// ── Telemetry Stick — Shared JS ───────────────────────────
+
+// ── Burger Menu ──────────────────────────────────────────
+function toggleMenu() {
+  var m = document.getElementById('drop-nav');
+  if (m) m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+if (!window._menuListener) {
+  window._menuListener = true;
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('header')) {
+      var m = document.getElementById('drop-nav');
+      if (m) m.style.display = 'none';
+    }
+  });
+}
+
+// ── Modem Widget ─────────────────────────────────────────
+var _modemLastOp = '';
+function updateModem(sig, op, sim, conn) {
+  var bars = !sim ? 0 : (sig < 0 || sig === 99 || sig === 0) ? 0 : sig < 5 ? 1 : sig < 10 ? 2 : sig < 15 ? 3 : sig < 20 ? 4 : 5;
+  if (bars > 0 && op) _modemLastOp = op;
+  for (var i = 1; i <= 5; i++) {
+    var b = document.getElementById('mb' + i);
+    if (b) b.classList.toggle('on', i <= bars);
+  }
+  var el = document.getElementById('modem-op');
+  if (!el) return;
+  if (!sim) { el.textContent = 'NO SIM'; el.style.color = 'var(--red)'; }
+  else if (bars === 0) { el.textContent = _modemLastOp || 'NO NET'; el.style.color = 'var(--muted)'; }
+  else { el.textContent = op || '--'; el.style.color = conn ? 'var(--green)' : 'var(--muted)'; }
+}
+
+// ── LED System ───────────────────────────────────────────
+function setLed(id, cls) {
+  var el = document.getElementById('led-' + id);
+  if (el) el.className = 'led' + (cls ? ' ' + cls : '');
+}
+
+// ── Battery ──────────────────────────────────────────────
+function setBatt(v, chg, vbus) {
+  var el = document.getElementById('batt-pct');
+  if (!el) return;
+  if (v < 0) { el.textContent = 'off'; el.style.color = 'var(--muted)'; }
+  else {
+    el.textContent = (chg ? '\u26A1' : '') + (vbus && !chg ? '\u2197' : '') + v + '%';
+    el.style.color = chg ? 'var(--yellow)' : v > 50 ? 'var(--green)' : v > 20 ? 'var(--yellow)' : 'var(--red)';
+  }
+}
+
+// ── Toast ────────────────────────────────────────────────
+function toast(msg, ok) {
+  if (ok === undefined) ok = true;
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = ok ? 'var(--green)' : 'var(--red)';
+  el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  el.classList.add('show');
+  setTimeout(function() { el.classList.remove('show'); }, 2800);
+}
