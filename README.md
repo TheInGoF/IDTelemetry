@@ -104,6 +104,18 @@ Open `src/secrets.h` and fill in:
 - **InfluxDB** host, org, bucket, token (if you want telemetry dashboards)
 - **Guard SSID** of the car's hotspot (e.g. `"My VW 1747"`)
 
+> ⚠️ **Generating tokens, keys and secrets**
+>
+> Use a cryptographically secure random number generator. **Never** ask an LLM (ChatGPT, Claude, Copilot, …) to "give me a random 32-byte key" — LLM output is probability-distributed, not random. The same prompt produces a small, predictable distribution of values that an attacker can enumerate offline. The convenience is not worth the silent loss of entropy.
+>
+> ```bash
+> openssl rand -hex 32                                  # AES-256 key
+> openssl rand -base64 32                               # API/webhook tokens
+> python3 -c "import secrets; print(secrets.token_hex(32))"
+> ```
+>
+> The MQTT AES key in `secrets.h` **must match** the `MQTT_AES_KEY` configured on the [IDMate](https://github.com/TheInGoF/IDMate) server side.
+
 ### Step 3 — Wiring
 
 ```text
