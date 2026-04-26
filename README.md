@@ -1,5 +1,7 @@
 # IDTelemetry
 
+> 📊 **Companion server:** [IDMate](https://github.com/TheInGoF/IDMate) — the dashboard & trip log that consumes the telemetry and lets you analyse trips, charges and battery health.
+
 **Open telemetry for the VW ID family** — an ESP32-based stick that turns the OBD2 port into a live data feed for SoC, battery temperature, power flow, charging behavior and location.
 
 Born out of frustration: the VW ID.7 shows you almost nothing about what's happening under the hood. No real SoC, no battery temperature, no power draw, no charge curve — not even a simple energy consumption history. Even a base-model VW Hybrid puts more data on the dashboard than an ID.7 does. This project is a DIY box that plugs into OBD2 and turns a black-box EV into something you can actually understand — your data, your broker, your dashboard.
