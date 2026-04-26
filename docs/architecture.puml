@@ -1,0 +1,63 @@
+@startuml architecture
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam componentStyle rectangle
+skinparam defaultFontName Menlo
+skinparam defaultFontSize 12
+
+title IDTelemetry — System Architecture
+
+package "Vehicle (VW ID family)" #EFEFEF {
+  [OBD2 Port] as OBD
+  [Car WiFi Hotspot] as CarWifi
+}
+
+package "IDTelemetry Stick" #FFFFFF {
+  package "ESP32-S3 (LILYGO T-SIM7080G-S3)" {
+    [CAN / TWAI\nGPIO17/18] as CAN
+    [Modem UART1\nGPIO4/5] as ModemUART
+    [GPS UART2\nGPIO1/2] as GpsUART
+    [I2C Wire0\nGPIO45/21] as I2C0
+    [I2C Wire1\nGPIO15/7] as I2C1
+    [BLE NimBLE] as BLE
+    [WiFi AP] as AP
+  }
+
+  [SN65HVD230\nCAN Transceiver] as TRX
+  [SIM7080G\nLTE-M / NB-IoT] as SIM
+  [BLITZ Mini M10\nu-blox GNSS] as M10
+  [DS1307\nRTC] as RTC
+  [MPU-6050\nGyro / Accel] as IMU
+  [AXP2101\nPMU] as PMU
+  [Li-Po 2200 mAh] as BAT
+}
+
+package "Backend" #EFEFEF {
+  cloud "MQTT Broker" as MQTT
+  database "InfluxDB / Server" as DB
+  [Grafana] as GRAF
+}
+
+package "Smartphone" #EFEFEF {
+  [ABRP App] as ABRP
+}
+
+OBD --> TRX : CAN-H/L
+TRX --> CAN
+ModemUART --> SIM
+GpsUART <-- M10
+I2C0 -- RTC
+I2C0 -- IMU
+I2C1 -- PMU
+PMU -- BAT
+PMU -- SIM : DC rails
+PMU -- M10 : DC5
+
+SIM ..> MQTT : LTE-M\nAES-256-CBC
+MQTT --> DB
+DB --> GRAF
+
+BLE <..> ABRP : ELM327 emulation
+AP <..> [Browser] : config / live data
+
+@enduml

@@ -13,6 +13,22 @@ Born out of frustration: the VW ID.7 shows you almost nothing about what's happe
 - Runs a **WiFi AP with a full Web-UI** for live data, config and debugging
 - Sleeps in the **low-µA range** when parked, wakes on motion
 
+## Architecture
+
+![System Architecture](docs/architecture.png)
+
+The stick reads CAN data via UDS, pushes encrypted telemetry over LTE-M MQTT, exposes a BLE ELM327 emulation for ABRP, and serves a local Web-UI on its WiFi AP. Sources are in [docs/](docs/) (`*.puml`, render with `plantuml`).
+
+### Modem Watchdog
+
+When MQTT or GPRS misbehave, the firmware escalates through four levels before giving up — built to survive long radio dead zones without endless reboot loops.
+
+![Modem Escalation](docs/modem_escalation.png)
+
+### Sleep / Wake
+
+![Sleep / Wake](docs/sleep_wake.png)
+
 ## Hardware
 
 | Component | Details |
