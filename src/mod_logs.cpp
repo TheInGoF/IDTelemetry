@@ -19,12 +19,27 @@ LogEntry* log_buf = nullptr;  // PSRAM, allokiert in logs_init()
 uint16_t  log_count = 0;          // Gesamtzahl (kann > MAX_LOG_ENTRIES sein)
 static uint16_t log_head = 0;     // nächster Schreibindex (Ring)
 
+// SPIFFS ist NICHT thread-safe. Alle Zugriffe (open/read/write/rename/remove)
+// müssen gegen concurrent access geschützt werden — sonst Heap-Korruption.
+// Recursive-Mutex: ermöglicht Nesting (z.B. spiffs_q_init → syslog → spiffs_append_ring).
+static SemaphoreHandle_t s_spiffs_mtx = nullptr;
+
+bool spiffs_lock(uint32_t timeout_ms) {
+    if (!s_spiffs_mtx) return true;  // vor logs_init() — Single-Task-Phase
+    return xSemaphoreTakeRecursive(s_spiffs_mtx, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+}
+
+void spiffs_unlock() {
+    if (s_spiffs_mtx) xSemaphoreGiveRecursive(s_spiffs_mtx);
+}
+
 // ============================================================
 //  SPIFFS Hilfsfunktion — Zeile anhängen, Ringpuffer
 // ============================================================
 
 static void spiffs_append_ring(const char* path, const char* line,
                                 size_t max_bytes) {
+    if (!spiffs_lock(200)) return;  // Timeout → Log-Zeile verwerfen statt Race
     if (SPIFFS.exists(path)) {
         File f = SPIFFS.open(path, "r");
         size_t sz = f ? f.size() : 0;
@@ -56,6 +71,7 @@ static void spiffs_append_ring(const char* path, const char* line,
 
     File f = SPIFFS.open(path, "a");
     if (f) { f.print(line); f.close(); }
+    spiffs_unlock();
 }
 
 // ============================================================
@@ -63,6 +79,9 @@ static void spiffs_append_ring(const char* path, const char* line,
 // ============================================================
 
 void logs_init() {
+    // SPIFFS-Mutex erzeugen BEVOR irgendein Task syslog() aufruft
+    if (!s_spiffs_mtx) s_spiffs_mtx = xSemaphoreCreateRecursiveMutex();
+
     // Log-Buffer in PSRAM allokieren (spart ~13 KB internes RAM)
     log_buf = (LogEntry*)ps_calloc(MAX_LOG_ENTRIES, sizeof(LogEntry));
     if (!log_buf) {
@@ -165,7 +184,10 @@ void log_clear(uint8_t src) {
         }
     }
     const char* path = can_log_path(src);
-    if (SPIFFS.exists(path)) SPIFFS.remove(path);
+    if (spiffs_lock()) {
+        if (SPIFFS.exists(path)) SPIFFS.remove(path);
+        spiffs_unlock();
+    }
     Serial.printf("[LOGS] %s gelöscht\n", path);
 }
 
@@ -178,13 +200,15 @@ String log_to_txt(uint8_t src) {
     out += "Zeit(ms)  | Dir | ID    | Bytes                   | Info\r\n";
     out += "--------------------------------------------------------\r\n";
 
-    if (!SPIFFS.exists(path)) { out += "(leer)\r\n"; return out; }
+    if (!spiffs_lock(1000)) { out += "(busy)\r\n"; return out; }
+    if (!SPIFFS.exists(path)) { spiffs_unlock(); out += "(leer)\r\n"; return out; }
 
     File f = SPIFFS.open(path, "r");
     if (f) {
         while (f.available()) out += f.readStringUntil('\n') + "\n";
         f.close();
     }
+    spiffs_unlock();
     return out;
 }
 
@@ -242,14 +266,19 @@ String log_ble_to_txt() {
     String out = "Telemetry Stick - BLE Log\r\n";
     out += "Intervall: 10s\r\n";
     out += "========================================\r\n";
-    if (!SPIFFS.exists(SPIFFS_BLE_LOG)) { out += "(leer)\r\n"; return out; }
+    if (!spiffs_lock(1000)) { out += "(busy)\r\n"; return out; }
+    if (!SPIFFS.exists(SPIFFS_BLE_LOG)) { spiffs_unlock(); out += "(leer)\r\n"; return out; }
     File f = SPIFFS.open(SPIFFS_BLE_LOG, "r");
     if (f) { while (f.available()) out += f.readStringUntil('\n') + "\n"; f.close(); }
+    spiffs_unlock();
     return out;
 }
 
 void log_ble_clear() {
-    if (SPIFFS.exists(SPIFFS_BLE_LOG)) SPIFFS.remove(SPIFFS_BLE_LOG);
+    if (spiffs_lock()) {
+        if (SPIFFS.exists(SPIFFS_BLE_LOG)) SPIFFS.remove(SPIFFS_BLE_LOG);
+        spiffs_unlock();
+    }
     Serial.println("[LOGS] BLE Log gelöscht");
 }
 

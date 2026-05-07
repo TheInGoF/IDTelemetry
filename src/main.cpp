@@ -116,8 +116,13 @@ GpsSnapshot gps_snapshot() {
 
 // ── Log-Datei über Serial ausgeben (tail_lines=0 → alles) ──
 static void serial_dump_log(const char* path, uint16_t tail_lines) {
+    if (!spiffs_lock(2000)) {
+        Serial.printf("[CMD] %s — SPIFFS busy\n", path);
+        return;
+    }
     if (!SPIFFS.exists(path)) {
         Serial.printf("[CMD] %s leer/nicht vorhanden\n", path);
+        spiffs_unlock();
         return;
     }
     File f = SPIFFS.open(path, "r");
@@ -150,6 +155,7 @@ static void serial_dump_log(const char* path, uint16_t tail_lines) {
         }
     }
     f.close();
+    spiffs_unlock();
     Serial.println("=== Ende ===");
 }
 
@@ -330,11 +336,16 @@ void loop() {
                 } else if (serial_log_cmd(serial_buf, "blelog",  SPIFFS_BLE_LOG))  {
                 } else if (serial_log_cmd(serial_buf, "scanlog", SPIFFS_SCAN_LOG)) {
                 } else if (strcmp(serial_buf, "clearlog") == 0) {
-                    if (SPIFFS.exists(SPIFFS_SYS_LOG))  SPIFFS.remove(SPIFFS_SYS_LOG);
-                    if (SPIFFS.exists(SPIFFS_ELM_LOG))  SPIFFS.remove(SPIFFS_ELM_LOG);
-                    if (SPIFFS.exists(SPIFFS_BLE_LOG))  SPIFFS.remove(SPIFFS_BLE_LOG);
-                    if (SPIFFS.exists(SPIFFS_SCAN_LOG)) SPIFFS.remove(SPIFFS_SCAN_LOG);
-                    Serial.println("[CMD] Alle Logs geloescht");
+                    if (spiffs_lock(2000)) {
+                        if (SPIFFS.exists(SPIFFS_SYS_LOG))  SPIFFS.remove(SPIFFS_SYS_LOG);
+                        if (SPIFFS.exists(SPIFFS_ELM_LOG))  SPIFFS.remove(SPIFFS_ELM_LOG);
+                        if (SPIFFS.exists(SPIFFS_BLE_LOG))  SPIFFS.remove(SPIFFS_BLE_LOG);
+                        if (SPIFFS.exists(SPIFFS_SCAN_LOG)) SPIFFS.remove(SPIFFS_SCAN_LOG);
+                        spiffs_unlock();
+                        Serial.println("[CMD] Alle Logs geloescht");
+                    } else {
+                        Serial.println("[CMD] SPIFFS busy");
+                    }
                 } else if (strcmp(serial_buf, "help") == 0) {
                     Serial.println("Befehle: sleep, nosleep, gps, lte, lte scan, mqtt, mqtt drop, can sniff, reset");
                     Serial.println("  LTE:   lte bands, lte bands fix, lte bands all");

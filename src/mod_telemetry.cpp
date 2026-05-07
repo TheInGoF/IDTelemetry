@@ -81,6 +81,7 @@ static uint16_t s_spiffs_ofs = 0;  // Anzahl gesendeter Rows (aus Datei geladen)
 static uint16_t s_spiffs_total = 0; // Gesamte Rows in Datei
 
 static void spiffs_q_init() {
+    if (!spiffs_lock(1000)) return;
     // Alte Queue-Datei verwerfen wenn Dateigröße kein Vielfaches der aktuellen Row-Größe ist
     // (schützt vor Format-Breaks zwischen Firmware-Versionen)
     if (SPIFFS.exists(SPIFFS_Q_DATA)) {
@@ -118,9 +119,11 @@ static void spiffs_q_init() {
         char m[64]; snprintf(m, sizeof(m), "SPIFFS-Queue: %u Rows pending, %u total", pending, s_spiffs_total);
         syslog("TELEM", m);
     }
+    spiffs_unlock();
 }
 
 static void spiffs_q_append(const TelemetryRow& row) {
+    if (!spiffs_lock(500)) return;
     // Wenn Queue zu groß: komprimieren (gesendete Rows löschen)
     if (s_spiffs_total >= SPIFFS_Q_MAX && s_spiffs_ofs > 0) {
         // Ungesendete Rows in temporäre Datei kopieren
@@ -155,21 +158,25 @@ static void spiffs_q_append(const TelemetryRow& row) {
         f.close();
         s_spiffs_total++;
     }
+    spiffs_unlock();
 }
 
 // Älteste ungesendete Row aus SPIFFS lesen (OHNE Offset vorrücken)
 static bool spiffs_q_peek(TelemetryRow& out) {
     if (s_spiffs_ofs >= s_spiffs_total) return false;
+    if (!spiffs_lock(500)) return false;
     File f = SPIFFS.open(SPIFFS_Q_DATA, "r");
-    if (!f) return false;
+    if (!f) { spiffs_unlock(); return false; }
     f.seek(s_spiffs_ofs * sizeof(TelemetryRow));
     bool ok = (f.read((uint8_t*)&out, sizeof(TelemetryRow)) == sizeof(TelemetryRow));
     f.close();
+    spiffs_unlock();
     return ok;
 }
 
 // Nach erfolgreichem Publish: Offset vorrücken
 static void spiffs_q_ack() {
+    if (!spiffs_lock(500)) return;
     s_spiffs_ofs++;
     File f = SPIFFS.open(SPIFFS_Q_OFS, "w");
     if (f) { f.write((uint8_t*)&s_spiffs_ofs, 2); f.close(); }
@@ -180,6 +187,7 @@ static void spiffs_q_ack() {
         s_spiffs_ofs = 0;
         s_spiffs_total = 0;
     }
+    spiffs_unlock();
 }
 
 static uint16_t spiffs_q_pending() {
@@ -902,6 +910,7 @@ struct PersistHeader {
 
 void telem_persist_to_spiffs() {
     if (!s_mutex) return;
+    if (!spiffs_lock(2000)) return;
 
     // Cache + last_sent_ms snapshot
     TelemetryPoint   cache_snap[TELEM_FIELD_COUNT];
@@ -956,12 +965,14 @@ void telem_persist_to_spiffs() {
             syslog("TELEM", msg);
         }
     }
+    spiffs_unlock();
 }
 
 void telem_restore_from_spiffs() {
-    if (!SPIFFS.exists(TELEM_PERSIST_FILE)) return;  // Kein Persist-File — normaler Start
+    if (!spiffs_lock(2000)) return;
+    if (!SPIFFS.exists(TELEM_PERSIST_FILE)) { spiffs_unlock(); return; }
     File f = SPIFFS.open(TELEM_PERSIST_FILE, "r");
-    if (!f) return;
+    if (!f) { spiffs_unlock(); return; }
 
     PersistHeader hdr;
     if (f.read((uint8_t*)&hdr, sizeof(hdr)) != sizeof(hdr) ||
@@ -969,6 +980,7 @@ void telem_restore_from_spiffs() {
         hdr.field_count != (uint32_t)TELEM_FIELD_COUNT) {
         f.close();
         SPIFFS.remove(TELEM_PERSIST_FILE);
+        spiffs_unlock();
         return;
     }
 
@@ -980,6 +992,7 @@ void telem_restore_from_spiffs() {
         f.close();
         SPIFFS.remove(TELEM_PERSIST_FILE);
         syslog("TELEM", "SPIFFS restore: Lesefehler, Datei gelöscht");
+        spiffs_unlock();
         return;
     }
     f.close();
@@ -1043,15 +1056,16 @@ void telem_restore_from_spiffs() {
     syslog("TELEM", msg);
 
     // ── Ungesendete Zeilen wiederherstellen ──────────────────────
-    if (!SPIFFS.exists(TELEM_ROWS_FILE)) return;
+    if (!SPIFFS.exists(TELEM_ROWS_FILE)) { spiffs_unlock(); return; }
     File fr = SPIFFS.open(TELEM_ROWS_FILE, "r");
-    if (!fr) return;
+    if (!fr) { spiffs_unlock(); return; }
     uint32_t rows_magic = 0;
     uint16_t row_count  = 0;
     if (fr.read((uint8_t*)&rows_magic, 4) != 4 || rows_magic != TELEM_ROWS_MAGIC ||
         fr.read((uint8_t*)&row_count, 2) != 2 || row_count == 0 || row_count > TELEM_ROW_BUF_SIZE) {
         fr.close();
         SPIFFS.remove(TELEM_ROWS_FILE);
+        spiffs_unlock();
         return;
     }
     if (s_row_buf && s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
@@ -1070,6 +1084,7 @@ void telem_restore_from_spiffs() {
     }
     fr.close();
     SPIFFS.remove(TELEM_ROWS_FILE);
+    spiffs_unlock();
 }
 
 // ============================================================

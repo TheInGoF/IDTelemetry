@@ -51,3 +51,9 @@ void   log_ble_clear();
 
 void        syslog(const char* category, const char* msg);
 const char* syslog_timestr();
+
+// ---- SPIFFS-Mutex -----------------------------------------
+// Schützt alle SPIFFS-Zugriffe gegen concurrent open/read/write/rename.
+// Nicht-thread-safe SPIFFS war Ursache für Heap-Korruption + Scheduler-Crashes.
+bool spiffs_lock(uint32_t timeout_ms = 500);
+void spiffs_unlock();

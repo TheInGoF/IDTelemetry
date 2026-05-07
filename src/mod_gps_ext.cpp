@@ -335,7 +335,7 @@ void gps_ext_init() {
 
     // s_ok wird erst nach erstem validen NMEA-Paket gesetzt (in process_line)
     { char m[80]; snprintf(m, sizeof(m), "BLITZ Mini M10 — UART GPIO%d/%d %dBd (warte auf Fix)", GPS_EXT_RX_PIN, GPS_EXT_TX_PIN, GPS_EXT_BAUD); syslog("GPS_EXT", m); }
-    xTaskCreatePinnedToCore(gps_ext_task, "GPS_EXT", 3072, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(gps_ext_task, "GPS_EXT", 4096, NULL, 2, NULL, 1);
 }
 
 // ── GPS in Idle schicken — M10 trackt weiter, UART wird geschlossen ──
