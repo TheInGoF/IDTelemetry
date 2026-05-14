@@ -2,9 +2,13 @@
 #include "mod_logs.h"
 #include "mod_telem_store.h"
 #include "mod_telemetry.h"
+#include "mod_payload.h"
 #include "mod_sleep.h"
 #include <Arduino.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClient.h>
+#include <PubSubClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <string.h>
@@ -12,23 +16,25 @@
 #if FEATURE_WIFI_UPLOAD
 
 // ============================================================
-//  Two-slot priority WiFi STA + future HTTP-POST drain.
+//  Two-slot WiFi STA + drain telem_store via HTTP POST or MQTT.
 //
-//  Lifecycle each ~5 s tick:
-//    if not associated:
-//        passively scan the air
-//        for slot in priority order:
-//            if slot.ssid in scan results -> WiFi.begin(slot)
-//        break
-//    else:
-//        TODO: drain telem_store via HTTP POST against slots[active].url
+//  URL scheme dispatch (per slot):
+//    http://host[:port]/path   → HTTP POST, body = AES-encrypted bytes
+//    https://host[:port]/path  → HTTPS POST (TLS via WiFiClientSecure)
+//    mqtt://host[:port]/topic  → MQTT publish, payload = encrypted bytes
+//    mqtts://host[:port]/topic → MQTT over TLS (TODO)
 //
-//  AP+STA coexistence:
-//    web_init() brings the softAP up first. WiFi.begin() while in AP-only
-//    mode auto-switches the radio to APSTA. The softAP channel will follow
-//    the STA's channel, which can confuse phones already connected to the
-//    AP. Acceptable for our use case — users typically open the AP only
-//    for setup, then close the phone tab.
+//  Server payload is BYTE-IDENTICAL to the LTE/MQTT path — same
+//  AES-256-CBC binary format produced by mod_payload. IDMate decoder
+//  works unchanged for all transports.
+//
+//  AP guard:
+//    When the local AP has any associated station (user configuring
+//    via /config), we skip the scan/connect cycle. AP_STA channel
+//    hopping would otherwise drop the phone mid-edit.
+//
+//  Note: AsyncTCP also runs in WIFI_MODE_STA for the web server. We
+//  keep WIFI_AP_STA explicitly so the AP remains usable when STA is up.
 // ============================================================
 
 struct Slot {
@@ -36,13 +42,19 @@ struct Slot {
     char pass[64];
     char url[128];
 };
-static Slot      s_slots[WIFI_UPLOAD_SLOTS] = {};
-static int       s_active_slot               = -1;
-static uint32_t  s_uploaded                  = 0;
-static bool      s_task_running              = false;
-static uint32_t  s_last_scan_ms              = 0;
-static const uint32_t SCAN_INTERVAL_MS       = 30000UL;
-static const uint32_t CONNECT_TIMEOUT_MS     = 12000UL;
+static Slot     s_slots[WIFI_UPLOAD_SLOTS] = {};
+static int      s_active_slot              = -1;
+static uint32_t s_uploaded                 = 0;
+static bool     s_task_running             = false;
+static uint32_t s_last_scan_ms             = 0;
+static const uint32_t SCAN_INTERVAL_MS     = 30000UL;
+static const uint32_t CONNECT_TIMEOUT_MS   = 12000UL;
+static const uint32_t DRAIN_BATCH          = 20;     // rows per cycle
+static const uint32_t DRAIN_GAP_MS         = 50;     // pause between rows
+
+// MQTT-over-WiFi client (lazy-init when first mqtt:// slot publishes)
+static WiFiClient    s_wifi_tcp;
+static PubSubClient  s_mqtt(s_wifi_tcp);
 
 void wifi_upload_configure_slot(int idx, const char* ssid, const char* pass,
                                 const char* post_url) {
@@ -57,9 +69,7 @@ void wifi_upload_configure_slot(int idx, const char* ssid, const char* pass,
 
     char m[96];
     snprintf(m, sizeof(m), "Slot %d: ssid=%s url=%s",
-             idx,
-             s.ssid[0] ? s.ssid : "(none)",
-             s.url[0]  ? s.url  : "(none)");
+             idx, s.ssid[0] ? s.ssid : "(none)", s.url[0] ? s.url : "(none)");
     syslog("WIFI_UP", m);
 }
 
@@ -67,15 +77,20 @@ bool wifi_upload_is_connected() {
     return (WiFi.getMode() & WIFI_MODE_STA) && WiFi.status() == WL_CONNECTED;
 }
 
-int wifi_upload_active_slot() { return s_active_slot; }
-uint32_t wifi_upload_count()  { return s_uploaded; }
+int      wifi_upload_active_slot() { return s_active_slot; }
+uint32_t wifi_upload_count()       { return s_uploaded; }
 
-// Returns slot index (0/1) of strongest in-range configured SSID,
-// preferring slot 0 over slot 1 on ties. -1 if none in range.
+static bool any_slot_enabled() {
+    for (int s = 0; s < WIFI_UPLOAD_SLOTS; s++) {
+        if (s_slots[s].ssid[0]) return true;
+    }
+    return false;
+}
+
+// ── Scan + connect ─────────────────────────────────────────
 static int find_best_slot_in_range() {
     int n = WiFi.scanNetworks();   // synchronous, ~2-3 s
     if (n <= 0) return -1;
-
     int best = -1;
     int best_rssi = -127;
     for (int i = 0; i < n; i++) {
@@ -84,10 +99,8 @@ static int find_best_slot_in_range() {
         for (int s = 0; s < WIFI_UPLOAD_SLOTS; s++) {
             if (!s_slots[s].ssid[0]) continue;
             if (found != s_slots[s].ssid) continue;
-            // Priority wins absolutely (slot 0 > slot 1), then signal.
             if (best < 0 || s < best || (s == best && rssi > best_rssi)) {
-                best = s;
-                best_rssi = rssi;
+                best = s; best_rssi = rssi;
             }
         }
     }
@@ -98,7 +111,6 @@ static int find_best_slot_in_range() {
 static bool try_connect(int slot) {
     if (slot < 0 || slot >= WIFI_UPLOAD_SLOTS) return false;
     if (!s_slots[slot].ssid[0]) return false;
-
     char m[80];
     snprintf(m, sizeof(m), "Slot %d verbinden: %s", slot, s_slots[slot].ssid);
     syslog("WIFI_UP", m);
@@ -122,48 +134,185 @@ static bool try_connect(int slot) {
     return false;
 }
 
-static bool any_slot_enabled() {
-    for (int s = 0; s < WIFI_UPLOAD_SLOTS; s++) {
-        if (s_slots[s].ssid[0]) return true;
-    }
-    return false;
+// ── URL parsing ────────────────────────────────────────────
+// Returns: 0=http, 1=https, 2=mqtt, 3=mqtts, -1=unknown
+static int parse_scheme(const char* url) {
+    if (strncmp(url, "http://", 7)   == 0) return 0;
+    if (strncmp(url, "https://", 8)  == 0) return 1;
+    if (strncmp(url, "mqtt://", 7)   == 0) return 2;
+    if (strncmp(url, "mqtts://", 8)  == 0) return 3;
+    return -1;
 }
 
+// Split mqtt://host:port/topic into host, port, topic.
+// Caller provides buffers. Returns true on success.
+static bool parse_mqtt_url(const char* url, char* host, size_t host_size,
+                           uint16_t* port, char* topic, size_t topic_size) {
+    int scheme = parse_scheme(url);
+    if (scheme != 2 && scheme != 3) return false;
+    const char* p = url + (scheme == 3 ? 8 : 7);   // skip scheme
+
+    // host[:port]
+    const char* slash = strchr(p, '/');
+    if (!slash) return false;
+    size_t hostpart_len = slash - p;
+    char hostpart[96];
+    if (hostpart_len >= sizeof(hostpart)) return false;
+    memcpy(hostpart, p, hostpart_len);
+    hostpart[hostpart_len] = '\0';
+
+    char* colon = strchr(hostpart, ':');
+    if (colon) {
+        *colon = '\0';
+        *port = (uint16_t)atoi(colon + 1);
+    } else {
+        *port = (scheme == 3) ? 8883 : 1883;
+    }
+    strncpy(host, hostpart, host_size - 1);
+    host[host_size - 1] = '\0';
+
+    strncpy(topic, slash + 1, topic_size - 1);
+    topic[topic_size - 1] = '\0';
+    return host[0] && topic[0];
+}
+
+// ── HTTP POST a single encoded row ────────────────────────
+static bool http_post_payload(const char* url, const uint8_t* body, int body_len) {
+    HTTPClient http;
+    if (!http.begin(url)) return false;
+    http.addHeader("Content-Type", "application/octet-stream");
+    http.setTimeout(8000);
+    int code = http.POST((uint8_t*)body, body_len);
+    http.end();
+    return code >= 200 && code < 300;
+}
+
+// ── MQTT publish a single encoded row ─────────────────────
+static bool mqtt_publish_payload(const char* host, uint16_t port, const char* topic,
+                                 const uint8_t* body, int body_len) {
+    if (!s_mqtt.connected()) {
+        s_mqtt.setServer(host, port);
+        s_mqtt.setSocketTimeout(8);
+        char client_id[24];
+        snprintf(client_id, sizeof(client_id), "idtelem-%08x",
+                 (unsigned)((uint32_t)ESP.getEfuseMac() & 0xFFFFFFFFu));
+        if (!s_mqtt.connect(client_id)) {
+            char m[80];
+            snprintf(m, sizeof(m), "MQTT-WiFi connect failed (state=%d)", s_mqtt.state());
+            syslog("WIFI_UP", m);
+            return false;
+        }
+        char m[80]; snprintf(m, sizeof(m), "MQTT-WiFi connected: %s:%u", host, port);
+        syslog("WIFI_UP", m);
+    }
+    return s_mqtt.publish(topic, body, (unsigned int)body_len, false);
+}
+
+// ── One row through the active slot's URL ─────────────────
+static bool send_one_row(const TelemetryRow& row, const char* url) {
+    static uint8_t encbuf[128];
+    int n = payload_encode(row, encbuf, sizeof(encbuf));
+    if (n <= 0) return false;
+
+    int scheme = parse_scheme(url);
+    switch (scheme) {
+        case 0:   // http
+        case 1:   // https — Arduino HTTPClient handles both via begin(url)
+            return http_post_payload(url, encbuf, n);
+
+        case 2: { // mqtt
+            char host[96]; uint16_t port = 1883; char topic[64];
+            if (!parse_mqtt_url(url, host, sizeof(host), &port, topic, sizeof(topic))) return false;
+            return mqtt_publish_payload(host, port, topic, encbuf, n);
+        }
+
+        case 3:   // mqtts — placeholder; needs WiFiClientSecure wiring
+        default:
+            return false;
+    }
+}
+
+// ── AP guard ───────────────────────────────────────────────
+// Skip the STA cycle while someone is on the AP. Avoids the
+// AP_STA channel-hop that breaks active /config sessions.
+static bool ap_is_busy() {
+    return WiFi.softAPgetStationNum() > 0;
+}
+
+// ── Main task ──────────────────────────────────────────────
 static void wifi_upload_task(void*) {
     s_task_running = true;
+    payload_init_key();
+
     while (!g_shutdown) {
+        // Nothing configured? Idle.
         if (!any_slot_enabled()) {
-            // Nothing to do — sleep long, check again later in case user
-            // configures via Web UI without a reboot.
             vTaskDelay(pdMS_TO_TICKS(15000));
             continue;
         }
 
-        if (!wifi_upload_is_connected()) {
-            if (s_active_slot >= 0) {
-                char m[48]; snprintf(m, sizeof(m), "Slot %d getrennt", s_active_slot);
-                syslog("WIFI_UP", m);
+        // Block STA while AP has clients (race avoidance).
+        if (ap_is_busy()) {
+            if (wifi_upload_is_connected()) {
+                syslog("WIFI_UP", "AP-Client aktiv → STA pausiert");
+                WiFi.disconnect(false);
                 s_active_slot = -1;
-            }
-            // Rate-limit scans
-            uint32_t now = millis();
-            if (now - s_last_scan_ms >= SCAN_INTERVAL_MS) {
-                s_last_scan_ms = now;
-                int slot = find_best_slot_in_range();
-                if (slot >= 0) {
-                    try_connect(slot);
-                }
             }
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
 
-        // TODO: connected — drain telem_store via HTTP POST against
-        // s_slots[s_active_slot].url. See docs/algorithms.md pseudo-code.
-        // Encrypt rows with AES-256-CBC (same format as MQTT path) and
-        // increment s_uploaded on each accepted row.
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        // Reconnect cycle when not associated.
+        if (!wifi_upload_is_connected()) {
+            if (s_active_slot >= 0) {
+                char m[48]; snprintf(m, sizeof(m), "Slot %d getrennt", s_active_slot);
+                syslog("WIFI_UP", m);
+                s_active_slot = -1;
+                if (s_mqtt.connected()) s_mqtt.disconnect();
+            }
+            uint32_t now = millis();
+            if (now - s_last_scan_ms >= SCAN_INTERVAL_MS) {
+                s_last_scan_ms = now;
+                int slot = find_best_slot_in_range();
+                if (slot >= 0) try_connect(slot);
+            }
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
+
+        // Connected — drain telem_store via the active slot's URL.
+        const char* url = s_slots[s_active_slot].url;
+        if (!url[0] || parse_scheme(url) < 0) {
+            // No URL configured — nothing to send, just keep STA alive.
+            vTaskDelay(pdMS_TO_TICKS(10000));
+            continue;
+        }
+
+        uint32_t sent_this_cycle = 0;
+        TelemetryRow row;
+        while (telem_store_pending() > 0 && sent_this_cycle < DRAIN_BATCH) {
+            if (!telem_store_peek(row)) break;
+            if (!send_one_row(row, url)) break;        // backoff on error
+            telem_store_ack();
+            s_uploaded++;
+            sent_this_cycle++;
+            if (s_mqtt.connected()) s_mqtt.loop();     // service MQTT
+            vTaskDelay(pdMS_TO_TICKS(DRAIN_GAP_MS));
+            if (g_shutdown) break;
+        }
+
+        if (sent_this_cycle > 0) {
+            char m[80];
+            snprintf(m, sizeof(m), "Slot %d: %u Rows hochgeladen (total %u)",
+                     s_active_slot, (unsigned)sent_this_cycle, (unsigned)s_uploaded);
+            syslog("WIFI_UP", m);
+        }
+
+        if (s_mqtt.connected()) s_mqtt.loop();
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
+
+    if (s_mqtt.connected()) s_mqtt.disconnect();
     if (wifi_upload_is_connected()) WiFi.disconnect(true);
     s_task_running = false;
     vTaskDelete(nullptr);
@@ -171,8 +320,8 @@ static void wifi_upload_task(void*) {
 
 void wifi_upload_start_task() {
     if (s_task_running) return;
-    xTaskCreatePinnedToCore(wifi_upload_task, "WIFI_UP", 4096, nullptr, 1, nullptr, 0);
-    syslog("WIFI_UP", "Task gestartet (Slot-Scan aktiv, Upload-Loop TODO)");
+    xTaskCreatePinnedToCore(wifi_upload_task, "WIFI_UP", 6144, nullptr, 1, nullptr, 0);
+    syslog("WIFI_UP", "Task gestartet (Drain aktiv, AP-Guard ein)");
 }
 
 #endif  // FEATURE_WIFI_UPLOAD

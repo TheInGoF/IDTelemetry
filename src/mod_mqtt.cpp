@@ -10,62 +10,20 @@
 #include "mod_pmu.h"
 #include "mod_logs.h"
 #include "mod_rtc.h"
+#include "mod_payload.h"
 #include "shared.h"
 #include "config.h"
 #include "secrets.h"
 #include <Arduino.h>
 #include <esp_system.h>
-#include <aes/esp_aes.h>
+// AES + RNG includes belong to mod_payload.cpp now.
 
 // ---- Extern: TinyGsm + Serial aus mod_modem ----
 extern TinyGsm&        modem_get();
 extern HardwareSerial&  modem_serial();
 
-// ---- AES-256 Pre-Shared Key (Hex-String → 32 Bytes) ----
-static uint8_t s_aes_key[32];
-static bool    s_aes_ready = false;
-
-static uint8_t hex_nibble(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return 0;
-}
-
-static void init_aes_key() {
-    // NVS-Override (Web UI) hat Vorrang, sonst Compile-Zeit-Key aus secrets.h.
-    // 64 Hex-Chars erwartet (= 32 Bytes = 256 Bit).
-    const char* override_key = cfg_aes_key();
-    const char* hex = (override_key && strlen(override_key) >= 64) ? override_key : SECRET_AES_KEY;
-    for (int i = 0; i < 32; i++) {
-        s_aes_key[i] = (hex_nibble(hex[i*2]) << 4) | hex_nibble(hex[i*2+1]);
-    }
-    s_aes_ready = true;
-}
-
-// Binäres Protokoll: Feld-Bit-Definitionen
-enum BinField : uint32_t {
-    BF_LAT       = (1 << 0),
-    BF_LON       = (1 << 1),
-    BF_HEADING   = (1 << 2),
-    BF_SOC       = (1 << 3),
-    BF_VOLTAGE   = (1 << 4),
-    BF_CURRENT   = (1 << 5),
-    BF_POWER     = (1 << 6),
-    BF_SPEED     = (1 << 7),
-    BF_CHARGING  = (1 << 8),   // Bool — kein Payload
-    BF_DCFC      = (1 << 9),   // Bool — kein Payload
-    BF_BATT_TEMP = (1 << 10),
-    BF_EXT_TEMP  = (1 << 11),
-    BF_RANGE     = (1 << 12),
-    BF_CAPACITY  = (1 << 13),
-    BF_KWH       = (1 << 14),
-    BF_PARKED    = (1 << 15),  // Bool — kein Payload
-    BF_ODOMETER  = (1 << 16),
-    BF_LTE_SIG   = (1 << 17),
-    BF_BATT_DEV  = (1 << 18),
-    BF_LTE_PLMN  = (1 << 19),  // numerisches PLMN als uint16 (z.B. 26201=Telekom DE)
-};
+// AES + binary build + BF_* enum live in mod_payload.h/.cpp now
+// (shared with mod_wifi_upload). See payload_encode().
 
 // ---- Zustand ----
 static bool     s_configured   = false;
@@ -93,7 +51,7 @@ static bool mqtt_at_ok(const char* cmd, long timeout_ms = 5000L) {
 
 // ---- Konfiguration ----
 void mqtt_configure() {
-    if (!s_aes_ready) init_aes_key();
+    payload_init_key();
 
     TinyGsm& m = modem_get();
     char cmd[160];
@@ -216,16 +174,9 @@ bool mqtt_is_connected() {
     return s_connected;
 }
 
-// ---- Little-Endian Schreibhilfen ----
-static inline void put_u8 (uint8_t* p, uint8_t  v) { p[0]=v; }
-static inline void put_i8 (uint8_t* p, int8_t   v) { p[0]=(uint8_t)v; }
-static inline void put_u16(uint8_t* p, uint16_t v) { p[0]=v&0xFF; p[1]=(v>>8)&0xFF; }
-static inline void put_i16(uint8_t* p, int16_t  v) { put_u16(p,(uint16_t)v); }
-static inline void put_u32(uint8_t* p, uint32_t v) { p[0]=v&0xFF; p[1]=(v>>8)&0xFF; p[2]=(v>>16)&0xFF; p[3]=(v>>24)&0xFF; }
-static inline void put_i32(uint8_t* p, int32_t  v) { put_u32(p,(uint32_t)v); }
+// put_*, build_binary, encrypt_payload moved to mod_payload.cpp.
 
-// ---- Binäre Payload bauen (Klartext, vor Verschlüsselung) ----
-// Gibt Länge der Plaintext-Daten zurück (field_mask + ts + Felder).
+#if 0  // build_binary / encrypt_payload moved to mod_payload.cpp
 static int build_binary(const TelemetryRow& row, uint8_t* buf, int buf_size) {
     if (buf_size < 8) return 0;
 
@@ -398,6 +349,7 @@ static int encrypt_payload(const uint8_t* plain, int plain_len,
     if (ret != 0) return 0;
     return total;
 }
+#endif  // legacy build_binary / encrypt_payload (now in mod_payload.cpp)
 
 // ---- Publish einer Zeile ----
 bool mqtt_publish_row(const TelemetryRow& row) {
@@ -406,13 +358,9 @@ bool mqtt_publish_row(const TelemetryRow& row) {
     TinyGsm& m = modem_get();
     HardwareSerial& ser = modem_serial();
 
-    // Binär packen → AES verschlüsseln
-    static uint8_t plain[128];
-    int plain_len = build_binary(row, plain, sizeof(plain));
-    if (plain_len <= 0) return false;
-
+    // Binär packen + AES verschlüsseln (shared mit WiFi-Upload via mod_payload)
     static uint8_t payload[192];   // 1 + 16 + max 128 padded
-    int plen = encrypt_payload(plain, plain_len, payload, sizeof(payload));
+    int plen = payload_encode(row, payload, sizeof(payload));
     if (plen <= 0) return false;
 
     // Topic
@@ -453,18 +401,7 @@ bool mqtt_publish_row(const TelemetryRow& row) {
     s_last_pub_ok = true;
     s_last_pub_ms = millis();
     s_pub_count++;
-
-    // Debug: welche Felder sind in der Payload (erste 4 Bytes plain = mask)
-    uint32_t mask = plain[0] | (plain[1] << 8) | (plain[2] << 16) | (plain[3] << 24);
-    Serial.printf("[MQTT] → %s (%d B enc, %d B plain) mask=0x%06lX #%u %s%s%s%s%s%s\n",
-        topic, plen, plain_len, (unsigned long)mask, s_pub_count,
-        (mask & BF_SOC)      ? "SoC "  : "",
-        (mask & BF_SPEED)    ? "Spd "  : "",
-        (mask & BF_VOLTAGE)  ? "V "    : "",
-        (mask & BF_LTE_SIG)  ? "LTE "  : "",
-        (mask & BF_LTE_PLMN) ? "LP "   : "",
-        (mask & BF_BATT_DEV) ? "Batt " : "");
-
+    Serial.printf("[MQTT] → %s (%d B enc) #%u\n", topic, plen, s_pub_count);
     return true;
 }
 
