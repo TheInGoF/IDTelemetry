@@ -47,7 +47,8 @@ void   log_ble_clear();
 // ---- System Log -------------------------------------------
 
 #define SPIFFS_SYS_LOG    "/sys.log"
-#define SPIFFS_SYS_LOG_KB 1024
+#define SPIFFS_SYS_LOG_KB 768   // Worst-Case: sys+scan+elm+ble+telem_q+HTML ~1.7MB von 2.0MB
+                                // → unter 85% Belegung damit SPIFFS-GC nicht einbricht.
 
 void        syslog(const char* category, const char* msg);
 const char* syslog_timestr();
