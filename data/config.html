@@ -70,7 +70,10 @@
       </div>
       <div class="field">
         <div class="lbl" data-i18n="cfg.wifi_pass">Passwort</div>
-        <input type="password" id="ap_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
+        <div style="display:flex;gap:6px">
+          <input type="password" id="ap_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password" style="flex:1">
+          <button type="button" class="btn" style="font-size:12px;padding:4px 10px" onclick="togglePw('ap_pass', this)" title="show / hide">&#128065;</button>
+        </div>
       </div>
     </div>
     <div class="hint warn" data-i18n="cfg.wifi_hint">&#9888; AP-Name und Passwort werden erst nach Neustart aktiv.</div>
@@ -81,7 +84,10 @@
   <div class="card">
     <div class="field">
       <div class="lbl" data-i18n="cfg.sim_pin">SIM PIN</div>
-      <input type="password" id="sim_pin" placeholder="&#8226;&#8226;&#8226;&#8226;" maxlength="8" autocomplete="off">
+      <div style="display:flex;gap:6px">
+        <input type="password" id="sim_pin" placeholder="&#8226;&#8226;&#8226;&#8226;" maxlength="8" autocomplete="off" style="flex:1">
+        <button type="button" class="btn" style="font-size:12px;padding:4px 10px" onclick="togglePw('sim_pin', this)" title="show / hide">&#128065;</button>
+      </div>
       <div class="hint" data-i18n="cfg.sim_pin_hint">4-8 Ziffern. Leer lassen wenn kein PIN n&#246;tig. Nach 3 Fehlversuchen wird die SIM mit PUK gesperrt!</div>
     </div>
     <div class="row2">
@@ -96,7 +102,10 @@
     </div>
     <div class="field">
       <div class="lbl" data-i18n="cfg.apn_pass">APN Passwort</div>
-      <input type="password" id="apn_pass" data-i18n-ph="cfg.apn_ph" placeholder="(leer lassen wenn nicht n&#246;tig)" autocomplete="new-password">
+      <div style="display:flex;gap:6px">
+        <input type="password" id="apn_pass" data-i18n-ph="cfg.apn_ph" placeholder="(leer lassen wenn nicht n&#246;tig)" autocomplete="new-password" style="flex:1">
+        <button type="button" class="btn" style="font-size:12px;padding:4px 10px" onclick="togglePw('apn_pass', this)" title="show / hide">&#128065;</button>
+      </div>
     </div>
     <div class="hint warn" data-i18n="cfg.apn_hint">&#9888; SIM PIN und APN-&#196;nderungen werden erst nach Neustart vom Modem &#252;bernommen.</div>
   </div>
@@ -121,7 +130,10 @@
       </div>
       <div class="field">
         <div class="lbl" data-i18n="cfg.mq_pass_label">Passwort</div>
-        <input type="password" id="mq_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
+        <div style="display:flex;gap:6px">
+          <input type="password" id="mq_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password" style="flex:1">
+          <button type="button" class="btn" style="font-size:12px;padding:4px 10px" onclick="togglePw('mq_pass', this)" title="show / hide">&#128065;</button>
+        </div>
       </div>
     </div>
     <div class="field">
