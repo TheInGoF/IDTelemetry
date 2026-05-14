@@ -130,64 +130,73 @@
     </div>
     <div class="hint" data-i18n="cfg.mq_hint">Publishes auf {prefix}/data. Port 8883 aktiviert TLS automatisch.</div>
     <div class="field" style="margin-top:10px">
-      <div class="lbl">AES-256 Key (64 hex chars)</div>
-      <input type="password" id="aes_key" placeholder="(leer = secrets.h Default)" autocomplete="new-password">
+      <div class="lbl" data-i18n="cfg.aes_label">AES-256 Key (64 hex chars)</div>
+      <div style="display:flex;gap:6px">
+        <input type="password" id="aes_key" placeholder="(leer = secrets.h Default)" autocomplete="new-password" style="flex:1">
+        <button type="button" class="btn" style="font-size:12px;padding:4px 10px" onclick="togglePw('aes_key', this)" title="show / hide">&#128065;</button>
+      </div>
     </div>
-    <div class="hint">Optional: &#252;berschreibt den im Firmware-Binary eingebauten Schl&#252;ssel. Leer lassen f&#252;r Default aus <code>secrets.h</code>.</div>
+    <div class="hint" data-i18n="cfg.aes_hint">Optional: &#252;berschreibt den im Firmware-Binary eingebauten Schl&#252;ssel. Leer lassen f&#252;r Default aus <code>secrets.h</code>.</div>
   </div>
 
   <!-- WiFi Upload (STA, two priority slots) -->
-  <div class="section-title">WiFi Upload (STA)</div>
+  <div class="section-title" data-i18n="cfg.sta_title">WiFi Upload (STA)</div>
   <div class="card">
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px" data-i18n="cfg.sta_intro">
       Zwei Slots in Priorit&#228;tsreihenfolge. Stick scannt periodisch und verbindet sich
       mit dem ersten Slot, dessen SSID in Reichweite ist. Slot 1 schl&#228;gt Slot 2 bei
       Gleichstand. Leere SSID = Slot deaktiviert.
     </div>
 
-    <div style="font-size:12px;font-weight:600;margin:8px 0 4px">Slot 1 (z.B. Heim-WiFi)</div>
+    <div style="font-size:12px;font-weight:600;margin:8px 0 4px" data-i18n="cfg.sta_slot1_label">Slot 1 (z.B. Heim-WiFi)</div>
     <div class="field">
-      <div class="lbl">SSID</div>
+      <div class="lbl" data-i18n="cfg.sta_ssid_label">SSID</div>
       <input type="text" id="sta_ssid" placeholder="(leer = Slot aus)">
     </div>
     <div class="field">
-      <div class="lbl">Password</div>
-      <input type="password" id="sta_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
+      <div class="lbl" data-i18n="cfg.sta_pass_label">Password</div>
+      <div style="display:flex;gap:6px">
+        <input type="password" id="sta_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password" style="flex:1">
+        <button type="button" class="btn" style="font-size:12px;padding:4px 10px" onclick="togglePw('sta_pass', this)" title="show / hide">&#128065;</button>
+      </div>
     </div>
     <div class="field">
-      <div class="lbl">Upload URL</div>
+      <div class="lbl" data-i18n="cfg.sta_url_label">Upload URL</div>
       <input type="text" id="upload_url" placeholder="https://idmate.example.com/api/ingest">
     </div>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
       <button type="button" class="btn" style="font-size:10px;padding:4px 10px"
-              onclick="fillMqttUrl('upload_url')">&#8635; Use MQTT settings</button>
+              onclick="fillMqttUrl('upload_url')" data-i18n="cfg.sta_use_mqtt">&#8635; Use MQTT settings</button>
       <button type="button" class="btn" style="font-size:10px;padding:4px 10px"
-              onclick="testWifi(0)">&#9889; Test Slot 1</button>
+              onclick="testWifi(0)" data-i18n="cfg.sta_test1">&#9889; Test Slot 1</button>
       <span id="wifi-test-0" style="font-size:10px;color:var(--muted);align-self:center"></span>
     </div>
 
-    <div style="font-size:12px;font-weight:600;margin:14px 0 4px">Slot 2 (z.B. Handy-Hotspot)</div>
+    <div style="font-size:12px;font-weight:600;margin:14px 0 4px" data-i18n="cfg.sta_slot2_label">Slot 2 (z.B. Handy-Hotspot)</div>
     <div class="field">
-      <div class="lbl">SSID</div>
+      <div class="lbl" data-i18n="cfg.sta_ssid_label">SSID</div>
       <input type="text" id="sta_ssid_2" placeholder="(leer = Slot aus)">
     </div>
     <div class="field">
-      <div class="lbl">Password</div>
-      <input type="password" id="sta_pass_2" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
+      <div class="lbl" data-i18n="cfg.sta_pass_label">Password</div>
+      <div style="display:flex;gap:6px">
+        <input type="password" id="sta_pass_2" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password" style="flex:1">
+        <button type="button" class="btn" style="font-size:12px;padding:4px 10px" onclick="togglePw('sta_pass_2', this)" title="show / hide">&#128065;</button>
+      </div>
     </div>
     <div class="field">
-      <div class="lbl">Upload URL</div>
+      <div class="lbl" data-i18n="cfg.sta_url_label">Upload URL</div>
       <input type="text" id="upload_url_2" placeholder="https://idmate.example.com/api/ingest">
     </div>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
       <button type="button" class="btn" style="font-size:10px;padding:4px 10px"
-              onclick="fillMqttUrl('upload_url_2')">&#8635; Use MQTT settings</button>
+              onclick="fillMqttUrl('upload_url_2')" data-i18n="cfg.sta_use_mqtt">&#8635; Use MQTT settings</button>
       <button type="button" class="btn" style="font-size:10px;padding:4px 10px"
-              onclick="testWifi(1)">&#9889; Test Slot 2</button>
+              onclick="testWifi(1)" data-i18n="cfg.sta_test2">&#9889; Test Slot 2</button>
       <span id="wifi-test-1" style="font-size:10px;color:var(--muted);align-self:center"></span>
     </div>
 
-    <div class="hint" style="margin-top:10px">
+    <div class="hint" style="margin-top:10px" data-i18n-html="cfg.sta_hint">
       URL-Schema: <code>http(s)://host/path</code> oder <code>mqtt(s)://host:port/topic</code>.<br>
       „Use MQTT settings" f&#252;llt die URL aus den MQTT-Broker-Feldern oben — gleicher Broker wie LTE, gleicher Server-Decoder.<br>
       Full-Variante: WiFi-Upload l&#228;uft parallel zum LTE-MQTT-Pfad als Absicherung.
@@ -206,30 +215,30 @@
   </div>
 
   <!-- GPS Quelle + Module -->
-  <div class="section-title">GPS-Quelle &amp; Module</div>
+  <div class="section-title" data-i18n="cfg.gps_title">GPS-Quelle &amp; Module</div>
   <div class="card">
-    <div style="font-size:12px;font-weight:600;margin-bottom:6px">GPS source</div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px" data-i18n="cfg.gps_source">GPS source</div>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
       <input type="radio" name="gps_src" id="gps_src_ext" value="ext" style="accent-color:var(--accent)">
-      <span style="font-size:12px">External GNSS (BLITZ Mini M10, UART) &mdash; <em>recommended</em></span>
+      <span style="font-size:12px" data-i18n-html="cfg.gps_ext">External GNSS (BLITZ Mini M10, UART) &mdash; <em>recommended</em></span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
       <input type="radio" name="gps_src" id="gps_src_int" value="int" style="accent-color:var(--accent)">
-      <span style="font-size:12px">Internal GNSS (SIM7080G) &mdash; full variant only</span>
+      <span style="font-size:12px" data-i18n="cfg.gps_int">Internal GNSS (SIM7080G) &mdash; full variant only</span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
       <input type="radio" name="gps_src" id="gps_src_off" value="off" style="accent-color:var(--accent)">
-      <span style="font-size:12px">Off</span>
+      <span style="font-size:12px" data-i18n="cfg.gps_off">Off</span>
     </label>
-    <div class="hint" style="margin-bottom:12px">
+    <div class="hint" style="margin-bottom:12px" data-i18n="cfg.gps_hint">
       External M10 is preferred &mdash; it keeps a fix while LTE runs (shared radio limits in SIM7080G internal GNSS).
       Lite variant must use external (no internal GNSS available).
     </div>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
       <input type="checkbox" id="mod_compass" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px">Compass (QMC5883L on BLITZ M10)</span>
+      <span style="font-size:12px" data-i18n="cfg.compass_label">Compass (QMC5883L on BLITZ M10)</span>
     </label>
-    <div class="hint">Compass on I2C Wire0 (GPIO45/21). Disable if not fitted.</div>
+    <div class="hint" data-i18n="cfg.compass_hint">Compass on I2C Wire0 (GPIO45/21). Disable if not fitted.</div>
   </div>
 
   <!-- SPIFFS Logs -->

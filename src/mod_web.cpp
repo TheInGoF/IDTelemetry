@@ -32,6 +32,8 @@ extern const uint8_t style_css_start[]   asm("_binary_data_style_css_start");
 extern const uint8_t style_css_end[]     asm("_binary_data_style_css_end");
 extern const uint8_t de_json_start[]     asm("_binary_data_lang_de_json_start");
 extern const uint8_t de_json_end[]       asm("_binary_data_lang_de_json_end");
+extern const uint8_t en_json_start[]     asm("_binary_data_lang_en_json_start");
+extern const uint8_t en_json_end[]       asm("_binary_data_lang_en_json_end");
 
 static void send_embedded(AsyncWebServerRequest* r, const uint8_t* start,
                           const uint8_t* end, const char* mime, bool html = false) {
@@ -96,20 +98,26 @@ void web_init() {
             "<body style=\"font-family:-apple-system,sans-serif;max-width:480px;"
             "margin:0 auto;padding:2em 1em;color:#1F2328\">"
             "<h2 style=\"text-align:center\">IDTelemetry</h2>"
-            "<p style=\"text-align:center;color:#57606a\">First time here? Set up your "
-            "WiFi upload + backend so telemetry flows.</p>"
+
+            "<p style=\"text-align:center;color:#57606a\">"
+            "<strong>EN:</strong> First time here? Set up WiFi upload + backend so telemetry flows.<br>"
+            "<strong>DE:</strong> Erstes Mal hier? Richte WiFi-Upload + Backend ein, damit Telemetrie fließt."
+            "</p>"
+
             "<p style=\"text-align:center;margin:1.5em 0\">"
             "<a href=\"http://192.168.4.1/config\" "
             "style=\"display:inline-block;padding:.7em 1.4em;background:#0969da;color:#fff;"
-            "text-decoration:none;border-radius:6px;font-weight:600\">Open Setup</a></p>"
-            "<ul style=\"font-size:14px;color:#57606a;line-height:1.6;padding-left:1.2em\">"
-            "<li><strong>WiFi Upload (STA)</strong> — home WiFi + endpoint URL</li>"
-            "<li><strong>MQTT Broker</strong> — host, port, topic, AES key</li>"
-            "<li><strong>SIM / APN</strong> — only for the LTE-M variant</li>"
+            "text-decoration:none;border-radius:6px;font-weight:600\">Open Setup · Einrichten</a></p>"
+
+            "<ul style=\"font-size:13px;color:#57606a;line-height:1.6;padding-left:1.2em\">"
+            "<li><strong>WiFi Upload (STA)</strong> — home WiFi + endpoint URL / Heim-WLAN + Endpoint-URL</li>"
+            "<li><strong>MQTT Broker</strong> — host, port, topic, AES key / Host, Port, Topic, AES-Key</li>"
+            "<li><strong>SIM / APN</strong> — LTE-M variant only / nur LTE-M-Variante</li>"
             "</ul>"
+
             "<p style=\"text-align:center;margin-top:1.5em\">"
             "<a href=\"http://192.168.4.1/daten\" "
-            "style=\"color:#0969da\">→ Skip to live dashboard</a></p>"
+            "style=\"color:#0969da\">→ Skip to live dashboard / Direkt zum Dashboard</a></p>"
             "</body></html>");
     };
     server.on("/hotspot-detect.html",          HTTP_GET, captive_landing);  // iOS
@@ -397,6 +405,9 @@ void ble_web_routes_init() {
     });
     server.on("/lang/de.json", HTTP_GET, [](AsyncWebServerRequest* r) {
         send_embedded(r, de_json_start, de_json_end, "application/json");
+    });
+    server.on("/lang/en.json", HTTP_GET, [](AsyncWebServerRequest* r) {
+        send_embedded(r, en_json_start, en_json_end, "application/json");
     });
 
     // Silence browser favicon requests instead of 500 from missing handler.

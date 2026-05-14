@@ -55,6 +55,15 @@ function setBatt(v, chg, vbus) {
   }
 }
 
+// ── Password show / hide toggle ──────────────────────────
+function togglePw(id, btn) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var hidden = el.type === 'password';
+  el.type = hidden ? 'text' : 'password';
+  if (btn) btn.textContent = hidden ? '\u{1F648}' : '\u{1F441}';
+}
+
 // ── Toast ────────────────────────────────────────────────
 function toast(msg, ok) {
   if (ok === undefined) ok = true;
