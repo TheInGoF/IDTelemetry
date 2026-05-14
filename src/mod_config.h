@@ -48,6 +48,11 @@ const char* cfg_mqtt_topic();    // Topic-Prefix (z.B. "tele/id7")
 // key without re-flashing.
 const char* cfg_aes_key();
 
+// WiFi-Upload (STA) — for FEATURE_WIFI_UPLOAD path
+const char* cfg_sta_ssid();
+const char* cfg_sta_pass();
+const char* cfg_upload_url();    // HTTP(S) endpoint that receives the rows
+
 // BLE Standby-Defaults (ABRP bekommt Werte auch ohne CAN)
 bool        cfg_ble_standby();
 

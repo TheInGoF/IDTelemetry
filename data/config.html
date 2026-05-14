@@ -129,6 +129,33 @@
       <input type="text" id="mq_topic" placeholder="tele/vw_nox">
     </div>
     <div class="hint" data-i18n="cfg.mq_hint">Publishes auf {prefix}/data. Port 8883 aktiviert TLS automatisch.</div>
+    <div class="field" style="margin-top:10px">
+      <div class="lbl">AES-256 Key (64 hex chars)</div>
+      <input type="password" id="aes_key" placeholder="(leer = secrets.h Default)" autocomplete="new-password">
+    </div>
+    <div class="hint">Optional: &#252;berschreibt den im Firmware-Binary eingebauten Schl&#252;ssel. Leer lassen f&#252;r Default aus <code>secrets.h</code>.</div>
+  </div>
+
+  <!-- WiFi Upload (STA, secondary path) -->
+  <div class="section-title">WiFi Upload (STA)</div>
+  <div class="card">
+    <div class="field">
+      <div class="lbl">Home WiFi SSID</div>
+      <input type="text" id="sta_ssid" placeholder="(leer = WiFi-Upload aus)">
+    </div>
+    <div class="field">
+      <div class="lbl">Home WiFi Password</div>
+      <input type="password" id="sta_pass" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <div class="lbl">Upload URL</div>
+      <input type="text" id="upload_url" placeholder="https://idmate.example.com/api/ingest">
+    </div>
+    <div class="hint">
+      Secondary upload path: bei verbundener Heim-WiFi werden Rows zus&#228;tzlich
+      (Full-Variante) oder ausschlie&#223;lich (Lite-Variante) per HTTP POST an die
+      angegebene URL gesendet. Empty SSID disables uploader.
+    </div>
   </div>
 
   <!-- BLE Standby -->
@@ -241,6 +268,10 @@ async function loadConfig(){
     document.getElementById('mq_user').value   = d.mq_user  || '';
     document.getElementById('mq_pass').value   = d.mq_pass  || '';
     document.getElementById('mq_topic').value  = d.mq_topic || '';
+    document.getElementById('aes_key').value   = d.aes_key  || '';
+    document.getElementById('sta_ssid').value  = d.sta_ssid || '';
+    document.getElementById('sta_pass').value  = d.sta_pass || '';
+    document.getElementById('upload_url').value= d.upload_url || '';
     document.getElementById('ble_standby').checked = d.ble_standby !== false;
     document.getElementById('mod_gps').checked     = d.mod_gps !== false;
     document.getElementById('mod_compass').checked = d.mod_compass === true;
@@ -270,6 +301,10 @@ async function saveConfig(){
     mq_user:   document.getElementById('mq_user').value.trim(),
     mq_pass:   document.getElementById('mq_pass').value,
     mq_topic:  document.getElementById('mq_topic').value.trim(),
+    aes_key:   document.getElementById('aes_key').value.trim(),
+    sta_ssid:  document.getElementById('sta_ssid').value.trim(),
+    sta_pass:  document.getElementById('sta_pass').value,
+    upload_url:document.getElementById('upload_url').value.trim(),
     ble_standby:  document.getElementById('ble_standby').checked,
     mod_gps:      document.getElementById('mod_gps').checked,
     mod_compass:  document.getElementById('mod_compass').checked,

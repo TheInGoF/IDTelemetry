@@ -30,6 +30,11 @@ static char s_mq_topic [64]  = SECRET_MQTT_TOPIC;
 // rebuilding firmware. Kept opt-in: if NVS is empty, the secrets.h key
 // continues to be used, so existing sticks are not disturbed.
 static char s_aes_key  [128] = "";
+// WiFi STA + upload endpoint — for FEATURE_WIFI_UPLOAD path. Empty SSID
+// disables the uploader. Used by mod_wifi_upload, settable via Web UI.
+static char s_sta_ssid   [64] = "";
+static char s_sta_pass   [64] = "";
+static char s_upload_url[128] = "";
 static bool s_ble_standby     = false;  // Default: aus
 static bool s_mod_gps         = true;   // Default: GPS vorhanden
 static bool s_log_can         = LOG_CAN_ENABLED_DEFAULT;
@@ -66,6 +71,9 @@ void cfg_init() {
     pref_load(p, "mq_pass",  s_mq_pass,  sizeof(s_mq_pass),  SECRET_MQTT_PASS);
     pref_load(p, "mq_topic", s_mq_topic, sizeof(s_mq_topic), SECRET_MQTT_TOPIC);
     pref_load(p, "aes_key",  s_aes_key,  sizeof(s_aes_key),  "");
+    pref_load(p, "sta_ssid",  s_sta_ssid,  sizeof(s_sta_ssid),   "");
+    pref_load(p, "sta_pass",  s_sta_pass,  sizeof(s_sta_pass),   "");
+    pref_load(p, "upload_url",s_upload_url,sizeof(s_upload_url), "");
     s_ble_standby = p.getBool("ble_stdby", false);
     s_mod_gps     = p.getBool("mod_gps",     true);
     s_log_can     = p.getBool("log_can", LOG_CAN_ENABLED_DEFAULT);
@@ -98,6 +106,9 @@ const char* cfg_mqtt_user()    { return s_mq_user; }
 const char* cfg_mqtt_pass()    { return s_mq_pass; }
 const char* cfg_mqtt_topic()   { return s_mq_topic; }
 const char* cfg_aes_key()      { return s_aes_key; }
+const char* cfg_sta_ssid()     { return s_sta_ssid; }
+const char* cfg_sta_pass()     { return s_sta_pass; }
+const char* cfg_upload_url()   { return s_upload_url; }
 bool        cfg_ble_standby()  { return s_ble_standby; }
 bool        cfg_mod_gps()      { return s_mod_gps; }
 bool        cfg_log_can()      { return s_log_can; }
@@ -139,6 +150,9 @@ bool cfg_save_json(const uint8_t* body, size_t len) {
     save("mq_pass",   s_mq_pass,  sizeof(s_mq_pass),  doc["mq_pass"]);
     save("mq_topic",  s_mq_topic, sizeof(s_mq_topic), doc["mq_topic"]);
     save("aes_key",   s_aes_key,  sizeof(s_aes_key),  doc["aes_key"]);
+    save("sta_ssid",   s_sta_ssid,   sizeof(s_sta_ssid),   doc["sta_ssid"]);
+    save("sta_pass",   s_sta_pass,   sizeof(s_sta_pass),   doc["sta_pass"]);
+    save("upload_url", s_upload_url, sizeof(s_upload_url), doc["upload_url"]);
     if (!doc["mq_port"].isNull()) {
         s_mq_port = doc["mq_port"].as<uint16_t>();
         p.putUShort("mq_port", s_mq_port);
@@ -192,6 +206,9 @@ const char* cfg_to_json() {
     doc["mq_pass"]      = s_mq_pass;
     doc["mq_topic"]     = s_mq_topic;
     doc["aes_key"]      = s_aes_key;
+    doc["sta_ssid"]     = s_sta_ssid;
+    doc["sta_pass"]     = s_sta_pass;
+    doc["upload_url"]   = s_upload_url;
     doc["ble_standby"]  = s_ble_standby;
     doc["mod_gps"]      = s_mod_gps;
     doc["log_can"]      = s_log_can;

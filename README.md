@@ -89,41 +89,83 @@ The device opens a WiFi Access Point:
 - Password: `IDTelemetry1`
 - URL: `http://192.168.4.1`
 
-Three pages: **Data** (live telemetry table), **Debug** (gyro graph, compass, CAN tools, logs) and **Config** (WiFi, SIM/APN, MQTT, OTA firmware update).
+Three pages:
+
+- **Data** — live telemetry table
+- **Debug** — gyro graph, compass, CAN tools, syslog viewer
+- **Config** — AP credentials, SIM / APN (full variant only), MQTT broker + AES key, **WiFi Upload (STA)** SSID / password / endpoint URL, BLE behaviour, SPIFFS logging toggles, OTA firmware update
+
+The Config page is the single source of runtime configuration — everything that used to live in `secrets.h` can be edited here and is persisted in NVS.
 
 ## Installation Guide
 
+The setup has two main paths:
+
+- **End-user path** (Web Flasher + Config page) — needs only a USB cable and a phone or laptop. No source code, no toolchain. See [Step 1](#step-1--flash-the-firmware) below.
+- **Developer path** (clone + PlatformIO) — for building from source or modifying. Jump to [Building from source](#building-from-source).
+
 ### Bill of Materials
 
-| Part | Description | approx. Price |
-| ---- | ----------- | ------------- |
-| LILYGO T-SIM7080G-S3 | ESP32-S3 board with LTE-M/NB-IoT modem | ~35 € |
-| SN65HVD230 CAN Transceiver | 3.3 V CAN bus module | ~3 € |
-| OBD2 plug with cable | 16-pin OBD2 connector (pin 6 + 14 for CAN) | ~5 € |
-| BLITZ Mini M10 | u-blox M10 GNSS + QMC5883L compass (UART) | ~40 € |
-| DS1307 RTC module | Real-time clock (I2C) with coin cell | ~2 € |
-| MPU-6050 breakout | Accelerometer / gyroscope (I2C) | ~3 € |
-| LTE-M SIM card | e.g. ThingsMobile (prepaid, no contract) | ~15 € |
-| USB-C cable | For flashing and power | — |
+| Variant | Part | Description | approx. Price |
+| ------- | ---- | ----------- | ------------- |
+| both | OBD2 plug + cable | 16-pin OBD2 connector (pin 6 + 14 for CAN, pin 16 for 12 V) | ~5 € |
+| both | SN65HVD230 CAN transceiver | 3.3 V CAN bus module | ~3 € |
+| both | DS1307 RTC module | Real-time clock (I2C) with coin cell | ~2 € |
+| both | MPU-6050 breakout | Accelerometer / gyroscope (I2C) | ~3 € |
+| both | USB-C cable | For flashing and power | — |
+| full | LILYGO T-SIM7080G-S3 | ESP32-S3 board with LTE-M/NB-IoT modem, AXP2101 PMU, Li-Po | ~35 € |
+| full | BLITZ Mini M10 | u-blox M10 GNSS + QMC5883L compass (UART) — recommended | ~40 € |
+| full | LTE-M SIM card | e.g. ThingsMobile (prepaid, no contract) | ~15 € |
+| lite | ESP32-S3-DevKitC-1 (N16R8) | Plain ESP32-S3 board, 16 MB flash, 8 MB PSRAM | ~12 € |
 
-### Step 1 — Install Toolchain
+### Step 1 — Flash the firmware
 
-1. Install [VSCode](https://code.visualstudio.com)
-2. Install the **PlatformIO IDE** extension in VSCode
-3. Clone this repo or download it as a ZIP
+> 💡 The easiest path is the **Web Flasher** — no toolchain, no IDE. If that's not available for your release yet, see [Building from source](#building-from-source) further down.
 
-### Step 2 — Add Credentials
+Open the [Web Flasher](https://theingof.github.io/IDTelemetry-dev/flasher/) in Chrome or Edge, plug the stick in via USB, click **Install** on the matching variant (`Full` for LILYGO T-SIM7080G-S3, `Lite` for plain ESP32-S3).
+
+### Step 2 — Connect to the stick AP
+
+Right after flashing the stick spans up its own WiFi:
+
+- SSID: `IDTelemetry`
+- Password: `IDTelemetry1`
+
+iOS / Android pop up a captive-portal sheet with a **Setup** button — click it. Otherwise open <http://192.168.4.1> in any browser.
+
+### Step 3 — Configure backends in the Web UI
+
+Everything you used to put into `secrets.h` lives in the Config page now, persisted in NVS. Fill in whatever applies to your setup:
+
+| Section | Fields | When to fill |
+| ------- | ------ | ------------ |
+| **WiFi Upload (STA)** | Home WiFi SSID + password, Upload URL | Always if you want a WiFi upload path (mandatory for the lite variant, optional secondary for full) |
+| **MQTT Broker** | Host, port, topic, AES-256 key | Full variant — primary upload path over LTE-M |
+| **MQTT Broker → AES-256 Key** | 64 hex chars | Overrides the compile-time key from `secrets.h`. Leave blank to keep the built-in default. |
+| **SIM / APN** | PIN, APN, user, pass | Full variant only |
+| **WiFi Access Point** | AP SSID + password | Optional — only if you want the stick to advertise a different AP than the default |
+
+Click **Save**. APN and AP credentials require a restart to take effect; the rest is live.
+
+### Step 4 — Verify
+
+- **Data page** shows live telemetry once CAN is up and the car is awake.
+- **Debug page** shows the syslog stream — look for `MQTT Verbunden`, `STA verbunden`, or `LTE: RSRP=…` lines to confirm each upload path.
+- ABRP / Torque can pair to BLE `OBDII`.
+
+---
+
+## Building from source
+
+If you want to modify the firmware or run a development build, follow this section instead of Step 1.
+
+### Add credentials
 
 ```bash
 cp src/secrets.h.example src/secrets.h
 ```
 
-Open `src/secrets.h` and fill in:
-
-- **APN** of your mobile carrier (e.g. `TM` for ThingsMobile)
-- **Traccar** host + device ID (if you want GPS tracking)
-- **InfluxDB** host, org, bucket, token (if you want telemetry dashboards)
-- **Guard SSID** of the car's hotspot (e.g. `"My VW 1747"`)
+`secrets.h` provides the *compile-time defaults* for everything that can be overridden via the Web UI. You only have to fill it in if you intend to flash a pre-configured stick (a single fleet of sticks that all use the same MQTT broker, AES key, etc.). For one-off setups, leave the defaults and configure everything via Step 3 above.
 
 > ⚠️ **Generating tokens, keys and secrets**
 >
@@ -137,7 +179,7 @@ Open `src/secrets.h` and fill in:
 >
 > The MQTT AES key in `secrets.h` **must match** the `MQTT_AES_KEY` configured on the [IDMate](https://github.com/TheInGoF/IDMate) server side.
 
-### Step 3 — Wiring
+### Wiring
 
 ```text
 LILYGO T-SIM7080G-S3          External Modules
@@ -174,41 +216,23 @@ Insert a nano-SIM card into the slot on the bottom of the LILYGO board.
 
 **Note:** The MPU-6050 AD0 pin must be pulled to 3.3 V so it uses I2C address `0x69` (avoiding collision with the DS1307 at `0x68`). The BLITZ M10 is powered by the PMU DC5 rail (3.3 V).
 
-### Step 4 — Flash Firmware
-
-Three ways to get the firmware onto the stick — pick whatever fits.
-
-**A) Web Flasher (easiest, no toolchain).**
-Once a release is published, open the [GitHub Pages flasher site](https://theingof.github.io/IDTelemetry-dev/flasher/) in Chrome or Edge, plug the stick in via USB and click **Install**. WebSerial talks directly to the board, no software to install. Source under [`docs/flasher/`](docs/flasher/).
-
-**B) Pre-built binaries + `esptool.py`.**
-Grab the `.bin` files from the [latest release](https://github.com/TheInGoF/IDTelemetry-dev/releases) and flash them with:
+### Build and flash from PlatformIO
 
 ```bash
-esptool.py --chip esp32s3 --port /dev/ttyACM0 write_flash \
-  0x0     idtelemetry-full-1.2.0.bootloader.bin \
-  0x8000  idtelemetry-full-1.2.0.partitions.bin \
-  0x10000 idtelemetry-full-1.2.0.bin
+# Install toolchain
+# - VSCode + PlatformIO IDE extension, OR
+# - just `pio` from `pip install platformio`
+
+# Build + upload the full variant (LILYGO T-SIM7080G-S3)
+pio run -e s3_full --target upload
+pio run -e s3_full --target uploadfs    # only on first flash, initialises SPIFFS
+
+# Or the lite variant (plain ESP32-S3)
+pio run -e s3_lite --target upload
+pio run -e s3_lite --target uploadfs    # only on first flash
 ```
 
-**C) Build from source (development).**
-Connect via USB-C, then in VSCode/PlatformIO:
-
-1. **Upload** — flashes the firmware (Web UI HTMLs are embedded inside the binary)
-2. **Upload Filesystem Image** — only required on first flash or after partition-table changes (initializes the SPIFFS partition for logs)
-
-Or via terminal:
-
-```bash
-pio run -e s3_full --target upload     # flash firmware (full / LILYGO variant)
-pio run -e s3_full --target uploadfs   # initialise SPIFFS (first flash only)
-```
-
-### Step 5 — Connect
-
-1. Connect to the **IDTelemetry** WiFi (password: `IDTelemetry1`)
-2. Open `http://192.168.4.1` in your browser
-3. Configure WiFi Guard, thresholds and backend credentials on the Config page
+Pre-built binaries from the [Releases page](https://github.com/TheInGoF/IDTelemetry-dev/releases) can also be flashed directly with `esptool.py` — see [`docs/flasher/README.md`](docs/flasher/README.md) for the byte-offset table that ESP Web Tools uses.
 
 ## GPIO Reference
 

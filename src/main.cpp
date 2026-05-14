@@ -43,6 +43,7 @@
 #include "mod_mqtt.h"
 #include "mod_sleep.h"
 #include "mod_telemetry.h"
+#include "mod_wifi_upload.h"
 #include "mod_config.h"
 #include <NimBLEDevice.h>
 
@@ -241,6 +242,11 @@ void setup() {
 
     telem_restore_from_spiffs();  // Phase 3: Daten aus Deep Sleep laden (jetzt mit korrekter RTC)
     telem_start_task();  // FreeRTOS: GPS/Gyro/LTE 10s, PMU 60s
+
+    // WiFi upload — secondary path. configure() with empty SSID is a no-op,
+    // so this stays inert until the user fills in the Config page.
+    wifi_upload_configure(cfg_sta_ssid(), cfg_sta_pass(), cfg_upload_url());
+    wifi_upload_start_task();
 
     // 3. AP hochfahren
     delay(2000);
