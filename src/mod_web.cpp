@@ -14,12 +14,29 @@
 #include <SPIFFS.h>
 #include <Update.h>
 
-// SPIFFS-Datei senden + alle Status-Header
-static void send_html(AsyncWebServerRequest* r, const char* path) {
-    auto* resp = r->beginResponse(SPIFFS, path, "text/html");
-    if (!resp) { r->send(500, "text/plain", "ERR"); return; }
+// SPIFFS-Datei einmalig in String laden (unter spiffs_lock) und als Response liefern.
+// Verhindert den lazy-read Race von r->send(SPIFFS,...) gegen syslog/telem-Queue.
+static void send_file(AsyncWebServerRequest* r, const char* path, const char* mime) {
+    String body;
+    if (!spiffs_lock(1000) || !SPIFFS.exists(path)) {
+        if (spiffs_lock(0)) spiffs_unlock();
+        r->send(503, "text/plain", "busy");
+        return;
+    }
+    File f = SPIFFS.open(path, "r");
+    if (f) {
+        body.reserve(f.size());
+        while (f.available()) body += (char)f.read();
+        f.close();
+    }
+    spiffs_unlock();
+    auto* resp = r->beginResponse(200, mime, body);
     headers_apply(resp);
     r->send(resp);
+}
+
+static void send_html(AsyncWebServerRequest* r, const char* path) {
+    send_file(r, path, "text/html");
 }
 
 static void on_ws_event(AsyncWebSocket*, AsyncWebSocketClient* c,
@@ -311,7 +328,13 @@ void web_ap_update() {
     // Hatte Client, ist jetzt weg → AP bleibt an (Seitenwechsel, kurze Pause)
     if (s_had_client) return;
 
-    // Nie ein Client → 2-min-Timeout prüfen
+    // Solange VBUS da ist: AP an lassen. Das Abschalten via softAPdisconnect()
+    // ist ein IPC-Call auf Core 0 (ipc0-Task) und kann unter TELEM-Last
+    // mit anderen ipc0-Operationen kollidieren — bisheriger PANIC-Trigger
+    // waehrend Fahrt nach 2 min Boot ohne Client-Verbindung.
+    if (vbus) return;
+
+    // Kein VBUS, kein Client → 2-min-Timeout prüfen
     if ((millis() - s_ap_start_ms) >= AP_TIMEOUT_MS) {
         web_ap_stop();
     }
@@ -322,19 +345,19 @@ void ble_web_routes_init() {
     server.on("/config", HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/config.html"); });
     server.on("/daten",  HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/daten.html");  });
 
-    // Shared Assets
+    // Shared Assets — unter spiffs_lock laden, lazy-read von r->send(SPIFFS,...) racet gegen syslog
     server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest* r) {
-        r->send(SPIFFS, "/style.css", "text/css");
+        send_file(r, "/style.css", "text/css");
     });
     server.on("/common.js", HTTP_GET, [](AsyncWebServerRequest* r) {
-        r->send(SPIFFS, "/common.js", "application/javascript");
+        send_file(r, "/common.js", "application/javascript");
     });
-
-    // i18n — Sprachdateien
     server.on("/i18n.js", HTTP_GET, [](AsyncWebServerRequest* r) {
-        r->send(SPIFFS, "/i18n.js", "application/javascript");
+        send_file(r, "/i18n.js", "application/javascript");
     });
-    server.serveStatic("/lang/", SPIFFS, "/lang/");
+    server.on("/lang/de.json", HTTP_GET, [](AsyncWebServerRequest* r) {
+        send_file(r, "/lang/de.json", "application/json");
+    });
 
     // /api/telemetry — alle Telemetrie-Felder mit Wert + Alter
     server.on("/api/telemetry", HTTP_GET, [](AsyncWebServerRequest* r) {
@@ -497,21 +520,39 @@ void ble_web_routes_init() {
         r->send(200, "application/json", out);
     });
 
-    server.on("/download-sys-log", HTTP_GET, [](AsyncWebServerRequest* r) {
-        if (SPIFFS.exists("/sys.log")) r->send(SPIFFS, "/sys.log", "text/plain");
-        else r->send(200, "text/plain", "# Sys Log leer");
+    // Logs koennen gross werden (bis 1MB) — nicht in Heap laden.
+    // Snapshot via Rename: andere Tasks schreiben dann auf neue Datei,
+    // Async-Read der Snapshot-Datei kollidiert nicht mehr mit Writern.
+    auto snapshot_and_send = [](AsyncWebServerRequest* r, const char* path, const char* snap) {
+        if (!spiffs_lock(1000)) { r->send(503, "text/plain", "busy"); return; }
+        if (SPIFFS.exists(snap)) SPIFFS.remove(snap);
+        bool have = SPIFFS.exists(path) && SPIFFS.rename(path, snap);
+        spiffs_unlock();
+        if (!have) { r->send(200, "text/plain", "# leer\n"); return; }
+        r->send(SPIFFS, snap, "text/plain");
+    };
+
+    server.on("/download-sys-log", HTTP_GET, [snapshot_and_send](AsyncWebServerRequest* r) {
+        snapshot_and_send(r, "/sys.log", "/sys.log.snap");
     });
     server.on("/clear-sys-log", HTTP_POST, [](AsyncWebServerRequest* r) {
-        if (SPIFFS.exists("/sys.log")) SPIFFS.remove("/sys.log");
+        if (spiffs_lock(500)) {
+            if (SPIFFS.exists("/sys.log"))      SPIFFS.remove("/sys.log");
+            if (SPIFFS.exists("/sys.log.snap")) SPIFFS.remove("/sys.log.snap");
+            spiffs_unlock();
+        }
         r->send(200, "application/json", "{\"ok\":true}");
     });
 
-    server.on("/download-elm-log", HTTP_GET, [](AsyncWebServerRequest* r) {
-        if (SPIFFS.exists("/elm.log")) r->send(SPIFFS, "/elm.log", "text/plain");
-        else r->send(200, "text/plain", "# ELM Log leer\n");
+    server.on("/download-elm-log", HTTP_GET, [snapshot_and_send](AsyncWebServerRequest* r) {
+        snapshot_and_send(r, "/elm.log", "/elm.log.snap");
     });
     server.on("/clear-elm-log", HTTP_POST, [](AsyncWebServerRequest* r) {
-        if (SPIFFS.exists("/elm.log")) SPIFFS.remove("/elm.log");
+        if (spiffs_lock(500)) {
+            if (SPIFFS.exists("/elm.log"))      SPIFFS.remove("/elm.log");
+            if (SPIFFS.exists("/elm.log.snap")) SPIFFS.remove("/elm.log.snap");
+            spiffs_unlock();
+        }
         r->send(200, "application/json", "{\"ok\":true}");
     });
 

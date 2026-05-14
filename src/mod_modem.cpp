@@ -925,6 +925,12 @@ static void modem_task(void* /*param*/) {
                                     if (s_wd_reboot_count == 0 && epoch > 0) s_wd_first_reboot_epoch = epoch;
                                     s_wd_reboot_count++;
                                     Serial.flush();
+                                    // Graceful: spiffs_lock holen + Shutdown-Signal
+                                    // verhindert dass esp_restart() mitten in
+                                    // einem spiffs_q_append-Rename zuschlaegt
+                                    // → korrupte Queue-Datei beim naechsten Boot.
+                                    g_shutdown = true;
+                                    if (spiffs_lock(2000)) spiffs_unlock();
                                     delay(200);
                                     esp_restart();
                                 }
@@ -1015,8 +1021,11 @@ static void modem_task(void* /*param*/) {
                         }
                     }
 
-                    // Ausstehende Zeilen sofort publishen
-                    if (mqtt_is_connected() && telem_get_row_pending() > 0) {
+                    // Ausstehende Zeilen sofort publishen — aber NICHT in den ersten 15s
+                    // nach Boot: bei Backlog (z.B. nach Eskalations-Reboot mit 100+ Rows)
+                    // wuerde der Burst parallel zur laufenden Modul-Init laufen und
+                    // ipc0/Spinlocks unter Last setzen → bisheriger PANIC-Trigger.
+                    if (mqtt_is_connected() && telem_get_row_pending() > 0 && millis() > 15000UL) {
                         TelemetryRow row;
                         int sent = 0;
                         while (telem_get_row_pending() > 0 && sent < 10) {

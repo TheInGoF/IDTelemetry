@@ -60,6 +60,10 @@ static inline bool plausible(float v, float lo, float hi) {
 static TelemetryPoint  s_cache[TELEM_FIELD_COUNT];   // letzter Wert pro Feld
 static uint32_t        s_last_sent[TELEM_FIELD_COUNT]; // letzter Sendezeitpunkt (SPIFFS-Persistenz)
 static SemaphoreHandle_t s_mutex = NULL;
+// Serialisiert row_try_capture: TELEM-Task und MODEM-Task (telem_force_capture)
+// koennen sonst gleichzeitig s_cap_lat/lon/ms, s_yaw_peak, s_curve_cooldown_ms
+// lesen+schreiben. Sichtbare Folge bisher: '9999m' Distanz-Trigger im Log.
+static SemaphoreHandle_t s_capture_mtx = NULL;
 
 static char  s_operator_str[32] = "";
 static bool  s_influx_ok        = false;
@@ -287,7 +291,11 @@ static float bearing_deg(double lat1, double lon1, double lat2, double lon2) {
 // Sequentielle Prüfung: Distanz → Yaw-Peak → Zeit (first-match wins).
 // s_yaw_peak wird im 1s-Loop akkumuliert und hier zurückgesetzt.
 static void row_try_capture() {
-    if (!gps_valid()) { s_yaw_peak = 0.0f; return; }
+    // Serialisierung: TELEM-Task und MODEM-Task (via telem_force_capture)
+    // duerfen nie gleichzeitig hier reinlaufen — sonst Race auf
+    // s_cap_lat/lon/ms, s_yaw_peak, s_curve_cooldown_ms.
+    if (!s_capture_mtx || xSemaphoreTake(s_capture_mtx, pdMS_TO_TICKS(100)) != pdTRUE) return;
+    if (!gps_valid()) { s_yaw_peak = 0.0f; xSemaphoreGive(s_capture_mtx); return; }
 
     double   lat     = gps_lat();
     double   lon     = gps_lon();
@@ -309,6 +317,7 @@ static void row_try_capture() {
                 "GPS-Glitch verworfen: %.0fm in %lums (max %.0fm)",
                 dist, (unsigned long)elapsed, max_m);
             syslog("TELEM", m);
+            xSemaphoreGive(s_capture_mtx);
             return;
         }
     }
@@ -340,14 +349,14 @@ static void row_try_capture() {
     // Peak zurücksetzen
     s_yaw_peak = 0.0f;
 
-    if (!do_capture) return;
+    if (!do_capture) { xSemaphoreGive(s_capture_mtx); return; }
 
     // RTC-Zeitstempel erforderlich (InfluxDB braucht gültigen Timestamp)
     uint64_t unix_s = rtc_unix_ms() / 1000ULL;
-    if (unix_s == 0) return;
+    if (unix_s == 0) { xSemaphoreGive(s_capture_mtx); return; }
 
     // ── Zeile unter Mutex in Ringpuffer schreiben ──────────
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) { xSemaphoreGive(s_capture_mtx); return; }
 
     TelemetryRow row;
     row.unix_s  = (uint32_t)unix_s;
@@ -411,6 +420,7 @@ static void row_try_capture() {
                  reason, dist, (unsigned long)(elapsed / 1000UL), s_row_pending);
         syslog("TELEM", _msg);
     }
+    xSemaphoreGive(s_capture_mtx);
 }
 
 // ── Erzwungener Capture (Fahrtende / extern) ─────────────────
@@ -677,6 +687,7 @@ static void telem_task(void* /*param*/) {
 
 void telem_init() {
     s_mutex = xSemaphoreCreateMutex();
+    if (!s_capture_mtx) s_capture_mtx = xSemaphoreCreateMutex();
     memset(s_cache,    0, sizeof(s_cache));
     memset(s_last_sent, 0, sizeof(s_last_sent));
     // Zeilen-Ringpuffer in PSRAM allokieren (spart ~57 KB internes RAM)
