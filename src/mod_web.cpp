@@ -14,29 +14,29 @@
 #include <SPIFFS.h>
 #include <Update.h>
 
-// SPIFFS-Datei einmalig in String laden (unter spiffs_lock) und als Response liefern.
-// Verhindert den lazy-read Race von r->send(SPIFFS,...) gegen syslog/telem-Queue.
-static void send_file(AsyncWebServerRequest* r, const char* path, const char* mime) {
-    String body;
-    if (!spiffs_lock(1000) || !SPIFFS.exists(path)) {
-        if (spiffs_lock(0)) spiffs_unlock();
-        r->send(503, "text/plain", "busy");
-        return;
-    }
-    File f = SPIFFS.open(path, "r");
-    if (f) {
-        body.reserve(f.size());
-        while (f.available()) body += (char)f.read();
-        f.close();
-    }
-    spiffs_unlock();
-    auto* resp = r->beginResponse(200, mime, body);
-    headers_apply(resp);
-    r->send(resp);
-}
+// ── Eingebettete Web-Assets ─────────────────────────────────
+// Linker-Symbole von board_build.embed_txtfiles in platformio.ini.
+// Liegen im App-Binary (Flash), nicht in SPIFFS → ueberleben SPIFFS-Korruption.
+extern const uint8_t debug_html_start[]  asm("_binary_data_debug_html_start");
+extern const uint8_t debug_html_end[]    asm("_binary_data_debug_html_end");
+extern const uint8_t config_html_start[] asm("_binary_data_config_html_start");
+extern const uint8_t config_html_end[]   asm("_binary_data_config_html_end");
+extern const uint8_t daten_html_start[]  asm("_binary_data_daten_html_start");
+extern const uint8_t daten_html_end[]    asm("_binary_data_daten_html_end");
+extern const uint8_t common_js_start[]   asm("_binary_data_common_js_start");
+extern const uint8_t common_js_end[]     asm("_binary_data_common_js_end");
+extern const uint8_t i18n_js_start[]     asm("_binary_data_i18n_js_start");
+extern const uint8_t i18n_js_end[]       asm("_binary_data_i18n_js_end");
+extern const uint8_t style_css_start[]   asm("_binary_data_style_css_start");
+extern const uint8_t style_css_end[]     asm("_binary_data_style_css_end");
+extern const uint8_t de_json_start[]     asm("_binary_data_lang_de_json_start");
+extern const uint8_t de_json_end[]       asm("_binary_data_lang_de_json_end");
 
-static void send_html(AsyncWebServerRequest* r, const char* path) {
-    send_file(r, path, "text/html");
+static void send_embedded(AsyncWebServerRequest* r, const uint8_t* start,
+                          const uint8_t* end, const char* mime, bool html = false) {
+    auto* resp = r->beginResponse_P(200, mime, start, (size_t)(end - start));
+    if (html) headers_apply(resp);
+    r->send(resp);
 }
 
 static void on_ws_event(AsyncWebSocket*, AsyncWebSocketClient* c,
@@ -341,22 +341,29 @@ void web_ap_update() {
 }
 
 void ble_web_routes_init() {
-    server.on("/debug",  HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/debug.html");  });
-    server.on("/config", HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/config.html"); });
-    server.on("/daten",  HTTP_GET, [](AsyncWebServerRequest* r) { send_html(r, "/daten.html");  });
+    // HTMLs aus eingebettetem Flash — kein SPIFFS-Zugriff, kein Race, immer da.
+    server.on("/debug",  HTTP_GET, [](AsyncWebServerRequest* r) {
+        send_embedded(r, debug_html_start,  debug_html_end,  "text/html", true);
+    });
+    server.on("/config", HTTP_GET, [](AsyncWebServerRequest* r) {
+        send_embedded(r, config_html_start, config_html_end, "text/html", true);
+    });
+    server.on("/daten",  HTTP_GET, [](AsyncWebServerRequest* r) {
+        send_embedded(r, daten_html_start,  daten_html_end,  "text/html", true);
+    });
 
-    // Shared Assets — unter spiffs_lock laden, lazy-read von r->send(SPIFFS,...) racet gegen syslog
+    // Shared Assets — ebenfalls aus dem Binary
     server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest* r) {
-        send_file(r, "/style.css", "text/css");
+        send_embedded(r, style_css_start, style_css_end, "text/css");
     });
     server.on("/common.js", HTTP_GET, [](AsyncWebServerRequest* r) {
-        send_file(r, "/common.js", "application/javascript");
+        send_embedded(r, common_js_start, common_js_end, "application/javascript");
     });
     server.on("/i18n.js", HTTP_GET, [](AsyncWebServerRequest* r) {
-        send_file(r, "/i18n.js", "application/javascript");
+        send_embedded(r, i18n_js_start, i18n_js_end, "application/javascript");
     });
     server.on("/lang/de.json", HTTP_GET, [](AsyncWebServerRequest* r) {
-        send_file(r, "/lang/de.json", "application/json");
+        send_embedded(r, de_json_start, de_json_end, "application/json");
     });
 
     // /api/telemetry — alle Telemetrie-Felder mit Wert + Alter

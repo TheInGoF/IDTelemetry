@@ -1,6 +1,8 @@
 # Name,   Type, SubType, Offset,   Size,     Flags
+# 16MB Flash Layout — Coredump nach vorn, SPIFFS bekommt fast den ganzen Rest.
+# HTMLs sind embedded ins App-Binary, SPIFFS ist reine Daten/Log-Partition.
 nvs,      data, nvs,     0x9000,   0x5000,
 otadata,  data, ota,     0xe000,   0x2000,
-app0,     app,  ota_0,   0x10000,  0x1C0000,
-spiffs,   data, spiffs,  0x1D0000, 0x230000,
-coredump, data, coredump,0x400000, 0x10000,
+app0,     app,  ota_0,   0x10000,  0x200000,
+coredump, data, coredump,0x210000, 0x10000,
+spiffs,   data, spiffs,  0x220000, 0xDD0000,
