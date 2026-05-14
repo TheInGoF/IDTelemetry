@@ -1,4 +1,5 @@
 #include "mod_telemetry.h"
+#include "mod_telem_store.h"
 #include "mod_sleep.h"
 #include "shared.h"
 #include "mod_modem.h"
@@ -409,7 +410,7 @@ static void row_try_capture() {
     xSemaphoreGive(s_mutex);
 
     // Crash-sicher auf SPIFFS schreiben — überlebt Reboot/Crash
-    spiffs_q_append(row);
+    telem_store_append(row);
 
     s_cap_lat = lat;
     s_cap_lon = lon;
@@ -707,7 +708,7 @@ void telem_init() {
         s_cache[i].valid = false;
     }
     s_influx_ok = false;
-    spiffs_q_init();  // SPIFFS-Queue: pending Rows aus vorherigem Lauf laden
+    telem_store_init();  // Raw-Partition Ring-Buffer: 5 MB, ~40k Rows ausfallsicher
     syslog("TELEM", "init OK");
 }
 
@@ -755,10 +756,10 @@ uint16_t telem_get_buf_pending() {
 }
 
 uint16_t telem_get_row_pending() {
-    // SPIFFS-Queue hat Vorrang (crash-safe, überlebt Reboot)
-    uint16_t sq = spiffs_q_pending();
-    if (sq > 0) return sq;
-    // Fallback: RAM-Ringpuffer (für Rows die noch nicht auf SPIFFS sind)
+    // Raw-Partition hat Vorrang (crash-safe, ueberlebt Reboot, 5 MB Pufferung)
+    uint32_t sq = telem_store_pending();
+    if (sq > 0) return (uint16_t)(sq > 65535 ? 65535 : sq);
+    // Fallback: RAM-Ringpuffer (theoretisch nicht erreicht — store wird immer geschrieben)
     uint16_t n = 0;
     if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         n = s_row_pending;
@@ -866,9 +867,9 @@ void telem_send_influx() {
 
 // ── MQTT: älteste ungesendete Zeile lesen (ohne entfernen) ──
 bool telem_peek_row(TelemetryRow& out) {
-    // SPIFFS-Queue hat Vorrang
-    if (spiffs_q_pending() > 0) {
-        return spiffs_q_peek(out);
+    // Raw-Partition hat Vorrang
+    if (telem_store_pending() > 0) {
+        return telem_store_peek(out);
     }
     // Fallback: RAM-Ringpuffer
     if (!s_mutex) return false;
@@ -884,9 +885,9 @@ bool telem_peek_row(TelemetryRow& out) {
 
 // ── MQTT: älteste Zeile als gesendet bestätigen ─────────────
 void telem_ack_row() {
-    // SPIFFS-Queue hat Vorrang
-    if (spiffs_q_pending() > 0) {
-        spiffs_q_ack();
+    // Raw-Partition hat Vorrang
+    if (telem_store_pending() > 0) {
+        telem_store_ack();
         // RAM-Ringpuffer parallel vorrücken (Row ist in beiden)
         if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             if (s_row_pending > 0) {

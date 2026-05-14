@@ -1,8 +1,12 @@
 # Name,   Type, SubType, Offset,   Size,     Flags
-# 16MB Flash Layout — Coredump nach vorn, SPIFFS bekommt fast den ganzen Rest.
-# HTMLs sind embedded ins App-Binary, SPIFFS ist reine Daten/Log-Partition.
+# 16MB Flash Layout
+# - app0      2 MB     Firmware (HTMLs embedded)
+# - coredump  64 KB    Crash dump
+# - telem     5 MB     Raw partition fuer Telemetrie-Rows (kein FS)
+# - spiffs    8.875 MB Reine Daten/Log-Partition
 nvs,      data, nvs,     0x9000,   0x5000,
 otadata,  data, ota,     0xe000,   0x2000,
 app0,     app,  ota_0,   0x10000,  0x200000,
 coredump, data, coredump,0x210000, 0x10000,
-spiffs,   data, spiffs,  0x220000, 0xDD0000,
+telem,    data, 0x40,    0x220000, 0x500000,
+spiffs,   data, spiffs,  0x720000, 0x8E0000,
