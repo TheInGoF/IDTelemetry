@@ -243,9 +243,11 @@ void setup() {
     telem_restore_from_spiffs();  // Phase 3: Daten aus Deep Sleep laden (jetzt mit korrekter RTC)
     telem_start_task();  // FreeRTOS: GPS/Gyro/LTE 10s, PMU 60s
 
-    // WiFi upload — secondary path. configure() with empty SSID is a no-op,
-    // so this stays inert until the user fills in the Config page.
-    wifi_upload_configure(cfg_sta_ssid(), cfg_sta_pass(), cfg_upload_url());
+    // WiFi upload — two priority slots (e.g. home WiFi + phone hotspot).
+    // Empty SSID disables a slot. Stick scans + joins whichever is in range,
+    // slot 0 preferred over slot 1 on ties.
+    wifi_upload_configure_slot(0, cfg_sta_ssid(),   cfg_sta_pass(),   cfg_upload_url());
+    wifi_upload_configure_slot(1, cfg_sta_ssid_2(), cfg_sta_pass_2(), cfg_upload_url_2());
     wifi_upload_start_task();
 
     // 3. AP hochfahren

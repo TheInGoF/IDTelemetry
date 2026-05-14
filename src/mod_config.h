@@ -48,10 +48,14 @@ const char* cfg_mqtt_topic();    // Topic-Prefix (z.B. "tele/id7")
 // key without re-flashing.
 const char* cfg_aes_key();
 
-// WiFi-Upload (STA) — for FEATURE_WIFI_UPLOAD path
-const char* cfg_sta_ssid();
+// WiFi-Upload (STA) — two priority slots (e.g. home WiFi + phone hotspot).
+// mod_wifi_upload joins whichever slot's SSID is in range; slot 1 wins ties.
+const char* cfg_sta_ssid();        // slot 1
 const char* cfg_sta_pass();
-const char* cfg_upload_url();    // HTTP(S) endpoint that receives the rows
+const char* cfg_upload_url();      // HTTP(S) endpoint for slot 1
+const char* cfg_sta_ssid_2();      // slot 2
+const char* cfg_sta_pass_2();
+const char* cfg_upload_url_2();    // HTTP(S) endpoint for slot 2
 
 // BLE Standby-Defaults (ABRP bekommt Werte auch ohne CAN)
 bool        cfg_ble_standby();
