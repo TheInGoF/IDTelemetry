@@ -294,6 +294,8 @@ void loop() {
                     modem_print_gps_info();
                 } else if (strcmp(serial_buf, "lte") == 0) {
                     modem_print_lte_info();
+                } else if (strcmp(serial_buf, "lte sig") == 0) {
+                    modem_print_lte_sig();
                 } else if (strcmp(serial_buf, "lte scan") == 0) {
                     modem_print_lte_scan();
                 } else if (strcmp(serial_buf, "lte bands") == 0) {

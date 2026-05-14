@@ -43,6 +43,7 @@ int  modem_gps_usat();     // Gesamt verwendet
 // Serial-Befehle: Info-Ausgabe auf Terminal
 void modem_print_gps_info();   // "gps"       → GPS-Status
 void modem_print_lte_info();   // "lte"       → LTE-Status (schnell)
+void modem_print_lte_sig();    // "lte sig"   → CPSI Signal/Zell-Info (nicht-destruktiv)
 void modem_print_lte_scan();   // "lte scan"  → Netzwerk-Scan (bis 3 Min!)
 void modem_print_lte_bands();  // "lte bands"     → Band-Konfiguration anzeigen
 void modem_lte_bands_fix(bool all); // "lte bands fix/all" → Baender setzen + Radio-Neustart

@@ -346,6 +346,77 @@ static RegStatus wait_for_reg(uint32_t wait_s) {
     return reg_s;
 }
 
+// ── AT+CPSI? — UE-System-Info (nicht-destruktiv, liest nur aktuelle Zelle) ──
+// Erwartetes Format LTE CAT-M:
+//   +CPSI: LTE CAT-M1,Online,MCC-MNC,TAC,SCellID,PCellID,EUTRAN-BANDx,EARFCN,
+//          dlbw,ulbw,RSRQ,RSRP,RSSI,RSSNR
+// Bei NO SERVICE: kuerzer ("+CPSI: NO SERVICE,Online" o.ae.).
+// Schreibt eine kompakte Log-Zeile via syslog (oder Serial bei verbose=true).
+// Reine Read-Operation, kein Side-Effect auf Registrierung.
+static void cpsi_query_log(bool verbose) {
+    s_modem.sendAT("+CPSI?");
+    String resp;
+    if (s_modem.waitResponse(2000L, resp) != 1) {
+        if (verbose) Serial.println("[LTE] CPSI: keine Antwort");
+        return;
+    }
+    int p = resp.indexOf("+CPSI:");
+    if (p < 0) {
+        if (verbose) Serial.printf("[LTE] CPSI: unerwartet: %s\n", resp.c_str());
+        return;
+    }
+    String line = resp.substring(p + 6);  // nach "+CPSI:"
+    // bis Zeilenende oder OK
+    int eol = line.indexOf('\r');
+    if (eol < 0) eol = line.indexOf('\n');
+    if (eol > 0) line = line.substring(0, eol);
+    line.trim();
+
+    if (verbose) Serial.printf("[LTE] CPSI raw: %s\n", line.c_str());
+
+    // Felder kommagetrennt zaehlen
+    int field_count = 1;
+    for (int i = 0; i < (int)line.length(); i++) if (line[i] == ',') field_count++;
+
+    if (field_count < 4) {
+        // "NO SERVICE" oder aehnlich
+        char m[64];
+        snprintf(m, sizeof(m), "CPSI: %s", line.c_str());
+        if (verbose) Serial.println(m); else syslog("LTE", m);
+        return;
+    }
+
+    // Felder extrahieren
+    auto field = [&](int n) -> String {
+        int start = 0, idx = 0;
+        for (int i = 0; i < (int)line.length(); i++) {
+            if (line[i] == ',') {
+                if (idx == n) return line.substring(start, i);
+                idx++;
+                start = i + 1;
+            }
+        }
+        if (idx == n) return line.substring(start);
+        return "";
+    };
+
+    String sysmode = field(0);    // "LTE CAT-M1" / "LTE NB-IOT"
+    String plmn    = field(2);    // "262-01"
+    String band    = field(6);    // "EUTRAN-BAND8"
+    String s_rsrq  = field(10);
+    String s_rsrp  = field(11);
+    String s_rssi  = field(12);
+    String s_snr   = field(13);
+
+    char m[128];
+    snprintf(m, sizeof(m),
+        "%s · %s · %s · RSRP=%sdBm RSRQ=%sdB RSSI=%sdBm SNR=%s",
+        sysmode.c_str(), plmn.c_str(), band.c_str(),
+        s_rsrp.c_str(), s_rsrq.c_str(), s_rssi.c_str(), s_snr.c_str());
+
+    if (verbose) Serial.println(m); else syslog("LTE", m);
+}
+
 // Aktuelles PLMN numerisch abfragen
 static void get_current_plmn(char* plmn_out, size_t size) {
     plmn_out[0] = '\0';
@@ -1054,6 +1125,14 @@ static void modem_task(void* /*param*/) {
                         s_sig_ms = now;
                         s_sig_quality = (int8_t)s_modem.getSignalQuality();
                     }
+
+                    // CPSI: alle 60s detaillierte Zell-/Signalinfo ins syslog.
+                    // Reine Read-Operation, beeinflusst Registrierung nicht.
+                    static uint32_t s_cpsi_ms = 0;
+                    if (s_sim_ok && (now - s_cpsi_ms) >= 60000UL) {
+                        s_cpsi_ms = now;
+                        cpsi_query_log(false);
+                    }
                 }
                 #endif // LTE_DISABLED
 
@@ -1468,8 +1547,13 @@ void modem_print_lte_info() {
         Serial.printf("│ Registr.:   %s\n", reg_str);
     }
 
-    Serial.println("│ → 'lte scan' für Netzwerk-Scan");
+    Serial.println("│ → 'lte sig'  für RSRP/RSRQ/Band");
+    Serial.println("│ → 'lte scan' für Netzwerk-Scan (destruktiv!)");
     Serial.println("└──────────────────────────────────────┘");
+}
+
+void modem_print_lte_sig() {
+    cpsi_query_log(true);
 }
 
 void modem_print_lte_scan() {
