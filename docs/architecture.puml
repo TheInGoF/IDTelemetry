@@ -21,6 +21,8 @@ package "IDTelemetry Stick" #FFFFFF {
     [I2C Wire1\nGPIO15/7] as I2C1
     [BLE NimBLE] as BLE
     [WiFi AP] as AP
+    database "Telemetry Store\n5 MB Raw Partition\n~40k Rows" as STORE
+    database "SPIFFS\n8.8 MB / Logs" as FS
   }
 
   [SN65HVD230\nCAN Transceiver] as TRX
@@ -53,6 +55,8 @@ PMU -- BAT
 PMU -- SIM : DC rails
 PMU -- M10 : DC5
 
+CAN --> STORE : Telemetrie-Rows
+STORE ..> SIM : Publish
 SIM ..> MQTT : LTE-M\nAES-256-CBC
 MQTT --> DB
 DB --> GRAF

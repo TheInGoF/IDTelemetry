@@ -10,6 +10,7 @@ Born out of frustration: the VW ID.7 shows you almost nothing about what's happe
 
 - Reads battery, drivetrain and climate data from the CAN bus (UDS/ISO-TP)
 - Pushes telemetry to **InfluxDB** over LTE-M for Grafana dashboards
+- Buffers **~40,000 rows (~5,000 km)** in a dedicated 5 MB Flash partition — survives reboots, crashes and long radio dead zones
 - Tracks location via **Traccar** (OsmAnd protocol)
 - Emulates a **BLE ELM327** so ABRP sees the car natively
 - Runs a **WiFi AP with a full Web-UI** for live data, config and debugging
@@ -19,7 +20,20 @@ Born out of frustration: the VW ID.7 shows you almost nothing about what's happe
 
 ![System Architecture](docs/architecture.png)
 
-The stick reads CAN data via UDS, pushes encrypted telemetry over LTE-M MQTT, exposes a BLE ELM327 emulation for ABRP, and serves a local Web-UI on its WiFi AP. Sources are in [docs/](docs/) (`*.puml`, render with `plantuml`).
+The stick reads CAN data via UDS, persists every telemetry row to a dedicated 5 MB raw Flash partition (~40,000 rows ≈ 5,000 km offline buffer), pushes encrypted telemetry over LTE-M MQTT, exposes a BLE ELM327 emulation for ABRP, and serves a local Web-UI on its WiFi AP. Sources are in [docs/](docs/) (`*.puml`, render with `plantuml`).
+
+### Storage Layout
+
+The 16 MB Flash is split into:
+
+| Partition | Size | Purpose |
+| --------- | ---- | ------- |
+| app0 | 2 MB | Firmware (Web-UI HTMLs are embedded inside) |
+| coredump | 64 KB | Crash dumps for post-mortem |
+| telem | 5 MB | Raw ring buffer for telemetry rows (no filesystem — atomic per-slot status byte) |
+| spiffs | 8.8 MB | Runtime logs only |
+
+HTMLs live inside the firmware binary, not in SPIFFS — they cannot be corrupted by log writes or filesystem issues. The telemetry ring buffer is crash-safe by design: each row is committed via a single status-byte flip, so a power loss mid-write loses at most one row.
 
 ### Modem Watchdog
 
@@ -157,14 +171,14 @@ Insert a nano-SIM card into the slot on the bottom of the LILYGO board.
 
 Connect the board via USB-C, then in VSCode/PlatformIO:
 
-1. **Upload Filesystem Image** — uploads the Web UI to SPIFFS (only needed once, or after HTML changes)
-2. **Upload** — flashes the firmware
+1. **Upload** — flashes the firmware (Web UI HTMLs are embedded inside the binary)
+2. **Upload Filesystem Image** — only required on first flash or after partition-table changes (initializes the SPIFFS partition for logs)
 
 Or via terminal:
 
 ```bash
-pio run --target uploadfs   # upload Web UI
-pio run --target upload      # flash firmware
+pio run --target upload      # flash firmware (includes embedded Web UI)
+pio run --target uploadfs    # initialise SPIFFS (first flash only)
 ```
 
 ### Step 5 — Connect
