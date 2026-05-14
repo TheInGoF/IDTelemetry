@@ -35,7 +35,13 @@ extern const uint8_t de_json_end[]       asm("_binary_data_lang_de_json_end");
 
 static void send_embedded(AsyncWebServerRequest* r, const uint8_t* start,
                           const uint8_t* end, const char* mime, bool html = false) {
-    auto* resp = r->beginResponse_P(200, mime, start, (size_t)(end - start));
+    // EMBED_TXTFILES (ESP-IDF) appends a NUL terminator that's included in the
+    // (end - start) span. Strip it — JS / JSON parsers reject the trailing \0
+    // ("Invalid or unexpected token"), HTML mostly tolerates it but it's still
+    // wrong content-length. Be defensive: strip any trailing NULs.
+    size_t len = (size_t)(end - start);
+    while (len > 0 && start[len - 1] == 0) len--;
+    auto* resp = r->beginResponse_P(200, mime, start, len);
     if (html) headers_apply(resp);
     r->send(resp);
 }
@@ -391,6 +397,11 @@ void ble_web_routes_init() {
     });
     server.on("/lang/de.json", HTTP_GET, [](AsyncWebServerRequest* r) {
         send_embedded(r, de_json_start, de_json_end, "application/json");
+    });
+
+    // Silence browser favicon requests instead of 500 from missing handler.
+    server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* r) {
+        r->send(204);
     });
 
     // /api/telemetry — alle Telemetrie-Felder mit Wert + Alter
