@@ -40,6 +40,11 @@ int  wifi_upload_active_slot();
 // How many rows we have drained successfully since boot.
 uint32_t wifi_upload_count();
 
+// Web UI test trigger — kicks off a one-shot connect + dummy publish
+// against the given slot. Runs asynchronously; check the syslog for
+// the result. Returns false if slot index is invalid or already busy.
+bool wifi_upload_test_slot(int slot);
+
 #else
 
 static inline void wifi_upload_configure_slot(int, const char*, const char*, const char*) {}
@@ -47,5 +52,6 @@ static inline void wifi_upload_start_task()           {}
 static inline bool wifi_upload_is_connected()         { return false; }
 static inline int  wifi_upload_active_slot()          { return -1; }
 static inline uint32_t wifi_upload_count()            { return 0; }
+static inline bool wifi_upload_test_slot(int)         { return false; }
 
 #endif

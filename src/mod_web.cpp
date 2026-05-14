@@ -9,6 +9,7 @@
 #include "mod_headers.h"
 #include "mod_telemetry.h"
 #include "mod_mqtt.h"
+#include "mod_wifi_upload.h"
 #include "mod_config.h"
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
@@ -608,6 +609,29 @@ void ble_web_routes_init() {
         [](AsyncWebServerRequest* r, uint8_t* data, size_t len, size_t, size_t) {
             bool ok = cfg_save_json(data, len);
             r->send(200, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
+        }
+    );
+
+    // ── WiFi-Upload Test ───────────────────────────────────────
+    // POST {"slot":0|1} → kicks off a connect+dummy-publish test for the
+    // selected slot. Result lands in syslog (Debug page). Response is
+    // just an ack — the actual work is async on the device.
+    server.on("/api/wifi-test", HTTP_POST, [](AsyncWebServerRequest* r) {},
+        nullptr,
+        [](AsyncWebServerRequest* r, uint8_t* data, size_t len, size_t, size_t) {
+            JsonDocument doc;
+            if (deserializeJson(doc, data, len)) {
+                r->send(400, "application/json", "{\"ok\":false,\"err\":\"bad json\"}");
+                return;
+            }
+            int slot = doc["slot"] | -1;
+            if (slot < 0 || slot >= WIFI_UPLOAD_SLOTS) {
+                r->send(400, "application/json", "{\"ok\":false,\"err\":\"slot out of range\"}");
+                return;
+            }
+            bool ok = wifi_upload_test_slot(slot);
+            r->send(200, "application/json",
+                    ok ? "{\"ok\":true}" : "{\"ok\":false,\"err\":\"slot empty or busy\"}");
         }
     );
 

@@ -18,7 +18,7 @@
 <body>
 <header>
   <div class="hrow1">
-    <button class="burger-btn" onclick="toggleMenu()">&#9776;</button>
+    <button type="button" class="burger-btn" onclick="toggleMenu(event)">&#9776;</button>
     <div class="logo">TS<span>.</span>CONFIG <span id="fw-ver" style="font-size:9px;color:var(--muted);font-weight:400"></span></div>
     <span style="flex:1"></span>
     <div class="led-g"><div class="led" id="led-gps"></div><span class="led-lbl">GPS</span></div>
@@ -158,6 +158,13 @@
       <div class="lbl">Upload URL</div>
       <input type="text" id="upload_url" placeholder="https://idmate.example.com/api/ingest">
     </div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <button type="button" class="btn" style="font-size:10px;padding:4px 10px"
+              onclick="fillMqttUrl('upload_url')">&#8635; Use MQTT settings</button>
+      <button type="button" class="btn" style="font-size:10px;padding:4px 10px"
+              onclick="testWifi(0)">&#9889; Test Slot 1</button>
+      <span id="wifi-test-0" style="font-size:10px;color:var(--muted);align-self:center"></span>
+    </div>
 
     <div style="font-size:12px;font-weight:600;margin:14px 0 4px">Slot 2 (z.B. Handy-Hotspot)</div>
     <div class="field">
@@ -172,9 +179,18 @@
       <div class="lbl">Upload URL</div>
       <input type="text" id="upload_url_2" placeholder="https://idmate.example.com/api/ingest">
     </div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <button type="button" class="btn" style="font-size:10px;padding:4px 10px"
+              onclick="fillMqttUrl('upload_url_2')">&#8635; Use MQTT settings</button>
+      <button type="button" class="btn" style="font-size:10px;padding:4px 10px"
+              onclick="testWifi(1)">&#9889; Test Slot 2</button>
+      <span id="wifi-test-1" style="font-size:10px;color:var(--muted);align-self:center"></span>
+    </div>
 
-    <div class="hint">
-      Full-Variante: WiFi-Upload l&#228;uft parallel zum LTE-MQTT-Pfad als zus&#228;tzliche Absicherung.
+    <div class="hint" style="margin-top:10px">
+      URL-Schema: <code>http(s)://host/path</code> oder <code>mqtt(s)://host:port/topic</code>.<br>
+      „Use MQTT settings" f&#252;llt die URL aus den MQTT-Broker-Feldern oben — gleicher Broker wie LTE, gleicher Server-Decoder.<br>
+      Full-Variante: WiFi-Upload l&#228;uft parallel zum LTE-MQTT-Pfad als Absicherung.
       Lite-Variante: WiFi-Upload ist der einzige Pfad — beide Slots leer = keine Daten weg.
     </div>
   </div>
@@ -189,18 +205,31 @@
     <div class="hint" data-i18n="cfg.ble_hint">Wenn aktiv, bekommt ABRP auch ohne CAN-Verbindung plausible Standwerte (0 km/h, 80% SoC etc.) und kann sich verbinden. Deaktiviert: ABRP bekommt "NO DATA" wenn kein CAN.</div>
   </div>
 
-  <!-- Module -->
-  <div class="section-title">Module</div>
+  <!-- GPS Quelle + Module -->
+  <div class="section-title">GPS-Quelle &amp; Module</div>
   <div class="card">
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
-      <input type="checkbox" id="mod_gps" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px">GPS intern (SIM7080G GNSS)</span>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">GPS source</div>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
+      <input type="radio" name="gps_src" id="gps_src_ext" value="ext" style="accent-color:var(--accent)">
+      <span style="font-size:12px">External GNSS (BLITZ Mini M10, UART) &mdash; <em>recommended</em></span>
     </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
+      <input type="radio" name="gps_src" id="gps_src_int" value="int" style="accent-color:var(--accent)">
+      <span style="font-size:12px">Internal GNSS (SIM7080G) &mdash; full variant only</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+      <input type="radio" name="gps_src" id="gps_src_off" value="off" style="accent-color:var(--accent)">
+      <span style="font-size:12px">Off</span>
+    </label>
+    <div class="hint" style="margin-bottom:12px">
+      External M10 is preferred &mdash; it keeps a fix while LTE runs (shared radio limits in SIM7080G internal GNSS).
+      Lite variant must use external (no internal GNSS available).
+    </div>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
       <input type="checkbox" id="mod_compass" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="font-size:12px">Kompass (QMC5883L)</span>
+      <span style="font-size:12px">Compass (QMC5883L on BLITZ M10)</span>
     </label>
-    <div class="hint">GPS-Antenne (BLDO2) stromlos wenn deaktiviert. Kompass: I2C-Bus GPIO45/21. Ext. GPS: config.h GPS_EXT_ENABLED_DEFAULT.</div>
+    <div class="hint">Compass on I2C Wire0 (GPIO45/21). Disable if not fitted.</div>
   </div>
 
   <!-- SPIFFS Logs -->
@@ -274,6 +303,45 @@ async function fetchStatus(){
 fetchStatus();
 var _stTimer=setInterval(fetchStatus,8000);
 
+// ── WiFi-Upload Helpers ─────────────────────────────────
+// Fill an Upload-URL field from the MQTT-Broker settings above.
+// Result: mqtt://{host}:{port}/{topic}/data — exactly what the LTE path publishes to.
+function fillMqttUrl(targetId) {
+  var host  = document.getElementById('mq_host').value.trim();
+  var port  = parseInt(document.getElementById('mq_port').value) || 1883;
+  var topic = document.getElementById('mq_topic').value.trim();
+  if (!host || !topic) {
+    toast('MQTT-Host / Topic erst ausfüllen', false);
+    return;
+  }
+  var scheme = port === 8883 ? 'mqtts' : 'mqtt';
+  document.getElementById(targetId).value = scheme + '://' + host + ':' + port + '/' + topic + '/data';
+}
+
+// Trigger a WiFi-upload test for the given slot. The actual connect + publish
+// is async on the device; we just kick it off and let the user watch the
+// syslog on the Debug page.
+async function testWifi(slot) {
+  var status = document.getElementById('wifi-test-' + slot);
+  if (status) { status.textContent = 'running…'; status.style.color = 'var(--muted)'; }
+  // Save current values first so the test uses what the user just typed.
+  try { await saveConfig(); } catch (e) {}
+  try {
+    var r = await fetch('/api/wifi-test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({slot: slot})
+    });
+    var d = await r.json();
+    if (status) {
+      status.textContent = d.ok ? '✓ kicked off — Debug-Seite zeigt den Verlauf' : '✗ ' + (d.err || 'failed');
+      status.style.color = d.ok ? 'var(--green)' : 'var(--red)';
+    }
+  } catch (e) {
+    if (status) { status.textContent = '✗ Verbindungsfehler'; status.style.color = 'var(--red)'; }
+  }
+}
+
 // ── Config laden ─────────────────────────────────────────
 async function loadConfig(){
   try{
@@ -297,7 +365,10 @@ async function loadConfig(){
     document.getElementById('sta_pass_2').value  = d.sta_pass_2 || '';
     document.getElementById('upload_url_2').value= d.upload_url_2 || '';
     document.getElementById('ble_standby').checked = d.ble_standby !== false;
-    document.getElementById('mod_gps').checked     = d.mod_gps !== false;
+    // GPS source: priorise gps_src field, fall back to legacy mod_gps boolean.
+    var src = d.gps_src || (d.mod_gps === false ? 'off' : 'int');
+    var rb = document.getElementById('gps_src_' + src);
+    if (rb) rb.checked = true;
     document.getElementById('mod_compass').checked = d.mod_compass === true;
     document.getElementById('log_can').checked = d.log_can === true;
     document.getElementById('log_ble').checked = d.log_ble === true;
@@ -333,7 +404,7 @@ async function saveConfig(){
     sta_pass_2:  document.getElementById('sta_pass_2').value,
     upload_url_2:document.getElementById('upload_url_2').value.trim(),
     ble_standby:  document.getElementById('ble_standby').checked,
-    mod_gps:      document.getElementById('mod_gps').checked,
+    gps_src:      (document.querySelector('input[name=gps_src]:checked') || {}).value || 'ext',
     mod_compass:  document.getElementById('mod_compass').checked,
     log_can:      document.getElementById('log_can').checked,
     log_ble:      document.getElementById('log_ble').checked,

@@ -1,17 +1,24 @@
 // ── Telemetry Stick — Shared JS ───────────────────────────
 
 // ── Burger Menu ──────────────────────────────────────────
-function toggleMenu() {
+function toggleMenu(ev) {
+  // Stop event from bubbling to the document-level close-handler below,
+  // otherwise the same click that opens the menu would close it again.
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var m = document.getElementById('drop-nav');
-  if (m) m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  if (!m) return;
+  var open = m.style.display !== 'none' && m.style.display !== '';
+  m.style.display = open ? 'none' : 'block';
 }
 if (!window._menuListener) {
   window._menuListener = true;
+  // Close on any outside click. Burger itself stops propagation so this
+  // never fires for the burger button.
   document.addEventListener('click', function(e) {
-    if (!e.target.closest('header')) {
-      var m = document.getElementById('drop-nav');
-      if (m) m.style.display = 'none';
-    }
+    if (e.target.closest('.drop-nav')) return;   // link tap → let navigation happen
+    if (e.target.closest('.burger-btn')) return; // burger handled by onclick
+    var m = document.getElementById('drop-nav');
+    if (m) m.style.display = 'none';
   });
 }
 

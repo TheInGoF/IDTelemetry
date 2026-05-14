@@ -12,6 +12,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <string.h>
+#include <time.h>
 
 #if FEATURE_WIFI_UPLOAD
 
@@ -79,6 +80,18 @@ bool wifi_upload_is_connected() {
 
 int      wifi_upload_active_slot() { return s_active_slot; }
 uint32_t wifi_upload_count()       { return s_uploaded; }
+
+// Test trigger — picked up by the main task on its next tick.
+static volatile int s_test_request = -1;
+bool wifi_upload_test_slot(int slot) {
+    if (slot < 0 || slot >= WIFI_UPLOAD_SLOTS) return false;
+    if (!s_slots[slot].ssid[0]) return false;
+    if (s_test_request >= 0) return false;  // already running
+    s_test_request = slot;
+    char m[64]; snprintf(m, sizeof(m), "Test angefordert für Slot %d", slot);
+    syslog("WIFI_UP", m);
+    return true;
+}
 
 static bool any_slot_enabled() {
     for (int s = 0; s < WIFI_UPLOAD_SLOTS; s++) {
@@ -245,6 +258,40 @@ static void wifi_upload_task(void*) {
     payload_init_key();
 
     while (!g_shutdown) {
+        // Handle one-shot test request from the Web UI ──────
+        if (s_test_request >= 0) {
+            int slot = s_test_request;
+            s_test_request = -1;
+            char m[80];
+            snprintf(m, sizeof(m), "TEST Slot %d → %s",
+                     slot, s_slots[slot].url[0] ? s_slots[slot].url : "(no URL)");
+            syslog("WIFI_UP", m);
+            // If already connected to a different slot, drop it first.
+            if (wifi_upload_is_connected() && s_active_slot != slot) {
+                WiFi.disconnect(false);
+                s_active_slot = -1;
+                vTaskDelay(pdMS_TO_TICKS(500));
+            }
+            if (!wifi_upload_is_connected()) {
+                if (!try_connect(slot)) {
+                    syslog("WIFI_UP", "TEST: connect failed");
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    continue;
+                }
+            }
+            // Synthesise a dummy row so we send SOMETHING even with empty store.
+            TelemetryRow t = {};
+            t.unix_s = (uint32_t)time(NULL);
+            const char* url = s_slots[slot].url;
+            if (url[0] && send_one_row(t, url)) {
+                syslog("WIFI_UP", "TEST: payload accepted by endpoint ✓");
+            } else {
+                syslog("WIFI_UP", "TEST: payload rejected ✗");
+            }
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
         // Nothing configured? Idle.
         if (!any_slot_enabled()) {
             vTaskDelay(pdMS_TO_TICKS(15000));

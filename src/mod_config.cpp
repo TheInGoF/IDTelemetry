@@ -41,6 +41,9 @@ static char s_sta_ssid_2  [64]  = "";
 static char s_sta_pass_2  [64]  = "";
 static char s_upload_url_2[128] = "";
 static bool s_ble_standby     = false;  // Default: aus
+// GPS source selector: "ext" (BLITZ M10), "int" (SIM7080G), "off".
+// Default ext — that's what the codebase actually uses since v1.1.
+static char s_gps_src[8] = "ext";
 static bool s_mod_gps         = true;   // Default: GPS vorhanden
 static bool s_log_can         = LOG_CAN_ENABLED_DEFAULT;
 static bool s_log_ble         = LOG_BLE_ENABLED_DEFAULT;
@@ -82,6 +85,7 @@ void cfg_init() {
     pref_load(p, "sta_ssid2",  s_sta_ssid_2, sizeof(s_sta_ssid_2),  "");
     pref_load(p, "sta_pass2",  s_sta_pass_2, sizeof(s_sta_pass_2),  "");
     pref_load(p, "url2",       s_upload_url_2, sizeof(s_upload_url_2), "");
+    pref_load(p, "gps_src",    s_gps_src,    sizeof(s_gps_src),    "ext");
     s_ble_standby = p.getBool("ble_stdby", false);
     s_mod_gps     = p.getBool("mod_gps",     true);
     s_log_can     = p.getBool("log_can", LOG_CAN_ENABLED_DEFAULT);
@@ -120,6 +124,7 @@ const char* cfg_upload_url()   { return s_upload_url; }
 const char* cfg_sta_ssid_2()   { return s_sta_ssid_2; }
 const char* cfg_sta_pass_2()   { return s_sta_pass_2; }
 const char* cfg_upload_url_2() { return s_upload_url_2; }
+const char* cfg_gps_src()      { return s_gps_src; }
 bool        cfg_ble_standby()  { return s_ble_standby; }
 bool        cfg_mod_gps()      { return s_mod_gps; }
 bool        cfg_log_can()      { return s_log_can; }
@@ -167,6 +172,15 @@ bool cfg_save_json(const uint8_t* body, size_t len) {
     save("sta_ssid2",  s_sta_ssid_2, sizeof(s_sta_ssid_2), doc["sta_ssid_2"]);
     save("sta_pass2",  s_sta_pass_2, sizeof(s_sta_pass_2), doc["sta_pass_2"]);
     save("url2",       s_upload_url_2, sizeof(s_upload_url_2), doc["upload_url_2"]);
+    save("gps_src",    s_gps_src,      sizeof(s_gps_src),      doc["gps_src"]);
+    // legacy: cfg_mod_gps() boolean is derived from gps_src for back-compat
+    if (!doc["gps_src"].isNull()) {
+        const char* src = doc["gps_src"].as<const char*>();
+        if (src) {
+            s_mod_gps = (strcmp(src, "int") == 0);
+            p.putBool("mod_gps", s_mod_gps);
+        }
+    }
     if (!doc["mq_port"].isNull()) {
         s_mq_port = doc["mq_port"].as<uint16_t>();
         p.putUShort("mq_port", s_mq_port);
@@ -226,6 +240,7 @@ const char* cfg_to_json() {
     doc["sta_ssid_2"]   = s_sta_ssid_2;
     doc["sta_pass_2"]   = s_sta_pass_2;
     doc["upload_url_2"] = s_upload_url_2;
+    doc["gps_src"]      = s_gps_src;
     doc["ble_standby"]  = s_ble_standby;
     doc["mod_gps"]      = s_mod_gps;
     doc["log_can"]      = s_log_can;

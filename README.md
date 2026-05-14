@@ -272,6 +272,10 @@ Build with `pio run -e s3_full` or `pio run -e s3_lite`. The active env selects 
 
 The lite variant is positioned as a hobby-grade option for users who already have a plain ESP32-S3 (N16R8) board and want BLE ELM327 + CAN + WiFi upload without buying the LILYGO board with modem and PMU. It is **not feature-complete yet** — feature flags compile cleanly, but the WiFi upload path and `#ifdef` gating are still being written.
 
+> ⚠️ **The lite variant requires an external GNSS module.** The plain ESP32-S3 board has no built-in GNSS, and the lite build does not include the SIM7080G internal GNSS path. Wire a BLITZ Mini M10 (or any u-blox / NMEA-output GNSS module) to UART2 (GPIO1 RX / GPIO2 TX, 115 200 baud). Without it, the firmware boots but no location data is captured.
+
+---
+
 > ⚠️ **Power supply for the lite variant is unresolved.**
 >
 > The lite variant is intended to be powered **via USB only** — i.e. always-on power from the OBD2 power pin or a 12 V → 5 V USB converter. Do **not** wire it to the car's permanent +12 V tap.
