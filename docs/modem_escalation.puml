@@ -1,10 +1,7 @@
 @startuml modem_escalation
-!theme plain
-skinparam backgroundColor #FAFAFA
-skinparam defaultFontName Menlo
-skinparam defaultFontSize 12
+!include _theme.puml
 
-title Modem / MQTT Watchdog — 4-stufige Eskalation
+title Modem / MQTT watchdog — 4-stage escalation
 
 start
 

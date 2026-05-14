@@ -20,7 +20,10 @@ Born out of frustration: the VW ID.7 shows you almost nothing about what's happe
 
 ![System Architecture](docs/architecture.png)
 
-The stick reads CAN data via UDS, persists every telemetry row to a dedicated 5 MB raw Flash partition (~40,000 rows ≈ 5,000 km offline buffer), pushes encrypted telemetry over LTE-M MQTT, exposes a BLE ELM327 emulation for ABRP, and serves a local Web-UI on its WiFi AP. Sources are in [docs/](docs/) (`*.puml`, render with `plantuml`).
+The stick reads CAN data via UDS, persists every telemetry row to a dedicated 5 MB raw Flash partition (~40,000 rows ≈ 5,000 km offline buffer), pushes encrypted telemetry over LTE-M MQTT, exposes a BLE ELM327 emulation for ABRP, and serves a local Web-UI on its WiFi AP.
+
+- High-level structure: [`docs/*.puml`](docs/) — rendered with `plantuml`, themed via [`docs/_theme.puml`](docs/_theme.puml)
+- Step-by-step algorithms (telemetry store, MQTT escalation, sleep/wake, GPS capture): [`docs/algorithms.md`](docs/algorithms.md)
 
 ### Storage Layout
 
@@ -46,6 +49,10 @@ When MQTT or GPRS misbehave, the firmware escalates through four levels before g
 ![Sleep / Wake](docs/sleep_wake.png)
 
 ## Hardware
+
+> ⚠️ **Board requirements**
+>
+> The firmware is built specifically for ESP32-S3 with **16 MB flash and 8 MB PSRAM** (the `N16R8` chip variant). Smaller flash or no-PSRAM boards will not boot — the partition table assumes a 16 MB layout, and the embedded Web UI plus the 5 MB raw telemetry partition do not fit in less. Plain ESP32 (non-S3) boards are not supported.
 
 | Component | Details |
 | --------- | ------- |
@@ -169,7 +176,23 @@ Insert a nano-SIM card into the slot on the bottom of the LILYGO board.
 
 ### Step 4 — Flash Firmware
 
-Connect the board via USB-C, then in VSCode/PlatformIO:
+Three ways to get the firmware onto the stick — pick whatever fits.
+
+**A) Web Flasher (easiest, no toolchain).**
+Once a release is published, open the [GitHub Pages flasher site](https://theingof.github.io/IDTelemetry-dev/flasher/) in Chrome or Edge, plug the stick in via USB and click **Install**. WebSerial talks directly to the board, no software to install. Source under [`docs/flasher/`](docs/flasher/).
+
+**B) Pre-built binaries + `esptool.py`.**
+Grab the `.bin` files from the [latest release](https://github.com/TheInGoF/IDTelemetry-dev/releases) and flash them with:
+
+```bash
+esptool.py --chip esp32s3 --port /dev/ttyACM0 write_flash \
+  0x0     idtelemetry-full-1.2.0.bootloader.bin \
+  0x8000  idtelemetry-full-1.2.0.partitions.bin \
+  0x10000 idtelemetry-full-1.2.0.bin
+```
+
+**C) Build from source (development).**
+Connect via USB-C, then in VSCode/PlatformIO:
 
 1. **Upload** — flashes the firmware (Web UI HTMLs are embedded inside the binary)
 2. **Upload Filesystem Image** — only required on first flash or after partition-table changes (initializes the SPIFFS partition for logs)
@@ -177,8 +200,8 @@ Connect the board via USB-C, then in VSCode/PlatformIO:
 Or via terminal:
 
 ```bash
-pio run --target upload      # flash firmware (includes embedded Web UI)
-pio run --target uploadfs    # initialise SPIFFS (first flash only)
+pio run -e s3_full --target upload     # flash firmware (full / LILYGO variant)
+pio run -e s3_full --target uploadfs   # initialise SPIFFS (first flash only)
 ```
 
 ### Step 5 — Connect
@@ -209,6 +232,29 @@ pio run --target uploadfs    # initialise SPIFFS (first flash only)
 | 45 | Sensor SDA | BIDIR | I2C Wire0 |
 
 I2C Wire0 devices: DS1307 (`0x68`), MPU-6050 (`0x69`), QMC5883L (`0x0D` — onboard BLITZ M10)
+
+## Build Variants
+
+Two PlatformIO environments share the same source tree:
+
+| Env | Hardware | Includes | Status |
+| --- | -------- | -------- | ------ |
+| `s3_full` (default) | LILYGO T-SIM7080G-S3 | LTE-M modem, external GNSS, AXP2101 PMU, Li-Po, BLE, CAN, raw 5 MB telemetry buffer | ✅ production |
+| `s3_lite` | Plain ESP32-S3 (N16R8) with 16 MB flash | BLE ELM327, CAN, raw 1 MB telemetry buffer, WiFi-only upload | 🧪 scaffolding only — not yet runnable |
+
+Build with `pio run -e s3_full` or `pio run -e s3_lite`. The active env selects partition table and `FEATURE_*` compile flags. See [`platformio.ini`](platformio.ini).
+
+### Lite variant — caveats
+
+The lite variant is positioned as a hobby-grade option for users who already have a plain ESP32-S3 (N16R8) board and want BLE ELM327 + CAN + WiFi upload without buying the LILYGO board with modem and PMU. It is **not feature-complete yet** — feature flags compile cleanly, but the WiFi upload path and `#ifdef` gating are still being written.
+
+> ⚠️ **Power supply for the lite variant is unresolved.**
+>
+> The lite variant is intended to be powered **via USB only** — i.e. always-on power from the OBD2 power pin or a 12 V → 5 V USB converter. Do **not** wire it to the car's permanent +12 V tap.
+>
+> When the vehicle goes to sleep (CAN bus quiet), any node still writing on CAN will trigger the wake-up alarm and eventually flag a CAN diagnostic fault. The lite variant has no AXP2101 / battery / sleep flow yet — so it must be on switched power that turns off with the ignition (OBD2 pin 16 is permanent on most VWs, but the cigarette-lighter USB ports usually switch with ignition).
+>
+> The `s3_full` variant solves this via VBUS detection + gyro motion wake — that whole layer is missing in lite.
 
 ## Safety & Power Management
 

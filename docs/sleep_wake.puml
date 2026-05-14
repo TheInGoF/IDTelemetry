@@ -1,8 +1,5 @@
 @startuml sleep_wake
-!theme plain
-skinparam backgroundColor #FAFAFA
-skinparam defaultFontName Menlo
-skinparam defaultFontSize 12
+!include _theme.puml
 
 title Sleep / Wake — Power States
 
@@ -14,14 +11,14 @@ state Boot {
   InitHardware --> Running
 }
 
-state Running #DDF7DD {
+state Running #DDF4FF {
   Running : telemetry @ 3 s tick
   Running : MQTT push on row capture
   Running : PMU update @ 10 s
   Running : modem watchdog
 }
 
-state DeepSleep #F7F7DD {
+state DeepSleep #FFF8C5 {
   DeepSleep : ESP32-S3 in deep sleep (~uA)
   DeepSleep : M10 GPS in idle (~5 mA)
   DeepSleep : SIM7080G powered off

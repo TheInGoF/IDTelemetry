@@ -9,6 +9,31 @@
 #define FW_VERSION  "1.2.0"
 
 // ============================================================
+//  BUILD-VARIANT FEATURE FLAGS
+//  Defined by the active env in platformio.ini. Defaults below
+//  keep direct compilation (without -DFEATURE_*) behaving like
+//  the historical s3_full build.
+// ============================================================
+#ifndef FEATURE_MODEM
+#define FEATURE_MODEM       1
+#endif
+#ifndef FEATURE_GPS_EXT
+#define FEATURE_GPS_EXT     1
+#endif
+#ifndef FEATURE_PMU
+#define FEATURE_PMU         1
+#endif
+#ifndef FEATURE_BLE
+#define FEATURE_BLE         1
+#endif
+#ifndef FEATURE_CAN
+#define FEATURE_CAN         1
+#endif
+#ifndef FEATURE_WIFI_UPLOAD
+#define FEATURE_WIFI_UPLOAD 0
+#endif
+
+// ============================================================
 //  MODUL-SCHALTER  ← hier ein-/ausschalten
 // ============================================================
 #define GPS_EXT_ENABLED     true   // BLITZ Mini M10 GPS  (UART, QWIIC-Connector GPIO43/44)

@@ -33,7 +33,10 @@ static uint8_t hex_nibble(char c) {
 }
 
 static void init_aes_key() {
-    const char* hex = SECRET_AES_KEY;
+    // NVS-Override (Web UI) hat Vorrang, sonst Compile-Zeit-Key aus secrets.h.
+    // 64 Hex-Chars erwartet (= 32 Bytes = 256 Bit).
+    const char* override_key = cfg_aes_key();
+    const char* hex = (override_key && strlen(override_key) >= 64) ? override_key : SECRET_AES_KEY;
     for (int i = 0; i < 32; i++) {
         s_aes_key[i] = (hex_nibble(hex[i*2]) << 4) | hex_nibble(hex[i*2+1]);
     }

@@ -1,0 +1,16 @@
+{
+  "name": "IDTelemetry — Full (T-SIM7080G-S3)",
+  "version": "1.2.0",
+  "home_assistant_domain": "esphome",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "../../firmware/idtelemetry-full-1.2.0.bootloader.bin",  "offset": 0 },
+        { "path": "../../firmware/idtelemetry-full-1.2.0.partitions.bin",  "offset": 32768 },
+        { "path": "../../firmware/idtelemetry-full-1.2.0.bin",             "offset": 65536 }
+      ]
+    }
+  ]
+}

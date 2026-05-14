@@ -72,19 +72,35 @@ void web_init() {
         r->redirect("/daten");
     });
 
-    // ── Captive-Portal-Fake: iOS/Android denkt der AP hat Internet ──
-    // iOS testet /hotspot-detect.html, Android /generate_204
-    // Exakte Antwort nötig damit iOS "Internet OK" markiert und verbunden bleibt
-    auto captive = [](AsyncWebServerRequest* r) {
-        r->send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
+    // ── Captive-Portal-Antwort ─────────────────────────────────
+    // Phones probe known URLs to detect "do I have internet on this WiFi?".
+    // We answer with a tiny landing page that links to the config wizard —
+    // iOS / Android pops a "captive portal" sheet with this content so the
+    // first-time user can jump straight into setup instead of hunting for
+    // the IP address.
+    //
+    // For sticks that are already configured this is harmless: the user just
+    // ignores the popup and uses the network normally.
+    auto captive_landing = [](AsyncWebServerRequest* r) {
+        r->send(200, "text/html",
+            "<!DOCTYPE html><html><head>"
+            "<meta name=viewport content=\"width=device-width,initial-scale=1\">"
+            "<title>IDTelemetry</title></head>"
+            "<body style=\"font-family:-apple-system,sans-serif;text-align:center;padding:2em\">"
+            "<h2>IDTelemetry</h2>"
+            "<p><a href=\"http://192.168.4.1/config\" "
+            "style=\"display:inline-block;padding:.6em 1.2em;background:#0969da;color:#fff;"
+            "text-decoration:none;border-radius:6px;font-weight:600\">Configure</a></p>"
+            "<p style=\"color:#57606a\"><a href=\"http://192.168.4.1/daten\" "
+            "style=\"color:#0969da\">Open Dashboard</a></p>"
+            "</body></html>");
     };
-    server.on("/hotspot-detect.html",          HTTP_GET, captive);  // iOS
-    server.on("/library/test/success.html",    HTTP_GET, captive);  // iOS alt
-    server.on("/success.txt",                  HTTP_GET, captive);  // iOS neu
-    server.on("/generate_204",                 HTTP_GET, [](AsyncWebServerRequest* r) {
-        r->send(204);  // Android/Chrome erwartet leere 204-Antwort
-    });
-    server.on("/ncsi.txt",                     HTTP_GET, captive);  // Windows
+    server.on("/hotspot-detect.html",          HTTP_GET, captive_landing);  // iOS
+    server.on("/library/test/success.html",    HTTP_GET, captive_landing);  // iOS alt
+    server.on("/success.txt",                  HTTP_GET, captive_landing);  // iOS neu
+    server.on("/generate_204",                 HTTP_GET, captive_landing);  // Android
+    server.on("/ncsi.txt",                     HTTP_GET, captive_landing);  // Windows
+    server.on("/connecttest.txt",              HTTP_GET, captive_landing);  // Windows neu
 
     server.on("/send", HTTP_POST, [](AsyncWebServerRequest* r) {},
         nullptr,

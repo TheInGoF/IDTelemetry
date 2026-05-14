@@ -43,6 +43,11 @@ const char* cfg_mqtt_user();
 const char* cfg_mqtt_pass();
 const char* cfg_mqtt_topic();    // Topic-Prefix (z.B. "tele/id7")
 
+// AES-256 key (64 hex chars). Empty string = fall back to SECRET_AES_KEY
+// from secrets.h. Setting this via the Web UI overrides the compile-time
+// key without re-flashing.
+const char* cfg_aes_key();
+
 // BLE Standby-Defaults (ABRP bekommt Werte auch ohne CAN)
 bool        cfg_ble_standby();
 
