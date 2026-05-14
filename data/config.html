@@ -344,7 +344,17 @@ function fillMqttUrl(targetId) {
 // syslog on the Debug page.
 async function testWifi(slot) {
   var status = document.getElementById('wifi-test-' + slot);
-  if (status) { status.textContent = 'running…'; status.style.color = 'var(--muted)'; }
+  // Heads up — share radio: AP will wobble while the stick joins the slot.
+  if (!confirm(
+        'Test startet eine echte STA-Verbindung.\n\n' +
+        'AP wackelt kurz, das Phone fliegt 5-15s vom IDTelemetry-AP.\n' +
+        'Reconnect passiert meist automatisch — danach Debug-Seite öffnen,\n' +
+        '"WIFI_UP TEST"-Zeilen zeigen das Ergebnis.\n\n' +
+        'Fortfahren?')) {
+    if (status) { status.textContent = 'abgebrochen'; status.style.color = 'var(--muted)'; }
+    return;
+  }
+  if (status) { status.textContent = 'AP wackelt — siehe Debug-Log…'; status.style.color = 'var(--muted)'; }
   // Save current values first so the test uses what the user just typed.
   try { await saveConfig(); } catch (e) {}
   try {
@@ -355,11 +365,18 @@ async function testWifi(slot) {
     });
     var d = await r.json();
     if (status) {
-      status.textContent = d.ok ? '✓ kicked off — Debug-Seite zeigt den Verlauf' : '✗ ' + (d.err || 'failed');
+      status.textContent = d.ok
+        ? '✓ gestartet — Phone reconnectet, dann Debug-Log prüfen'
+        : '✗ ' + (d.err || 'failed');
       status.style.color = d.ok ? 'var(--green)' : 'var(--red)';
     }
   } catch (e) {
-    if (status) { status.textContent = '✗ Verbindungsfehler'; status.style.color = 'var(--red)'; }
+    if (status) {
+      // Wir EXPECT eine Trennung — die meldet sich als fetch-error.
+      // Das ist eigentlich der gute Fall: Test läuft, AP ist gerade weg.
+      status.textContent = 'AP weg (erwartet) — bitte neu verbinden';
+      status.style.color = 'var(--muted)';
+    }
   }
 }
 

@@ -262,32 +262,42 @@ static void wifi_upload_task(void*) {
         if (s_test_request >= 0) {
             int slot = s_test_request;
             s_test_request = -1;
-            char m[80];
+            char m[96];
+
+            // Heads-up: the AP will wobble while STA joins (shared radio).
+            // The phone that triggered the test usually drops + reconnects.
+            syslog("WIFI_UP", "TEST start — AP wackelt kurz, Phone reconnectet danach");
             snprintf(m, sizeof(m), "TEST Slot %d → %s",
                      slot, s_slots[slot].url[0] ? s_slots[slot].url : "(no URL)");
             syslog("WIFI_UP", m);
+
             // If already connected to a different slot, drop it first.
             if (wifi_upload_is_connected() && s_active_slot != slot) {
                 WiFi.disconnect(false);
                 s_active_slot = -1;
                 vTaskDelay(pdMS_TO_TICKS(500));
             }
-            if (!wifi_upload_is_connected()) {
-                if (!try_connect(slot)) {
-                    syslog("WIFI_UP", "TEST: connect failed");
-                    vTaskDelay(pdMS_TO_TICKS(2000));
-                    continue;
-                }
+
+            bool connected = wifi_upload_is_connected() || try_connect(slot);
+            bool payload_ok = false;
+            if (connected) {
+                // Synthesise a dummy row so we send SOMETHING even with empty store.
+                TelemetryRow t = {};
+                t.unix_s = (uint32_t)time(NULL);
+                const char* url = s_slots[slot].url;
+                if (url[0]) payload_ok = send_one_row(t, url);
             }
-            // Synthesise a dummy row so we send SOMETHING even with empty store.
-            TelemetryRow t = {};
-            t.unix_s = (uint32_t)time(NULL);
-            const char* url = s_slots[slot].url;
-            if (url[0] && send_one_row(t, url)) {
-                syslog("WIFI_UP", "TEST: payload accepted by endpoint ✓");
-            } else {
-                syslog("WIFI_UP", "TEST: payload rejected ✗");
-            }
+
+            if (!connected)        syslog("WIFI_UP", "TEST: ✗ Slot konnte nicht verbinden");
+            else if (!payload_ok)  syslog("WIFI_UP", "TEST: ✗ verbunden aber Endpoint lehnt ab / URL fehlt");
+            else                   syslog("WIFI_UP", "TEST: ✓ Verbindung + Endpoint OK");
+
+            // Release STA immediately so the AP returns to its own channel
+            // and the user's phone can re-associate quickly.
+            if (s_mqtt.connected()) s_mqtt.disconnect();
+            if (wifi_upload_is_connected()) WiFi.disconnect(false);
+            s_active_slot = -1;
+            syslog("WIFI_UP", "TEST done — STA freigegeben, AP wieder stabil");
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
