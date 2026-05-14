@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "config.h"
 
 // ============================================================
 //  mod_modem - SIM7080G Modem (LTE + GPS)
@@ -7,49 +8,62 @@
 //  Verwaltet UART1 (MODEM_TX/RX aus config.h) exklusiv.
 //  GPS-Daten → g_gps (shared.h), Inline-API: gps_valid/lat/lon/location_str
 //
-//  Ablauf im Task (Core 1):
-//    alle 60 s  → traccar_on_gps_tick() → Traccar-Versand (wenn GPS-Fix vorhanden)
-//    alle  5 s  → AT+CGNSINF            → g_gps Cache aktualisieren
-//    alle 30 s  → Signal/SIM            → Modem-Status Cache
+//  Lite-Variante hat kein SIM7080G → alle Aufrufe werden zu inline no-ops.
 // ============================================================
 
-// Initialisiert Modem, SIM, GPS, GPRS.  Blockiert max. ~35 s.
+#if FEATURE_MODEM
+
 void modem_init();
-
-// Startet den FreeRTOS-Task.  Erst nach modem_init() aufrufen.
 void modem_start_task();
-
-// GPRS-Verbindung sicherstellen (reconnect falls nötig).
 bool modem_ensure_connected();
-
-// True wenn GPRS-Datenverbindung aktiv.
 bool modem_is_connected();
 
-// Modem-Status (SIM7080G) — alle ~30 s aktualisiert
-int8_t      modem_signal_quality(); // CSQ 0-31, 99=kein Signal, -1=unbekannt
-const char* modem_operator();       // Netzanbieter-Name oder ""
-uint16_t    modem_plmn();           // Numerisches PLMN (z.B. 26201 Telekom DE), 0 = unbekannt
-bool        modem_sim_ok();         // SIM vorhanden und bereit
+int8_t      modem_signal_quality();
+const char* modem_operator();
+uint16_t    modem_plmn();
+bool        modem_sim_ok();
 
-// GPS + GPRS deaktivieren, dann AT+CPOF — vor Deep Sleep aufrufen.
-// Nach Wake-up startet modem_init() das Modem automatisch neu (PWRKEY-Puls).
 void modem_poweroff();
-void modem_pre_sleep_flush();  // Letzter GPS-Punkt (ig=0) + InfluxDB leeren vor Sleep
+void modem_pre_sleep_flush();
 
-// GPS Satelliten (SIM7080G liefert keine Aufschlüsselung nach Konstellation)
-int  modem_gps_vsat();     // Gesamt sichtbar
-int  modem_gps_usat();     // Gesamt verwendet
+int  modem_gps_vsat();
+int  modem_gps_usat();
 
-// Serial-Befehle: Info-Ausgabe auf Terminal
-void modem_print_gps_info();   // "gps"       → GPS-Status
-void modem_print_lte_info();   // "lte"       → LTE-Status (schnell)
-void modem_print_lte_sig();    // "lte sig"   → CPSI Signal/Zell-Info (nicht-destruktiv)
-void modem_print_lte_scan();   // "lte scan"  → Netzwerk-Scan (bis 3 Min!)
-void modem_print_lte_bands();  // "lte bands"     → Band-Konfiguration anzeigen
-void modem_lte_bands_fix(bool all); // "lte bands fix/all" → Baender setzen + Radio-Neustart
-void modem_send_at(const char* cmd); // "at ..." → rohes AT-Kommando senden + Antwort anzeigen
-void modem_pause_task();             // "at stop"  → Modem-Task pausieren (fuer manuelles AT-Testing)
-void modem_resume_task();            // "at start" → Modem-Task fortsetzen
+void modem_print_gps_info();
+void modem_print_lte_info();
+void modem_print_lte_sig();
+void modem_print_lte_scan();
+void modem_print_lte_bands();
+void modem_lte_bands_fix(bool all);
+void modem_send_at(const char* cmd);
+void modem_pause_task();
+void modem_resume_task();
 
-// MQTT-Status
-bool modem_mqtt_connected();         // MQTT-Verbindung aktiv?
+bool modem_mqtt_connected();
+
+#else  // FEATURE_MODEM == 0 — Lite variant has no SIM7080G
+
+static inline void modem_init()              {}
+static inline void modem_start_task()        {}
+static inline bool modem_ensure_connected()  { return false; }
+static inline bool modem_is_connected()      { return false; }
+static inline int8_t      modem_signal_quality() { return -1; }
+static inline const char* modem_operator()       { return ""; }
+static inline uint16_t    modem_plmn()           { return 0; }
+static inline bool        modem_sim_ok()         { return false; }
+static inline void modem_poweroff()         {}
+static inline void modem_pre_sleep_flush()  {}
+static inline int  modem_gps_vsat()         { return 0; }
+static inline int  modem_gps_usat()         { return 0; }
+static inline void modem_print_gps_info()   {}
+static inline void modem_print_lte_info()   {}
+static inline void modem_print_lte_sig()    {}
+static inline void modem_print_lte_scan()   {}
+static inline void modem_print_lte_bands()  {}
+static inline void modem_lte_bands_fix(bool) {}
+static inline void modem_send_at(const char*) {}
+static inline void modem_pause_task()       {}
+static inline void modem_resume_task()      {}
+static inline bool modem_mqtt_connected()   { return false; }
+
+#endif
