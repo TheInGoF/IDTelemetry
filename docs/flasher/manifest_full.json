@@ -7,9 +7,9 @@
     {
       "chipFamily": "ESP32-S3",
       "parts": [
-        { "path": "../../firmware/idtelemetry-full-1.2.0.bootloader.bin",  "offset": 0 },
-        { "path": "../../firmware/idtelemetry-full-1.2.0.partitions.bin",  "offset": 32768 },
-        { "path": "../../firmware/idtelemetry-full-1.2.0.bin",             "offset": 65536 }
+        { "path": "https://github.com/TheInGoF/IDTelemetry/releases/download/v1.2.0/idtelemetry-full-1.2.0.bootloader.bin", "offset": 0 },
+        { "path": "https://github.com/TheInGoF/IDTelemetry/releases/download/v1.2.0/idtelemetry-full-1.2.0.partitions.bin", "offset": 32768 },
+        { "path": "https://github.com/TheInGoF/IDTelemetry/releases/download/v1.2.0/idtelemetry-full-1.2.0.bin",            "offset": 65536 }
       ]
     }
   ]
