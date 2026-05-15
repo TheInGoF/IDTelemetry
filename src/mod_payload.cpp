@@ -109,21 +109,6 @@ static int build_plaintext(const TelemetryRow& row, uint8_t* buf, int buf_size) 
 int payload_encode(const TelemetryRow& row, uint8_t* out, int out_size) {
     if (!s_aes_ready) payload_init_key();
 
-    // Debug: log the raw cache values for the fields the server reports as
-    // out of range. One line per encoded row — small enough not to spam.
-    {
-        char dm[160];
-        snprintf(dm, sizeof(dm),
-            "ODO=%.1f(%d) RANGE=%.1f(%d) KWH=%.1f(%d) PLMN=%u(%d) LTE_SIG=%.0f(%d)",
-            row.values[TELEM_ODOMETER],    row.valid[TELEM_ODOMETER] ? 1 : 0,
-            row.values[TELEM_RANGE],       row.valid[TELEM_RANGE] ? 1 : 0,
-            row.values[TELEM_KWH_CHARGED], row.valid[TELEM_KWH_CHARGED] ? 1 : 0,
-            (uint32_t)row.values[TELEM_LTE_OPERATOR],
-                                           row.valid[TELEM_LTE_OPERATOR] ? 1 : 0,
-            row.values[TELEM_LTE_SIGNAL],  row.valid[TELEM_LTE_SIGNAL] ? 1 : 0);
-        syslog("PAYLOAD", dm);
-    }
-
     uint8_t plain[96];
     int plain_len = build_plaintext(row, plain, sizeof(plain));
     if (plain_len == 0) return 0;
